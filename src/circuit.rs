@@ -1,13 +1,9 @@
-use std::collections::HashSet;
-
 /// Data type to uniquely identify gates.
 pub type GateIndex = usize;
 
 /// Description of a gate executed under S-MPC.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Gate {
-    False,
-    True,
     InA,
     InB,
     Xor(GateIndex, GateIndex),
@@ -18,18 +14,19 @@ pub enum Gate {
 #[derive(Clone, Debug)]
 pub struct Circuit {
     pub gates: Vec<Gate>,
-    pub output_gates: HashSet<GateIndex>,
+    pub output_gates: Vec<GateIndex>,
 }
 
 impl Circuit {
     pub fn eval(&self, in_a: &[bool], in_b: &[bool]) -> Vec<Option<bool>> {
-        let mut output = vec![None; self.gates.len()];
+        let mut output = vec![None; self.gates.len() + 2];
         let mut in_a_iter = in_a.iter();
         let mut in_b_iter = in_b.iter();
+        output[0] = Some(false);
+        output[1] = Some(true);
         for (w, gate) in self.gates.iter().enumerate() {
+            let w = w + 2;
             let output_bit = match gate {
-                Gate::False => false,
-                Gate::True => true,
                 Gate::InA => *in_a_iter.next().unwrap(),
                 Gate::InB => *in_b_iter.next().unwrap(),
                 Gate::Xor(x, y) => {
