@@ -1,4 +1,7 @@
-use crate::ast::{Type, MetaInfo, Party, ParamDef, Op};
+use crate::{
+    ast::{Op, ParamDef, Party, Type},
+    parser::MetaInfo,
+};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Program {

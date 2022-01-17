@@ -1,13 +1,9 @@
+use crate::parser::MetaInfo;
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Program {
     pub fn_defs: Vec<FnDef>,
     pub main: MainDef,
-}
-
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct MetaInfo {
-    //line: usize,
-    //column: usize,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

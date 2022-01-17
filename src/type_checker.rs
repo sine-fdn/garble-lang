@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{Expr, ExprEnum, MainDef, MetaInfo, Op, ParamDef, Party, Program, Type},
+    ast::{Expr, ExprEnum, MainDef, Op, ParamDef, Party, Program, Type},
+    parser::MetaInfo,
     typed_ast,
 };
 
@@ -168,10 +169,7 @@ fn type_check_add() -> Result<(), TypeError> {
             body: Expr(
                 ExprEnum::Op(
                     Op::Add,
-                    Box::new(Expr(
-                        ExprEnum::Identifier("x".to_string()),
-                        MetaInfo {},
-                    )),
+                    Box::new(Expr(ExprEnum::Identifier("x".to_string()), MetaInfo {})),
                     Box::new(Expr(ExprEnum::Number(255), MetaInfo {})),
                 ),
                 MetaInfo {},

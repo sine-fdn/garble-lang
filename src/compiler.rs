@@ -1,9 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ast::{MetaInfo, Op, ParamDef, Party, Type},
+    ast::{Op, ParamDef, Party, Type},
     circuit::{Circuit, Gate, GateIndex},
-    typed_ast::{Expr, ExprEnum, MainDef, Program},
+    typed_ast::{Expr, ExprEnum, MainDef, Program}, parser::MetaInfo,
 };
 
 impl Program {
