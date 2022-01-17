@@ -1,16 +1,16 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Program {
     pub fn_defs: Vec<FnDef>,
     pub main: MainDef,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct MetaInfo {
     //line: usize,
     //column: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct FnDef {
     pub identifier: String,
     pub ty: Type,
@@ -19,7 +19,7 @@ pub struct FnDef {
     pub meta: MetaInfo,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct MainDef {
     pub ty: Type,
     pub params: Vec<(Party, ParamDef)>,
@@ -27,25 +27,25 @@ pub struct MainDef {
     pub meta: MetaInfo,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Type {
     Bool,
     U8,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ParamDef(pub String, pub Type);
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum Party {
     A,
     B,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Expr(pub ExprEnum, pub MetaInfo);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ExprEnum {
     True,
     False,
@@ -54,7 +54,7 @@ pub enum ExprEnum {
     Op(Op, Box<Expr>, Box<Expr>),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum Op {
     Add,
     BitAnd,

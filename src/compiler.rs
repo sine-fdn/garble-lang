@@ -8,6 +8,7 @@ use crate::{
 
 impl Program {
     pub fn compile(&self) -> Circuit {
+        // TODO: compile non-main fn defs
         let mut bindings = HashMap::new();
         let mut gates = vec![];
         let mut wire = 2;
