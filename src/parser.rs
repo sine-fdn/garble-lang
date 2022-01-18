@@ -2,8 +2,8 @@ use crate::ast::{Expr, ExprEnum, MainDef, Op, ParamDef, Party, Program, Type};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct MetaInfo {
-    //line: usize,
-//column: usize,
+    pub start: (usize, usize),
+    pub end: (usize, usize),
 }
 
 #[derive(Debug, Clone)]
@@ -22,7 +22,7 @@ pub enum ParseErrorEnum {
     ExpectedType,
     InvalidParty,
     InvalidOp,
-    BinaryExprWithInvalidNumOfArguments,
+    InvalidExpr,
 }
 
 pub fn parse(prg: &str) -> Result<Program, ParseError> {
@@ -111,10 +111,7 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                 let y = parse_expr(sexprs.next().unwrap())?;
                 ExprEnum::Op(op, Box::new(x), Box::new(y))
             } else {
-                return Err(ParseError(
-                    ParseErrorEnum::BinaryExprWithInvalidNumOfArguments,
-                    meta,
-                ));
+                return Err(ParseError(ParseErrorEnum::InvalidExpr, meta));
             }
         }
     };
@@ -182,19 +179,24 @@ fn expect_type(sexpr: Sexpr) -> Result<(Type, MetaInfo), ParseError> {
 
 fn parse_into_sexpr(prg: &str) -> Result<Sexpr, ParseError> {
     let mut stack = Vec::new();
+    let mut stack_meta_start = Vec::new();
     let mut current_token = Vec::new();
-    for (_l, line) in prg.lines().enumerate() {
-        for (_c, char) in line.chars().enumerate() {
+    let mut current_token_start = (0, 0);
+    for (l, line) in prg.lines().enumerate() {
+        for (c, char) in line.chars().enumerate() {
             if char == '(' || char == ')' || char.is_whitespace() {
                 if char == '(' {
                     stack.push(Vec::new());
+                    stack_meta_start.push((l, c));
                 }
                 if let Some(sexprs) = stack.last_mut() {
-                    if current_token.is_empty() {
-                    } else {
+                    if !current_token.is_empty() {
                         let token: String = current_token.iter().collect();
                         current_token.clear();
-                        let meta = MetaInfo {};
+                        let meta = MetaInfo {
+                            start: current_token_start,
+                            end: (l, c),
+                        };
                         let sexpr = if let Ok(n) = token.parse::<u128>() {
                             SexprEnum::NumUnsigned(n)
                         } else if token.as_str() == "true" {
@@ -207,30 +209,42 @@ fn parse_into_sexpr(prg: &str) -> Result<Sexpr, ParseError> {
                         sexprs.push(Sexpr(sexpr, meta));
                     }
                 } else {
-                    let meta = MetaInfo {};
+                    let meta = MetaInfo {
+                        start: current_token_start,
+                        end: (l, c),
+                    };
                     return Err(ParseError(ParseErrorEnum::UnexpectedToken, meta));
                 }
                 if char == ')' {
                     if stack.len() > 1 {
                         if let (Some(mut sexprs), Some(parent)) = (stack.pop(), stack.last_mut()) {
+                            let meta = MetaInfo {
+                                start: stack_meta_start.pop().unwrap(),
+                                end: (l, c + 1),
+                            };
                             if sexprs.is_empty() {
-                                let meta = MetaInfo {};
                                 return Err(ParseError(ParseErrorEnum::EmptySexpr, meta));
                             } else if sexprs.len() == 1 {
-                                parent.push(sexprs.pop().unwrap());
+                                let Sexpr(sexpr, _) = sexprs.pop().unwrap();
+                                parent.push(Sexpr(sexpr, meta));
                             } else {
-                                let meta = sexprs.first().unwrap().1;
                                 parent.push(Sexpr(SexprEnum::List(sexprs), meta));
                             }
                         }
                     }
                 }
             } else {
+                if current_token.is_empty() {
+                    current_token_start = (l, c);
+                }
                 current_token.push(char);
             }
         }
     }
-    let meta = MetaInfo {};
+    let meta = MetaInfo {
+        start: (0, 0),
+        end: (0, 1),
+    };
     if stack.is_empty() {
         Err(ParseError(ParseErrorEnum::EmptySexpr, meta))
     } else if stack.len() == 1 {
@@ -250,6 +264,5 @@ const prg1: &str = "
 #[test]
 fn parse_sexpr() -> Result<(), ParseError> {
     let sexpr = parse(prg1)?;
-    println!("{:?}", sexpr);
     Ok(())
 }

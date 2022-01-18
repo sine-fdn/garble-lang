@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     ast::{Op, ParamDef, Party, Type},
     circuit::{Circuit, Gate, GateIndex},
-    parser::MetaInfo,
-    typed_ast::{Expr, ExprEnum, MainDef, Program},
+    parser::{MetaInfo, parse},
+    typed_ast::{Expr, ExprEnum, MainDef, Program}, compile,
 };
 
 impl Program {
@@ -42,12 +42,10 @@ fn push_gate(gates: &mut Vec<Gate>, gate: Gate) -> GateIndex {
 
 fn extend_to_bits(v: &mut Vec<usize>, bits: usize) {
     if v.len() != bits {
-        println!("before (len {}): {:?}", v.len(), v);
         let old_size = v.len();
         v.resize(bits, 0);
         v.copy_within(0..old_size, bits - old_size);
         v[0..old_size].fill(0);
-        println!("after (len {}): {:?}", v.len(), v);
     }
 }
 
@@ -304,70 +302,4 @@ fn unsigned_to_bits(n: u128, size: usize, bits: &mut Vec<bool>) {
     for i in 0..size {
         bits.push((n >> (size - 1 - i) & 1) == 1);
     }
-}
-
-#[test]
-fn compile_xor() -> Result<(), ComputeError> {
-    let prg = Program {
-        fn_defs: vec![],
-        main: MainDef {
-            params: vec![(Party::A, ParamDef("x".to_string(), Type::Bool))],
-            body: Expr(
-                ExprEnum::Op(
-                    Op::BitXor,
-                    Box::new(Expr(
-                        ExprEnum::Identifier("x".to_string()),
-                        Type::Bool,
-                        MetaInfo {},
-                    )),
-                    Box::new(Expr(ExprEnum::True, Type::Bool, MetaInfo {})),
-                ),
-                Type::Bool,
-                MetaInfo {},
-            ),
-            meta: MetaInfo {},
-        },
-    };
-    let circuit = prg.compile();
-    let mut computation: Computation = circuit.into();
-    for b in [true, false] {
-        computation.set_bool(Party::A, b);
-        computation.run()?;
-        assert_eq!(computation.get_bool()?, !b);
-    }
-    Ok(())
-}
-
-#[test]
-fn compile_add() -> Result<(), ComputeError> {
-    for y in 0..127 {
-        let prg = Program {
-            fn_defs: vec![],
-            main: MainDef {
-                params: vec![(Party::A, ParamDef("x".to_string(), Type::U8))],
-                body: Expr(
-                    ExprEnum::Op(
-                        Op::Add,
-                        Box::new(Expr(
-                            ExprEnum::Identifier("x".to_string()),
-                            Type::U8,
-                            MetaInfo {},
-                        )),
-                        Box::new(Expr(ExprEnum::NumUnsigned(y), Type::U8, MetaInfo {})),
-                    ),
-                    Type::U8,
-                    MetaInfo {},
-                ),
-                meta: MetaInfo {},
-            },
-        };
-        let circuit = prg.compile();
-        let mut computation: Computation = circuit.into();
-        for x in 0..127 {
-            computation.set_u8(Party::A, x);
-            computation.run()?;
-            assert_eq!(computation.get_u8()?, x + y as u8);
-        }
-    }
-    Ok(())
 }
