@@ -4,13 +4,13 @@ use crate::{
     ast::{Op, ParamDef, Party, Type},
     circuit::{Circuit, Gate, GateIndex},
     parser::{MetaInfo, parse},
-    typed_ast::{Expr, ExprEnum, MainDef, Program}, compile,
+    typed_ast::{Expr, ExprEnum, MainDef, Program}, compile, env::Env,
 };
 
 impl Program {
     pub fn compile(&self) -> Circuit {
         // TODO: compile non-main fn defs
-        let mut bindings = HashMap::new();
+        let mut env = Env::new();
         let mut gates = vec![];
         let mut wire = 2;
         for (party, ParamDef(identifier, ty)) in self.main.params.iter() {
@@ -24,9 +24,8 @@ impl Program {
                 wires.push(wire);
                 wire += 1;
             }
-            bindings.insert(identifier.clone(), wires);
+            env.set(identifier.clone(), wires);
         }
-        let mut env = bindings.into();
         let output_gates = self.main.body.compile(&mut env, &mut gates);
         Circuit {
             gates,
@@ -50,7 +49,7 @@ fn extend_to_bits(v: &mut Vec<usize>, bits: usize) {
 }
 
 impl Expr {
-    fn compile(&self, env: &mut Env, gates: &mut Vec<Gate>) -> Vec<GateIndex> {
+    fn compile(&self, env: &mut Env<Vec<GateIndex>>, gates: &mut Vec<Gate>) -> Vec<GateIndex> {
         let Expr(expr, ty, _meta) = self;
         match expr {
             ExprEnum::True => {
@@ -64,7 +63,7 @@ impl Expr {
                 unsigned_to_bits(*n, ty.size_in_bits(), &mut bits);
                 bits.into_iter().map(|b| b as usize).collect()
             }
-            ExprEnum::Identifier(s) => env.get(s),
+            ExprEnum::Identifier(s) => env.get(s).unwrap(),
             ExprEnum::Op(op, x, y) => {
                 let mut x = x.compile(env, gates);
                 let mut y = y.compile(env, gates);
@@ -108,6 +107,14 @@ impl Expr {
                     }
                 }
             }
+            ExprEnum::Let(var, binding, body) => {
+                let binding = binding.compile(env, gates);
+                env.push();
+                env.set(var.clone(), binding);
+                let body = body.compile(env, gates);
+                env.pop();
+                body
+            }
         }
     }
 }
@@ -122,27 +129,6 @@ impl Type {
             Type::U64 => 64,
             Type::U128 => 128,
         }
-    }
-}
-
-type Bindings = HashMap<String, Vec<GateIndex>>;
-
-struct Env(Vec<Bindings>);
-
-impl Into<Env> for Bindings {
-    fn into(self) -> Env {
-        Env(vec![self])
-    }
-}
-
-impl Env {
-    fn get(&self, identifier: &str) -> Vec<GateIndex> {
-        for bindings in self.0.iter().rev() {
-            if let Some(gate) = bindings.get(identifier) {
-                return gate.clone();
-            }
-        }
-        panic!("Found identifier without binding: '{}'", identifier);
     }
 }
 

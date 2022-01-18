@@ -52,6 +52,7 @@ pub enum ExprEnum {
     NumUnsigned(u128),
     Identifier(String),
     Op(Op, Box<Expr>, Box<Expr>),
+    Let(String, Box<Expr>, Box<Expr>),
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]

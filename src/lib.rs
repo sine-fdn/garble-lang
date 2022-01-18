@@ -7,6 +7,7 @@ use {circuit::Circuit, parser::parse};
 pub mod ast;
 pub mod circuit;
 pub mod compiler;
+pub mod env;
 pub mod parser;
 pub mod type_checker;
 pub mod typed_ast;

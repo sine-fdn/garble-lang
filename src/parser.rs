@@ -21,7 +21,7 @@ pub enum ParseErrorEnum {
     ExpectedKeyword(String),
     ExpectedType,
     InvalidParty,
-    InvalidOp,
+    InvalidArity(usize),
     InvalidExpr,
 }
 
@@ -96,22 +96,39 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
         SexprEnum::NumUnsigned(n) => ExprEnum::NumUnsigned(n),
         SexprEnum::Identifier(s) => ExprEnum::Identifier(s),
         SexprEnum::List(sexprs) => {
-            if sexprs.len() == 3 {
-                let mut sexprs = sexprs.into_iter();
-                let (op, _meta) = expect_identifier(sexprs.next().unwrap())?;
-                let op = match op.as_str() {
-                    "+" => Op::Add,
-                    "&" => Op::BitAnd,
-                    "^" => Op::BitXor,
-                    _ => {
-                        return Err(ParseError(ParseErrorEnum::InvalidOp, meta));
+            let arity = sexprs.len() - 1;
+            let mut sexprs = sexprs.into_iter();
+            let (f, _meta) = expect_identifier(sexprs.next().unwrap())?;
+
+            match f.as_str() {
+                "+" | "&" | "^" => {
+                    if arity == 2 {
+                        let op = match f.as_str() {
+                            "+" => Op::Add,
+                            "&" => Op::BitAnd,
+                            "^" => Op::BitXor,
+                            _ => unreachable!(),
+                        };
+                        let x = parse_expr(sexprs.next().unwrap())?;
+                        let y = parse_expr(sexprs.next().unwrap())?;
+                    ExprEnum::Op(op, Box::new(x), Box::new(y))
+                    } else {
+                        return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
                     }
-                };
-                let x = parse_expr(sexprs.next().unwrap())?;
-                let y = parse_expr(sexprs.next().unwrap())?;
-                ExprEnum::Op(op, Box::new(x), Box::new(y))
-            } else {
-                return Err(ParseError(ParseErrorEnum::InvalidExpr, meta));
+                },
+                "let" => {
+                    if arity == 3 {
+                        let (identifier, _) = expect_identifier(sexprs.next().unwrap())?;
+                        let binding = parse_expr(sexprs.next().unwrap())?;
+                        let body = parse_expr(sexprs.next().unwrap())?;
+                        ExprEnum::Let(identifier, Box::new(binding), Box::new(body))
+                    } else {
+                        return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
+                    }
+                },
+                _ => {
+                    return Err(ParseError(ParseErrorEnum::InvalidExpr, meta));
+                }
             }
         }
     };
