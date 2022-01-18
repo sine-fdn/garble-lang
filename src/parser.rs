@@ -38,7 +38,7 @@ struct Sexpr(SexprEnum, MetaInfo);
 enum SexprEnum {
     True,
     False,
-    Number(u64),
+    NumUnsigned(u128),
     List(Vec<Sexpr>),
     Identifier(String),
 }
@@ -93,7 +93,7 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
     let expr = match sexpr {
         SexprEnum::True => ExprEnum::True,
         SexprEnum::False => ExprEnum::False,
-        SexprEnum::Number(n) => ExprEnum::Number(n),
+        SexprEnum::NumUnsigned(n) => ExprEnum::NumUnsigned(n),
         SexprEnum::Identifier(s) => ExprEnum::Identifier(s),
         SexprEnum::List(sexprs) => {
             if sexprs.len() == 3 {
@@ -102,7 +102,7 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                 let op = match op.as_str() {
                     "+" => Op::Add,
                     "&" => Op::BitAnd,
-                    "|" => Op::BitXor,
+                    "^" => Op::BitXor,
                     _ => {
                         return Err(ParseError(ParseErrorEnum::InvalidOp, meta));
                     }
@@ -168,6 +168,10 @@ fn expect_type(sexpr: Sexpr) -> Result<(Type, MetaInfo), ParseError> {
             let ty = match identifier.as_str() {
                 "bool" => Type::Bool,
                 "u8" => Type::U8,
+                "u16" => Type::U16,
+                "u32" => Type::U32,
+                "u64" => Type::U64,
+                "u128" => Type::U128,
                 _ => return Err(ParseError(ParseErrorEnum::ExpectedType, meta)),
             };
             Ok((ty, meta))
@@ -191,8 +195,8 @@ fn parse_into_sexpr(prg: &str) -> Result<Sexpr, ParseError> {
                         let token: String = current_token.iter().collect();
                         current_token.clear();
                         let meta = MetaInfo {};
-                        let sexpr = if let Ok(n) = token.parse::<u64>() {
-                            SexprEnum::Number(n)
+                        let sexpr = if let Ok(n) = token.parse::<u128>() {
+                            SexprEnum::NumUnsigned(n)
                         } else if token.as_str() == "true" {
                             SexprEnum::True
                         } else if token.as_str() == "false" {

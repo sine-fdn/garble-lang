@@ -27,6 +27,10 @@ pub struct MainDef {
 pub enum Type {
     Bool,
     U8,
+    U16,
+    U32,
+    U64,
+    U128,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -45,7 +49,7 @@ pub struct Expr(pub ExprEnum, pub MetaInfo);
 pub enum ExprEnum {
     True,
     False,
-    Number(u64),
+    NumUnsigned(u128),
     Identifier(String),
     Op(Op, Box<Expr>, Box<Expr>),
 }

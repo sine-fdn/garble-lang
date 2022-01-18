@@ -11,8 +11,9 @@ pub struct TypeError(pub TypeErrorEnum, pub MetaInfo);
 
 #[derive(Debug, Clone)]
 pub enum TypeErrorEnum {
-    MaxNumSizeExceeded(Type, u64),
-    ExpectedNumTypeButFound(Type),
+    MaxNumUnsignedSizeExceeded(Type, u128),
+    UnexpectedType { expected: Type, actual: Type },
+    TypeMismatch((Type, MetaInfo), (Type, MetaInfo)),
 }
 
 impl Program {
@@ -25,7 +26,8 @@ impl Program {
             params.push((*party, param.clone()));
         }
         let mut env = bindings.into();
-        let body = self.main.body.type_check(&mut env, self.main.ty)?;
+        let body = self.main.body.type_check(&mut env)?;
+        expect_type(&body, self.main.ty)?;
         let main = typed_ast::MainDef {
             params,
             body,
@@ -38,52 +40,93 @@ impl Program {
     }
 }
 
-fn ensure_num_type(ty: Type, meta: MetaInfo) -> Result<Type, TypeError> {
+fn expect_type(expr: &typed_ast::Expr, expected: Type) -> Result<(), TypeError> {
+    let typed_ast::Expr(_expr, actual, meta) = expr;
+    let actual = *actual;
+    if actual == expected {
+        Ok(())
+    } else {
+        let e = TypeErrorEnum::UnexpectedType { expected, actual };
+        Err(TypeError(e, *meta))
+    }
+}
+
+fn unify(e1: &typed_ast::Expr, e2: &typed_ast::Expr, m: MetaInfo) -> Result<Type, TypeError> {
+    let typed_ast::Expr(expr1, ty1, meta1) = e1;
+    let typed_ast::Expr(expr2, ty2, meta2) = e2;
+    match (expr1, expr2) {
+        (typed_ast::ExprEnum::NumUnsigned(n1), typed_ast::ExprEnum::NumUnsigned(n2)) => {
+            let n = if n1 > n2 { n1 } else { n2 };
+            return Ok(min_unsigned_type(*n));
+        }
+        (typed_ast::ExprEnum::NumUnsigned(n), _) => {
+            if is_coercible(*n, *ty2) {
+                return Ok(*ty2);
+            }
+        }
+        (_, typed_ast::ExprEnum::NumUnsigned(n)) => {
+            if is_coercible(*n, *ty1) {
+                return Ok(*ty1);
+            }
+        }
+        _ => {
+            if *ty1 == *ty2 {
+                return Ok(*ty1);
+            }
+        }
+    }
+    let e = TypeErrorEnum::TypeMismatch((*ty1, *meta1), (*ty2, *meta2));
+    Err(TypeError(e, m))
+}
+
+fn is_coercible(n: u128, ty: Type) -> bool {
     match ty {
-        Type::Bool => Err(TypeError(TypeErrorEnum::ExpectedNumTypeButFound(ty), meta)),
-        Type::U8 => Ok(Type::U8),
+        Type::Bool => n <= 1,
+        Type::U8 => n <= u8::MAX as u128,
+        Type::U16 => n <= u16::MAX as u128,
+        Type::U32 => n <= u32::MAX as u128,
+        Type::U64 => n <= u64::MAX as u128,
+        Type::U128 => true,
+    }
+}
+
+fn min_unsigned_type(n: u128) -> Type {
+    if n <= u8::MAX as u128 {
+        Type::U8
+    } else if n <= u16::MAX as u128 {
+        Type::U16
+    } else if n <= u32::MAX as u128 {
+        Type::U32
+    } else if n <= u64::MAX as u128 {
+        Type::U64
+    } else {
+        Type::U128
     }
 }
 
 impl Expr {
-    fn type_check(&self, env: &mut Env, expected: Type) -> Result<typed_ast::Expr, TypeError> {
+    fn type_check(&self, env: &mut Env) -> Result<typed_ast::Expr, TypeError> {
         let Expr(expr, meta) = self;
         let meta = *meta;
         let (expr, ty) = match expr {
             ExprEnum::True => (typed_ast::ExprEnum::True, Type::Bool),
             ExprEnum::False => (typed_ast::ExprEnum::False, Type::Bool),
-            ExprEnum::Number(n) => {
-                let expected = ensure_num_type(expected, meta)?;
-                match expected {
-                    Type::Bool => unreachable!("Bool cannot be the type of a number literal"),
-                    Type::U8 => {
-                        if *n <= u8::MAX as u64 {
-                            (typed_ast::ExprEnum::NumU8(*n as u8), Type::U8)
-                        } else {
-                            let e = TypeErrorEnum::MaxNumSizeExceeded(Type::U8, *n);
-                            return Err(TypeError(e, meta));
-                        }
-                    }
-                }
+            ExprEnum::NumUnsigned(n) => {
+                (typed_ast::ExprEnum::NumUnsigned(*n), min_unsigned_type(*n))
             }
             ExprEnum::Identifier(s) => (typed_ast::ExprEnum::Identifier(s.clone()), env.get(s)),
             ExprEnum::Op(op, x, y) => match op {
                 Op::Add => {
-                    let expected = ensure_num_type(expected, meta)?;
-                    let x = x.type_check(env, expected)?;
-                    let y = y.type_check(env, expected)?;
-                    (
-                        typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)),
-                        expected,
-                    )
+                    let x = x.type_check(env)?;
+                    let y = y.type_check(env)?;
+                    let ty = unify(&x, &y, meta)?;
+                    (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), ty)
                 }
                 Op::BitAnd | Op::BitXor => {
-                    let x = x.type_check(env, Type::Bool)?;
-                    let y = y.type_check(env, Type::Bool)?;
-                    (
-                        typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)),
-                        expected,
-                    )
+                    let x = x.type_check(env)?;
+                    let y = y.type_check(env)?;
+                    let ty = unify(&x, &y, meta)?;
+                    (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), ty)
                 }
             },
         };
@@ -170,7 +213,7 @@ fn type_check_add() -> Result<(), TypeError> {
                 ExprEnum::Op(
                     Op::Add,
                     Box::new(Expr(ExprEnum::Identifier("x".to_string()), MetaInfo {})),
-                    Box::new(Expr(ExprEnum::Number(255), MetaInfo {})),
+                    Box::new(Expr(ExprEnum::NumUnsigned(255), MetaInfo {})),
                 ),
                 MetaInfo {},
             ),
@@ -191,7 +234,7 @@ fn type_check_add() -> Result<(), TypeError> {
                         MetaInfo {},
                     )),
                     Box::new(typed_ast::Expr(
-                        typed_ast::ExprEnum::NumU8(255),
+                        typed_ast::ExprEnum::NumUnsigned(255),
                         Type::U8,
                         MetaInfo {},
                     )),

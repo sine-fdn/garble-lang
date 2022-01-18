@@ -31,7 +31,7 @@ pub struct Expr(pub ExprEnum, pub Type, pub MetaInfo);
 pub enum ExprEnum {
     True,
     False,
-    NumU8(u8),
+    NumUnsigned(u128),
     Identifier(String),
     Op(Op, Box<Expr>, Box<Expr>),
 }

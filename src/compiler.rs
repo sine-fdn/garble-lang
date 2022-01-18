@@ -3,7 +3,8 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     ast::{Op, ParamDef, Party, Type},
     circuit::{Circuit, Gate, GateIndex},
-    typed_ast::{Expr, ExprEnum, MainDef, Program}, parser::MetaInfo,
+    parser::MetaInfo,
+    typed_ast::{Expr, ExprEnum, MainDef, Program},
 };
 
 impl Program {
@@ -13,10 +14,7 @@ impl Program {
         let mut gates = vec![];
         let mut wire = 2;
         for (party, ParamDef(identifier, ty)) in self.main.params.iter() {
-            let type_size = match ty {
-                Type::Bool => 1,
-                Type::U8 => 8,
-            };
+            let type_size = ty.size_in_bits();
             let mut wires = Vec::with_capacity(type_size);
             for _i in 0..type_size {
                 match party {
@@ -42,6 +40,17 @@ fn push_gate(gates: &mut Vec<Gate>, gate: Gate) -> GateIndex {
     gates.len() + 1 // because index 0 and 1 are reserved for const true/false
 }
 
+fn extend_to_bits(v: &mut Vec<usize>, bits: usize) {
+    if v.len() != bits {
+        println!("before (len {}): {:?}", v.len(), v);
+        let old_size = v.len();
+        v.resize(bits, 0);
+        v.copy_within(0..old_size, bits - old_size);
+        v[0..old_size].fill(0);
+        println!("after (len {}): {:?}", v.len(), v);
+    }
+}
+
 impl Expr {
     fn compile(&self, env: &mut Env, gates: &mut Vec<Gate>) -> Vec<GateIndex> {
         let Expr(expr, ty, _meta) = self;
@@ -52,15 +61,15 @@ impl Expr {
             ExprEnum::False => {
                 vec![0]
             }
-            ExprEnum::NumU8(n) => {
-                let mut bits = Vec::with_capacity(8);
-                u8_to_bits(*n, &mut bits);
+            ExprEnum::NumUnsigned(n) => {
+                let mut bits = Vec::with_capacity(ty.size_in_bits());
+                unsigned_to_bits(*n, ty.size_in_bits(), &mut bits);
                 bits.into_iter().map(|b| b as usize).collect()
             }
             ExprEnum::Identifier(s) => env.get(s),
             ExprEnum::Op(op, x, y) => {
-                let x = x.compile(env, gates);
-                let y = y.compile(env, gates);
+                let mut x = x.compile(env, gates);
+                let mut y = y.compile(env, gates);
                 match op {
                     Op::BitAnd => {
                         vec![push_gate(gates, Gate::And(x[0], y[0]))]
@@ -71,12 +80,15 @@ impl Expr {
                     Op::Add => {
                         match ty {
                             Type::Bool => panic!("Addition is not supported for type Bool"),
-                            Type::U8 => {
+                            Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 => {
+                                let bits = ty.size_in_bits();
                                 let mut carry = 0;
-                                let mut sum = vec![0; 8];
+                                let mut sum = vec![0; bits];
+                                extend_to_bits(&mut x, bits);
+                                extend_to_bits(&mut y, bits);
                                 // sequence of full adders:
-                                for i in 0..8 {
-                                    let i = 7 - i;
+                                for i in 0..bits {
+                                    let i = bits - 1 - i;
                                     let x = x[i];
                                     let y = y[i];
                                     // first half-adder:
@@ -98,6 +110,19 @@ impl Expr {
                     }
                 }
             }
+        }
+    }
+}
+
+impl Type {
+    fn size_in_bits(&self) -> usize {
+        match self {
+            Type::Bool => 1,
+            Type::U8 => 8,
+            Type::U16 => 16,
+            Type::U32 => 32,
+            Type::U64 => 64,
+            Type::U128 => 128,
         }
     }
 }
@@ -146,7 +171,7 @@ pub enum ComputeError {
     UnexpectedNumberOfInputsFromPartyA(usize),
     UnexpectedNumberOfInputsFromPartyB(usize),
     OutputHasNotBeenComputed,
-    OutputDoesNotHaveType(Type),
+    OutputTypeMismatch { expected: Type, actual_bits: usize },
 }
 
 impl Computation {
@@ -205,32 +230,79 @@ impl Computation {
         if output.len() == 1 {
             Ok(output[0])
         } else {
-            Err(ComputeError::OutputDoesNotHaveType(Type::Bool))
+            Err(ComputeError::OutputTypeMismatch {
+                expected: Type::Bool,
+                actual_bits: output.len(),
+            })
         }
     }
 
     pub fn set_u8(&mut self, p: Party, n: u8) {
         let inputs = self.get_input(p);
-        u8_to_bits(n, inputs);
+        unsigned_to_bits(n as u128, 8, inputs);
     }
 
-    pub fn get_u8(&self) -> Result<u8, ComputeError> {
+    pub fn set_u16(&mut self, p: Party, n: u16) {
+        let inputs = self.get_input(p);
+        unsigned_to_bits(n as u128, 16, inputs);
+    }
+
+    pub fn set_u32(&mut self, p: Party, n: u32) {
+        let inputs = self.get_input(p);
+        unsigned_to_bits(n as u128, 32, inputs);
+    }
+
+    pub fn set_u64(&mut self, p: Party, n: u64) {
+        let inputs = self.get_input(p);
+        unsigned_to_bits(n as u128, 64, inputs);
+    }
+
+    pub fn set_u128(&mut self, p: Party, n: u128) {
+        let inputs = self.get_input(p);
+        unsigned_to_bits(n, 128, inputs);
+    }
+
+    fn get_unsigned(&self, ty: Type) -> Result<u128, ComputeError> {
         let output = self.get_output()?;
-        if output.len() == 8 {
+        let size = ty.size_in_bits();
+        if output.len() == size {
             let mut n = 0;
-            for i in 0..8 {
-                n += (output[i] as u8) << (7 - i);
+            for i in 0..size {
+                n += (output[i] as u128) << (size - 1 - i);
             }
             Ok(n)
         } else {
-            Err(ComputeError::OutputDoesNotHaveType(Type::U8))
+            Err(ComputeError::OutputTypeMismatch{
+                expected: ty,
+                actual_bits: output.len(),
+            })
         }
+    }
+
+    pub fn get_u8(&self) -> Result<u8, ComputeError> {
+        self.get_unsigned(Type::U8).map(|n| n as u8)
+    }
+
+    pub fn get_u16(&self) -> Result<u16, ComputeError> {
+        self.get_unsigned(Type::U16).map(|n| n as u16)
+    }
+
+    pub fn get_u32(&self) -> Result<u32, ComputeError> {
+        self.get_unsigned(Type::U32).map(|n| n as u32)
+    }
+
+    pub fn get_u64(&self) -> Result<u64, ComputeError> {
+        self.get_unsigned(Type::U64).map(|n| n as u64)
+    }
+
+    pub fn get_u128(&self) -> Result<u128, ComputeError> {
+        self.get_unsigned(Type::U128)
     }
 }
 
-fn u8_to_bits(n: u8, bits: &mut Vec<bool>) {
-    for i in 0..8 {
-        bits.push((n >> (7 - i) & 1) == 1);
+fn unsigned_to_bits(n: u128, size: usize, bits: &mut Vec<bool>) {
+    for i in 0..size {
+        bits.push((n >> (size - 1 - i) & 1) == 1);
     }
 }
 
@@ -281,7 +353,7 @@ fn compile_add() -> Result<(), ComputeError> {
                             Type::U8,
                             MetaInfo {},
                         )),
-                        Box::new(Expr(ExprEnum::NumU8(y), Type::U8, MetaInfo {})),
+                        Box::new(Expr(ExprEnum::NumUnsigned(y), Type::U8, MetaInfo {})),
                     ),
                     Type::U8,
                     MetaInfo {},
@@ -294,7 +366,7 @@ fn compile_add() -> Result<(), ComputeError> {
         for x in 0..127 {
             computation.set_u8(Party::A, x);
             computation.run()?;
-            assert_eq!(computation.get_u8()?, x + y);
+            assert_eq!(computation.get_u8()?, x + y as u8);
         }
     }
     Ok(())
