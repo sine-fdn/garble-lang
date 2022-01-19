@@ -159,6 +159,19 @@ impl Expr {
                             _ => unreachable!(),
                         }
                     }
+                    Op::Eq | Op::NotEq => {
+                        let mut acc = 1;
+                        for i in 0..bits {
+                            let xor = push_gate(gates, Gate::Xor(x[i], y[i]));
+                            let eq = push_gate(gates, Gate::Xor(xor, 1));
+                            acc = push_gate(gates, Gate::And(acc, eq));
+                        }
+                        match op {
+                            Op::Eq => vec![acc],
+                            Op::NotEq => vec![push_gate(gates, Gate::Xor(acc, 1))],
+                            _ => unreachable!(),
+                        }
+                    }
                 }
             }
             ExprEnum::Let(var, binding, body) => {

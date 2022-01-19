@@ -149,3 +149,26 @@ fn compile_greater_than_and_less_then() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn compile_equals_and_not_equals() -> Result<(), String> {
+    let prg = "
+(fn main bool (param x A u16) (param y A u16)
+  (& (== x y) (!= x 0)))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in 0..2 {
+        for y in 0..2 {
+            let expected = (x == y) && (x != 0);
+            computation.set_u16(Party::A, x);
+            computation.set_u16(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(
+                computation.get_bool().map_err(|e| e.prettify(prg))?,
+                expected
+            );
+        }
+    }
+    Ok(())
+}

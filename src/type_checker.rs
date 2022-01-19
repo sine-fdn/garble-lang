@@ -215,6 +215,19 @@ impl Expr {
                         }
                     }
                 }
+                Op::Eq | Op::NotEq => {
+                    let x = x.type_check(env)?;
+                    let y = y.type_check(env)?;
+                    let ty = unify(&x, &y, meta)?;
+                    match ty {
+                        Type::Bool | Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 => {
+                            (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), Type::Bool)
+                        }
+                        _ => {
+                            return Err(TypeError(TypeErrorEnum::ExpectedBoolOrNumberType(ty), meta));
+                        }
+                    }
+                }
             },
             ExprEnum::Let(var, binding, body) => {
                 let binding = binding.type_check(env)?;

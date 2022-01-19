@@ -66,4 +66,6 @@ pub enum Op {
     BitOr,
     GreaterThan,
     LessThan,
+    Eq,
+    NotEq,
 }
