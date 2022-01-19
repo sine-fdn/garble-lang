@@ -63,4 +63,7 @@ pub enum Op {
     Add,
     BitAnd,
     BitXor,
+    BitOr,
+    GreaterThan,
+    LessThan,
 }

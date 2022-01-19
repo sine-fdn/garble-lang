@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, cmp::max};
 
 use crate::{
     ast::{Op, ParamDef, Party, Type},
@@ -75,43 +75,88 @@ impl Expr {
             ExprEnum::Op(op, x, y) => {
                 let mut x = x.compile(fns, env, gates);
                 let mut y = y.compile(fns, env, gates);
+                let bits = max(x.len(), y.len());
+                extend_to_bits(&mut x, bits);
+                extend_to_bits(&mut y, bits);
                 match op {
                     Op::BitAnd => {
-                        vec![push_gate(gates, Gate::And(x[0], y[0]))]
+                        let mut output_bits = vec![0; bits];
+                        for i in 0..bits {
+                            output_bits[i] = push_gate(gates, Gate::And(x[i], y[i]));
+                        }
+                        output_bits
                     }
                     Op::BitXor => {
-                        vec![push_gate(gates, Gate::Xor(x[0], y[0]))]
+                        let mut output_bits = vec![0; bits];
+                        for i in 0..bits {
+                            output_bits[i] = push_gate(gates, Gate::Xor(x[i], y[i]));
+                        }
+                        output_bits
+                    }
+                    Op::BitOr => {
+                        let mut output_bits = vec![0; bits];
+                        for i in 0..bits {
+                            let xor = push_gate(gates, Gate::Xor(x[i], y[i]));
+                            let and = push_gate(gates, Gate::And(x[i], y[i]));
+                            let or = push_gate(gates, Gate::Xor(xor, and));
+                            output_bits[i] = or;
+                        }
+                        output_bits
                     }
                     Op::Add => {
-                        match ty {
-                            Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 => {
-                                let bits = ty.size_in_bits();
-                                let mut carry = 0;
-                                let mut sum = vec![0; bits];
-                                extend_to_bits(&mut x, bits);
-                                extend_to_bits(&mut y, bits);
-                                // sequence of full adders:
-                                for i in 0..bits {
-                                    let i = bits - 1 - i;
-                                    let x = x[i];
-                                    let y = y[i];
-                                    // first half-adder:
-                                    let u = push_gate(gates, Gate::Xor(x, y));
-                                    let v = push_gate(gates, Gate::And(x, y));
-                                    // second half-adder:
-                                    let s = push_gate(gates, Gate::Xor(u, carry));
-                                    let w = push_gate(gates, Gate::And(u, carry));
-                                    sum[i] = s;
-                                    // or gate:
-                                    let xor_v_w = push_gate(gates, Gate::Xor(v, w));
-                                    let and_v_w = push_gate(gates, Gate::And(v, w));
-                                    let or_v_w = push_gate(gates, Gate::Xor(xor_v_w, and_v_w));
-                                    carry = or_v_w;
-                                }
-                                sum
-                            }
-                            Type::Bool => panic!("Addition is not supported for type Bool"),
-                            Type::Fn(_, _) => panic!("Addition is not supported for fn types"),
+                        let mut carry = 0;
+                        let mut sum = vec![0; bits];
+                        // sequence of full adders:
+                        for i in 0..bits {
+                            let i = bits - 1 - i;
+                            let x = x[i];
+                            let y = y[i];
+                            // first half-adder:
+                            let u = push_gate(gates, Gate::Xor(x, y));
+                            let v = push_gate(gates, Gate::And(x, y));
+                            // second half-adder:
+                            let s = push_gate(gates, Gate::Xor(u, carry));
+                            let w = push_gate(gates, Gate::And(u, carry));
+                            sum[i] = s;
+                            // or gate:
+                            let xor_v_w = push_gate(gates, Gate::Xor(v, w));
+                            let and_v_w = push_gate(gates, Gate::And(v, w));
+                            let or_v_w = push_gate(gates, Gate::Xor(xor_v_w, and_v_w));
+                            carry = or_v_w;
+                        }
+                        sum
+                    }
+                    Op::GreaterThan | Op::LessThan => {
+                        let mut acc_gt = 0;
+                        let mut acc_lt = 0;
+                        for i in 0..bits {
+                            // greater-than for the current bit:
+                            let xor = push_gate(gates, Gate::Xor(x[i], y[i]));
+                            let gt = push_gate(gates, Gate::And(xor, x[i]));
+
+                            // less-than for the current bit:
+                            let lt = push_gate(gates, Gate::And(xor, y[i]));
+
+                            // greater-than or'ed with accumulator:
+                            let xor = push_gate(gates, Gate::Xor(gt, acc_gt));
+                            let and = push_gate(gates, Gate::And(gt, acc_gt));
+                            let gt = push_gate(gates, Gate::Xor(xor, and));
+
+                            // less-than or'ed with accumulator:
+                            let xor = push_gate(gates, Gate::Xor(lt, acc_lt));
+                            let and = push_gate(gates, Gate::And(lt, acc_lt));
+                            let lt = push_gate(gates, Gate::Xor(xor, and));
+
+                            let not_acc_gt = push_gate(gates, Gate::Xor(acc_gt, 1));
+                            let not_acc_lt = push_gate(gates, Gate::Xor(acc_lt, 1));
+
+                            acc_gt = push_gate(gates, Gate::And(gt, not_acc_lt));
+                            acc_lt = push_gate(gates, Gate::And(lt, not_acc_gt))
+                        }
+                        match op {
+                            Op::GreaterThan => vec![acc_gt],
+                            Op::LessThan => vec![acc_lt],
+                            _ => unreachable!(),
                         }
                     }
                 }
@@ -128,7 +173,8 @@ impl Expr {
                 let fn_def = *fns.get(identifier).unwrap();
                 let mut body = fn_def.body.clone();
                 for (ParamDef(identifier, ty), arg) in fn_def.params.iter().zip(args) {
-                    let let_expr = ExprEnum::Let(identifier.clone(), Box::new(arg.clone()), Box::new(body));
+                    let let_expr =
+                        ExprEnum::Let(identifier.clone(), Box::new(arg.clone()), Box::new(body));
                     body = Expr(let_expr, ty.clone(), meta.clone())
                 }
                 env.push();

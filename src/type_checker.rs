@@ -14,6 +14,8 @@ pub struct TypeError(pub TypeErrorEnum, pub MetaInfo);
 pub enum TypeErrorEnum {
     IdentifierWithoutBinding(String),
     MaxNumUnsignedSizeExceeded(Type, u128),
+    ExpectedBoolOrNumberType(Type),
+    ExpectedNumberType(Type),
     DuplicateFnParam(String),
     FnCannotBeUsedAsValue(String),
     ExpectedFnType {
@@ -187,11 +189,31 @@ impl Expr {
                     let ty = unify(&x, &y, meta)?;
                     (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), ty)
                 }
-                Op::BitAnd | Op::BitXor => {
+                Op::BitAnd | Op::BitXor | Op::BitOr => {
                     let x = x.type_check(env)?;
                     let y = y.type_check(env)?;
                     let ty = unify(&x, &y, meta)?;
-                    (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), ty)
+                    match ty {
+                        Type::Bool | Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 => {
+                            (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), ty)
+                        }
+                        _ => {
+                            return Err(TypeError(TypeErrorEnum::ExpectedBoolOrNumberType(ty), meta));
+                        }
+                    }
+                }
+                Op::GreaterThan | Op::LessThan => {
+                    let x = x.type_check(env)?;
+                    let y = y.type_check(env)?;
+                    let ty = unify(&x, &y, meta)?;
+                    match ty {
+                        Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 => {
+                            (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), Type::Bool)
+                        }
+                        _ => {
+                            return Err(TypeError(TypeErrorEnum::ExpectedNumberType(ty), meta));
+                        }
+                    }
                 }
             },
             ExprEnum::Let(var, binding, body) => {
@@ -258,7 +280,11 @@ impl Expr {
                 let case_false = case_false.type_check(env)?;
                 expect_type(&condition, Type::Bool)?;
                 let ty = unify(&case_true, &case_false, meta)?;
-                let expr = typed_ast::ExprEnum::If(Box::new(condition), Box::new(case_true), Box::new(case_false));
+                let expr = typed_ast::ExprEnum::If(
+                    Box::new(condition),
+                    Box::new(case_true),
+                    Box::new(case_false),
+                );
                 (expr, ty)
             }
         };

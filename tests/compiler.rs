@@ -98,3 +98,54 @@ fn compile_if() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn compile_bit_ops_for_numbers() -> Result<(), String> {
+    let prg = "
+(fn main u16 (param x A u16) (param y A u16) (param z A u16)
+  (| x (& y (^ z 2))))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in 10..20 {
+        for y in 10..20 {
+            for z in 10..20 {
+                let expected = x | (y & (z ^ 2));
+                computation.set_u16(Party::A, x);
+                computation.set_u16(Party::A, y);
+                computation.set_u16(Party::A, z);
+                computation.run().map_err(|e| e.prettify(prg))?;
+                assert_eq!(
+                    computation.get_u16().map_err(|e| e.prettify(prg))?,
+                    expected
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_greater_than_and_less_then() -> Result<(), String> {
+    let prg = "
+(fn main bool (param x A u16) (param y A u16)
+  (&
+    (> x y)
+    (< x 10)))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in 5..15 {
+        for y in 5..15 {
+            let expected = (x > y) && (x < 10);
+            computation.set_u16(Party::A, x);
+            computation.set_u16(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(
+                computation.get_bool().map_err(|e| e.prettify(prg))?,
+                expected
+            );
+        }
+    }
+    Ok(())
+}
