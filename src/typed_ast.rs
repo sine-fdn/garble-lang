@@ -35,4 +35,5 @@ pub enum ExprEnum {
     Identifier(String),
     Op(Op, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
+    FnCall(String, Vec<Expr>),
 }

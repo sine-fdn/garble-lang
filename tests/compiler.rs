@@ -59,3 +59,23 @@ fn compile_let_expr() -> Result<(), String> {
     assert_eq!(computation.get_u16().map_err(|e| e.prettify(prg))?, 257);
     Ok(())
 }
+
+#[test]
+fn compile_static_fn_defs() -> Result<(), String> {
+    let prg = "
+(fn add u16 (param x u16) (param y u16)
+  (+ x y))
+
+(fn inc u16 (param x u16)
+  (call add x 1))
+
+(fn main u16 (param x A u16)
+  (call inc x))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    computation.set_u16(Party::A, 255);
+    computation.run().map_err(|e| e.prettify(prg))?;
+    assert_eq!(computation.get_u16().map_err(|e| e.prettify(prg))?, 256);
+    Ok(())
+}

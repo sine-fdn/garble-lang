@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use crate::{
-    ast::{Expr, ExprEnum, MainDef, Op, ParamDef, Party, Program, Type},
+    ast::{Expr, ExprEnum, Op, ParamDef, Program, Type},
+    env::Env,
     parser::MetaInfo,
-    typed_ast, env::Env,
+    typed_ast,
 };
 
 #[derive(Debug, Clone)]
@@ -13,36 +14,90 @@ pub struct TypeError(pub TypeErrorEnum, pub MetaInfo);
 pub enum TypeErrorEnum {
     IdentifierWithoutBinding(String),
     MaxNumUnsignedSizeExceeded(Type, u128),
-    UnexpectedType { expected: Type, actual: Type },
+    DuplicateFnParam(String),
+    FnCannotBeUsedAsValue(String),
+    ExpectedFnType {
+        expected: Vec<Type>,
+        actual: Type,
+    },
+    ExpectedFnArgTypes {
+        expected: Vec<Type>,
+        actual: Vec<Type>,
+    },
+    UnexpectedType {
+        expected: Type,
+        actual: Type,
+    },
     TypeMismatch((Type, MetaInfo), (Type, MetaInfo)),
 }
 
 impl Program {
     pub fn type_check(&self) -> Result<typed_ast::Program, TypeError> {
         let mut env = Env::new();
+        let mut fn_defs = Vec::with_capacity(self.fn_defs.len());
+        for fn_def in self.fn_defs.iter() {
+            let mut param_types = Vec::with_capacity(fn_def.params.len());
+
+            env.push();
+            let mut params = Vec::with_capacity(fn_def.params.len());
+            let mut param_identifiers = HashSet::new();
+            for param in fn_def.params.iter() {
+                let ParamDef(identifier, ty) = param;
+                if param_identifiers.contains(identifier) {
+                    let e = TypeErrorEnum::DuplicateFnParam(identifier.clone());
+                    return Err(TypeError(e, fn_def.meta));
+                } else {
+                    param_identifiers.insert(identifier);
+                }
+                env.set(identifier.clone(), ty.clone());
+                params.push(param.clone());
+                param_types.push(ty.clone());
+            }
+            let body = fn_def.body.type_check(&mut env)?;
+            expect_type(&body, fn_def.ty.clone())?;
+            env.pop();
+
+            let fn_type = Type::Fn(param_types, Box::new(fn_def.ty.clone()));
+            env.set(fn_def.identifier.clone(), fn_type);
+            fn_defs.push(typed_ast::FnDef {
+                identifier: fn_def.identifier.clone(),
+                params,
+                body,
+                meta: fn_def.meta,
+            })
+        }
         let mut params = Vec::with_capacity(self.main.params.len());
+        let mut param_identifiers = HashSet::new();
         for (party, param) in self.main.params.iter() {
             let ParamDef(identifier, ty) = param;
-            env.set(identifier.clone(), *ty);
+            if param_identifiers.contains(identifier) {
+                let e = TypeErrorEnum::DuplicateFnParam(identifier.clone());
+                return Err(TypeError(e, self.main.meta));
+            } else {
+                param_identifiers.insert(identifier);
+            }
+            env.set(identifier.clone(), ty.clone());
             params.push((*party, param.clone()));
         }
         let body = self.main.body.type_check(&mut env)?;
-        expect_type(&body, self.main.ty)?;
+        expect_type(&body, self.main.ty.clone())?;
         let main = typed_ast::MainDef {
             params,
             body,
             meta: self.main.meta,
         };
-        Ok(typed_ast::Program {
-            fn_defs: vec![], // TODO
-            main,
-        })
+        Ok(typed_ast::Program { fn_defs, main })
     }
 }
 
 fn expect_type(expr: &typed_ast::Expr, expected: Type) -> Result<(), TypeError> {
-    let typed_ast::Expr(_expr, actual, meta) = expr;
-    let actual = *actual;
+    let typed_ast::Expr(expr, actual, meta) = expr;
+    let actual = actual.clone();
+    if let typed_ast::ExprEnum::NumUnsigned(n) = expr {
+        if is_coercible(*n, &expected) {
+            return Ok(());
+        }
+    }
     if actual == expected {
         Ok(())
     } else {
@@ -60,26 +115,26 @@ fn unify(e1: &typed_ast::Expr, e2: &typed_ast::Expr, m: MetaInfo) -> Result<Type
             return Ok(min_unsigned_type(*n));
         }
         (typed_ast::ExprEnum::NumUnsigned(n), _) => {
-            if is_coercible(*n, *ty2) {
-                return Ok(*ty2);
+            if is_coercible(*n, ty2) {
+                return Ok(ty2.clone());
             }
         }
         (_, typed_ast::ExprEnum::NumUnsigned(n)) => {
-            if is_coercible(*n, *ty1) {
-                return Ok(*ty1);
+            if is_coercible(*n, ty1) {
+                return Ok(ty1.clone());
             }
         }
         _ => {
             if *ty1 == *ty2 {
-                return Ok(*ty1);
+                return Ok(ty1.clone());
             }
         }
     }
-    let e = TypeErrorEnum::TypeMismatch((*ty1, *meta1), (*ty2, *meta2));
+    let e = TypeErrorEnum::TypeMismatch((ty1.clone(), *meta1), (ty2.clone(), *meta2));
     Err(TypeError(e, m))
 }
 
-fn is_coercible(n: u128, ty: Type) -> bool {
+fn is_coercible(n: u128, ty: &Type) -> bool {
     match ty {
         Type::Bool => n <= 1,
         Type::U8 => n <= u8::MAX as u128,
@@ -87,6 +142,7 @@ fn is_coercible(n: u128, ty: Type) -> bool {
         Type::U32 => n <= u32::MAX as u128,
         Type::U64 => n <= u64::MAX as u128,
         Type::U128 => true,
+        Type::Fn(_, _) => false,
     }
 }
 
@@ -118,7 +174,10 @@ impl Expr {
                 if let Some(ty) = env.get(s) {
                     (typed_ast::ExprEnum::Identifier(s.clone()), ty)
                 } else {
-                    return Err(TypeError(TypeErrorEnum::IdentifierWithoutBinding(s.clone()), meta));
+                    return Err(TypeError(
+                        TypeErrorEnum::IdentifierWithoutBinding(s.clone()),
+                        meta,
+                    ));
                 }
             }
             ExprEnum::Op(op, x, y) => match op {
@@ -137,13 +196,61 @@ impl Expr {
             },
             ExprEnum::Let(var, binding, body) => {
                 let binding = binding.type_check(env)?;
+                if let Type::Fn(_, _) = binding.1 {
+                    return Err(TypeError(
+                        TypeErrorEnum::FnCannotBeUsedAsValue(var.clone()),
+                        meta,
+                    ));
+                }
                 env.push();
-                env.set(var.clone(), binding.1);
+                env.set(var.clone(), binding.1.clone());
                 let body = body.type_check(env)?;
                 env.pop();
-                let ty = body.1;
+                let ty = body.1.clone();
                 let expr = typed_ast::ExprEnum::Let(var.clone(), Box::new(binding), Box::new(body));
                 (expr, ty)
+            }
+            ExprEnum::FnCall(identifier, args) => {
+                if let Some(fn_type) = env.get(identifier) {
+                    let mut arg_types = Vec::with_capacity(args.len());
+                    let mut arg_meta = Vec::with_capacity(args.len());
+                    let mut arg_exprs = Vec::with_capacity(args.len());
+                    for arg in args.iter() {
+                        let arg = arg.type_check(env)?;
+                        let typed_ast::Expr(_, ty, meta) = &arg;
+                        arg_types.push(ty.clone());
+                        arg_meta.push(*meta);
+                        arg_exprs.push(arg);
+                    }
+                    match fn_type {
+                        Type::Fn(fn_arg_types, ret_ty) => {
+                            if fn_arg_types.len() == arg_types.len() {
+                                for (expected, actual) in fn_arg_types.into_iter().zip(&arg_exprs) {
+                                    expect_type(actual, expected)?;
+                                }
+                                let expr =
+                                    typed_ast::ExprEnum::FnCall(identifier.clone(), arg_exprs);
+                                (expr, *ret_ty)
+                            } else {
+                                let e = TypeErrorEnum::ExpectedFnArgTypes {
+                                    expected: arg_types,
+                                    actual: fn_arg_types,
+                                };
+                                return Err(TypeError(e, meta));
+                            }
+                        }
+                        actual => {
+                            let e = TypeErrorEnum::ExpectedFnType {
+                                expected: arg_types,
+                                actual,
+                            };
+                            return Err(TypeError(e, meta));
+                        }
+                    }
+                } else {
+                    let e = TypeErrorEnum::IdentifierWithoutBinding(identifier.clone());
+                    return Err(TypeError(e, meta));
+                }
             }
         };
         Ok(typed_ast::Expr(expr, ty, meta))

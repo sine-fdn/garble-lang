@@ -1,15 +1,18 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
     ast::{Op, ParamDef, Party, Type},
     circuit::{Circuit, Gate, GateIndex},
-    parser::{MetaInfo, parse},
-    typed_ast::{Expr, ExprEnum, MainDef, Program}, compile, env::Env,
+    env::Env,
+    typed_ast::{Expr, ExprEnum, FnDef, Program},
 };
 
 impl Program {
     pub fn compile(&self) -> Circuit {
-        // TODO: compile non-main fn defs
+        let mut fns = HashMap::new();
+        for fn_def in self.fn_defs.iter() {
+            fns.insert(fn_def.identifier.clone(), fn_def);
+        }
         let mut env = Env::new();
         let mut gates = vec![];
         let mut wire = 2;
@@ -26,7 +29,7 @@ impl Program {
             }
             env.set(identifier.clone(), wires);
         }
-        let output_gates = self.main.body.compile(&mut env, &mut gates);
+        let output_gates = self.main.body.compile(&fns, &mut env, &mut gates);
         Circuit {
             gates,
             output_gates,
@@ -49,8 +52,13 @@ fn extend_to_bits(v: &mut Vec<usize>, bits: usize) {
 }
 
 impl Expr {
-    fn compile(&self, env: &mut Env<Vec<GateIndex>>, gates: &mut Vec<Gate>) -> Vec<GateIndex> {
-        let Expr(expr, ty, _meta) = self;
+    fn compile(
+        &self,
+        fns: &HashMap<String, &FnDef>,
+        env: &mut Env<Vec<GateIndex>>,
+        gates: &mut Vec<Gate>,
+    ) -> Vec<GateIndex> {
+        let Expr(expr, ty, meta) = self;
         match expr {
             ExprEnum::True => {
                 vec![1]
@@ -65,8 +73,8 @@ impl Expr {
             }
             ExprEnum::Identifier(s) => env.get(s).unwrap(),
             ExprEnum::Op(op, x, y) => {
-                let mut x = x.compile(env, gates);
-                let mut y = y.compile(env, gates);
+                let mut x = x.compile(fns, env, gates);
+                let mut y = y.compile(fns, env, gates);
                 match op {
                     Op::BitAnd => {
                         vec![push_gate(gates, Gate::And(x[0], y[0]))]
@@ -76,7 +84,6 @@ impl Expr {
                     }
                     Op::Add => {
                         match ty {
-                            Type::Bool => panic!("Addition is not supported for type Bool"),
                             Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 => {
                                 let bits = ty.size_in_bits();
                                 let mut carry = 0;
@@ -103,15 +110,29 @@ impl Expr {
                                 }
                                 sum
                             }
+                            Type::Bool => panic!("Addition is not supported for type Bool"),
+                            Type::Fn(_, _) => panic!("Addition is not supported for fn types"),
                         }
                     }
                 }
             }
             ExprEnum::Let(var, binding, body) => {
-                let binding = binding.compile(env, gates);
+                let binding = binding.compile(fns, env, gates);
                 env.push();
                 env.set(var.clone(), binding);
-                let body = body.compile(env, gates);
+                let body = body.compile(fns, env, gates);
+                env.pop();
+                body
+            }
+            ExprEnum::FnCall(identifier, args) => {
+                let fn_def = *fns.get(identifier).unwrap();
+                let mut body = fn_def.body.clone();
+                for (ParamDef(identifier, ty), arg) in fn_def.params.iter().zip(args) {
+                    let let_expr = ExprEnum::Let(identifier.clone(), Box::new(arg.clone()), Box::new(body));
+                    body = Expr(let_expr, ty.clone(), meta.clone())
+                }
+                env.push();
+                let body = body.compile(fns, env, gates);
                 env.pop();
                 body
             }
@@ -128,6 +149,7 @@ impl Type {
             Type::U32 => 32,
             Type::U64 => 64,
             Type::U128 => 128,
+            Type::Fn(_, _) => panic!("Fn types cannot be directly mapped to bits"),
         }
     }
 }
@@ -256,7 +278,7 @@ impl Computation {
             }
             Ok(n)
         } else {
-            Err(ComputeError::OutputTypeMismatch{
+            Err(ComputeError::OutputTypeMismatch {
                 expected: ty,
                 actual_bits: output.len(),
             })

@@ -23,7 +23,7 @@ pub struct MainDef {
     pub meta: MetaInfo,
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Type {
     Bool,
     U8,
@@ -31,6 +31,7 @@ pub enum Type {
     U32,
     U64,
     U128,
+    Fn(Vec<Type>, Box<Type>)
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -53,6 +54,7 @@ pub enum ExprEnum {
     Identifier(String),
     Op(Op, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
+    FnCall(String, Vec<Expr>),
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]

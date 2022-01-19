@@ -1,4 +1,4 @@
-use crate::ast::{Expr, ExprEnum, MainDef, Op, ParamDef, Party, Program, Type};
+use crate::ast::{Expr, ExprEnum, FnDef, MainDef, Op, ParamDef, Party, Program, Type};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct MetaInfo {
@@ -14,7 +14,7 @@ pub enum ParseErrorEnum {
     EmptySexpr,
     UnexpectedToken,
     UnclosedSexpr,
-    MissingMainFnDef,
+    InvalidFnDef,
     InvalidMainFnDef,
     ExpectedIdentifier,
     ExpectedListOfLength(usize),
@@ -26,8 +26,8 @@ pub enum ParseErrorEnum {
 }
 
 pub fn parse(prg: &str) -> Result<Program, ParseError> {
-    let sexpr = parse_into_sexpr(prg)?;
-    let ast = parse_into_ast(sexpr)?;
+    let sexprs = parse_into_sexprs(prg)?;
+    let ast = parse_into_ast(sexprs)?;
     Ok(ast)
 }
 
@@ -43,7 +43,53 @@ enum SexprEnum {
     Identifier(String),
 }
 
-fn parse_into_ast(sexpr: Sexpr) -> Result<Program, ParseError> {
+fn parse_into_ast(mut sexprs: Vec<Sexpr>) -> Result<Program, ParseError> {
+    let main = sexprs.pop().unwrap();
+    let mut fn_defs = Vec::new();
+    for fn_def in sexprs.into_iter() {
+        fn_defs.push(parse_fn_def(fn_def)?);
+    }
+    let main = parse_main_def(main)?;
+    Ok(Program { fn_defs, main })
+}
+
+fn parse_fn_def(sexpr: Sexpr) -> Result<FnDef, ParseError> {
+    let Sexpr(sexpr, meta) = sexpr;
+    match sexpr {
+        SexprEnum::List(mut sexprs) => {
+            let body = parse_expr(sexprs.pop().unwrap())?;
+            let mut sexprs = sexprs.into_iter();
+            if let (Some(keyword_fn), Some(identifier), Some(ty)) =
+                (sexprs.next(), sexprs.next(), sexprs.next())
+            {
+                expect_keyword(keyword_fn, "fn")?;
+                let (identifier, _) = expect_identifier(identifier)?;
+                let (ty, _) = expect_type(ty)?;
+                let mut params = Vec::new();
+                while let Some(param_def) = sexprs.next() {
+                    let (param_def, _) = expect_fixed_list(param_def, 3)?;
+                    let mut param_def = param_def.into_iter();
+                    expect_keyword(param_def.next().unwrap(), "param")?;
+                    let (identifier, _) = expect_identifier(param_def.next().unwrap())?;
+                    let (ty, _) = expect_type(param_def.next().unwrap())?;
+                    params.push(ParamDef(identifier, ty));
+                }
+                Ok(FnDef {
+                    identifier,
+                    ty,
+                    params,
+                    body,
+                    meta,
+                })
+            } else {
+                return Err(ParseError(ParseErrorEnum::InvalidFnDef, meta));
+            }
+        }
+        _ => Err(ParseError(ParseErrorEnum::InvalidFnDef, meta)),
+    }
+}
+
+fn parse_main_def(sexpr: Sexpr) -> Result<MainDef, ParseError> {
     let Sexpr(sexpr, meta) = sexpr;
     match sexpr {
         SexprEnum::List(mut sexprs) => {
@@ -72,19 +118,17 @@ fn parse_into_ast(sexpr: Sexpr) -> Result<Program, ParseError> {
                     let (ty, _) = expect_type(param_def.next().unwrap())?;
                     params.push((party, ParamDef(identifier, ty)));
                 }
-                let fn_defs = Vec::new();
-                let main = MainDef {
+                Ok(MainDef {
                     ty,
                     params,
                     body,
                     meta,
-                };
-                Ok(Program { fn_defs, main })
+                })
             } else {
                 return Err(ParseError(ParseErrorEnum::InvalidMainFnDef, meta));
             }
         }
-        _ => Err(ParseError(ParseErrorEnum::MissingMainFnDef, meta)),
+        _ => Err(ParseError(ParseErrorEnum::InvalidMainFnDef, meta)),
     }
 }
 
@@ -111,11 +155,11 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                         };
                         let x = parse_expr(sexprs.next().unwrap())?;
                         let y = parse_expr(sexprs.next().unwrap())?;
-                    ExprEnum::Op(op, Box::new(x), Box::new(y))
+                        ExprEnum::Op(op, Box::new(x), Box::new(y))
                     } else {
                         return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
                     }
-                },
+                }
                 "let" => {
                     if arity == 3 {
                         let (identifier, _) = expect_identifier(sexprs.next().unwrap())?;
@@ -125,7 +169,19 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                     } else {
                         return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
                     }
-                },
+                }
+                "call" => {
+                    if arity > 0 {
+                        let (identifier, _) = expect_identifier(sexprs.next().unwrap())?;
+                        let mut exprs = Vec::new();
+                        while let Some(sexpr) = sexprs.next() {
+                            exprs.push(parse_expr(sexpr)?);
+                        }
+                        ExprEnum::FnCall(identifier, exprs)
+                    } else {
+                        return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
+                    }
+                }
                 _ => {
                     return Err(ParseError(ParseErrorEnum::InvalidExpr, meta));
                 }
@@ -194,9 +250,9 @@ fn expect_type(sexpr: Sexpr) -> Result<(Type, MetaInfo), ParseError> {
     }
 }
 
-fn parse_into_sexpr(prg: &str) -> Result<Sexpr, ParseError> {
-    let mut stack = Vec::new();
-    let mut stack_meta_start = Vec::new();
+fn parse_into_sexprs(prg: &str) -> Result<Vec<Sexpr>, ParseError> {
+    let mut stack = vec![vec![]];
+    let mut stack_meta_start = vec![(0, 0)];
     let mut current_token = Vec::new();
     let mut current_token_start = (0, 0);
     for (l, line) in prg.lines().enumerate() {
@@ -262,24 +318,10 @@ fn parse_into_sexpr(prg: &str) -> Result<Sexpr, ParseError> {
         start: (0, 0),
         end: (0, 1),
     };
-    if stack.is_empty() {
-        Err(ParseError(ParseErrorEnum::EmptySexpr, meta))
-    } else if stack.len() == 1 {
+    if stack.len() == 1 {
         let sexprs = stack.pop().unwrap();
-        let meta = sexprs.first().unwrap().1;
-        Ok(Sexpr(SexprEnum::List(sexprs), meta))
+        Ok(sexprs)
     } else {
         Err(ParseError(ParseErrorEnum::UnclosedSexpr, meta))
     }
-}
-
-const prg1: &str = "
-(fn main u8 (param x A u8)
-  (+ x 1))
-";
-
-#[test]
-fn parse_sexpr() -> Result<(), ParseError> {
-    let sexpr = parse(prg1)?;
-    Ok(())
 }

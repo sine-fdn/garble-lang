@@ -41,6 +41,20 @@ pub fn compile(prg: &str) -> Result<Circuit, Error> {
     Ok(parse(prg)?.type_check()?.compile())
 }
 
+impl ParseError {
+    pub fn prettify(&self, prg: &str) -> String {
+        let e = Error::ParseError(self.clone());
+        e.prettify(prg)
+    }
+}
+
+impl TypeError {
+    pub fn prettify(&self, prg: &str) -> String {
+        let e = Error::TypeError(self.clone());
+        e.prettify(prg)
+    }
+}
+
 impl ComputeError {
     pub fn prettify(&self, prg: &str) -> String {
         let e = Error::ComputeError(self.clone());
