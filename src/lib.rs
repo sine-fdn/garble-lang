@@ -96,7 +96,7 @@ impl Error {
 fn prettify_meta(prg: &str, meta: MetaInfo) -> String {
     let mut msg = "".to_string();
     let lines: Vec<&str> = prg.lines().collect();
-    for l in (meta.start.0 as i64 - 2)..(meta.start.0 as i64 + 2) {
+    for l in (meta.start.0 as i64 - 2)..(meta.end.0 as i64 + 2) {
         let line_start = meta.start.0 as i64;
         let line_end = meta.end.0 as i64;
         if l >= 0 && (l as usize) < lines.len() {
