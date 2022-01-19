@@ -136,6 +136,24 @@ impl Expr {
                 env.pop();
                 body
             }
+            ExprEnum::If(condition, case_true, case_false) => {
+                let condition = condition.compile(fns, env, gates);
+                let case_true = case_true.compile(fns, env, gates);
+                let case_false = case_false.compile(fns, env, gates);
+                assert_eq!(condition.len(), 1);
+                assert_eq!(case_true.len(), case_false.len());
+                let condition = condition[0];
+                let not_condition = push_gate(gates, Gate::Xor(condition, 1));
+                let mut gate_indexes = Vec::with_capacity(case_true.len());
+                for i in 0..case_true.len() {
+                    let case_true = case_true[i];
+                    let case_false = case_false[i];
+                    let gate_if_true = push_gate(gates, Gate::And(case_true, condition));
+                    let gate_if_false = push_gate(gates, Gate::And(case_false, not_condition));
+                    gate_indexes.push(push_gate(gates, Gate::Xor(gate_if_true, gate_if_false)));
+                }
+                gate_indexes
+            }
         }
     }
 }

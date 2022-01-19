@@ -79,3 +79,22 @@ fn compile_static_fn_defs() -> Result<(), String> {
     assert_eq!(computation.get_u16().map_err(|e| e.prettify(prg))?, 256);
     Ok(())
 }
+
+#[test]
+fn compile_if() -> Result<(), String> {
+    let prg = "
+(fn main u8 (param x A bool)
+  (if (^ (& true false) x)
+    100
+    50))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for b in [true, false] {
+        let expected = if b { 100 } else { 50 };
+        computation.set_bool(Party::A, b);
+        computation.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(computation.get_u8().map_err(|e| e.prettify(prg))?, expected);
+    }
+    Ok(())
+}

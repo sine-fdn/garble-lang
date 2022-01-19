@@ -252,6 +252,15 @@ impl Expr {
                     return Err(TypeError(e, meta));
                 }
             }
+            ExprEnum::If(condition, case_true, case_false) => {
+                let condition = condition.type_check(env)?;
+                let case_true = case_true.type_check(env)?;
+                let case_false = case_false.type_check(env)?;
+                expect_type(&condition, Type::Bool)?;
+                let ty = unify(&case_true, &case_false, meta)?;
+                let expr = typed_ast::ExprEnum::If(Box::new(condition), Box::new(case_true), Box::new(case_false));
+                (expr, ty)
+            }
         };
         Ok(typed_ast::Expr(expr, ty, meta))
     }

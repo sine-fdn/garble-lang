@@ -170,6 +170,16 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                         return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
                     }
                 }
+                "if" => {
+                    if arity == 3 {
+                        let condition = parse_expr(sexprs.next().unwrap())?;
+                        let case_true = parse_expr(sexprs.next().unwrap())?;
+                        let case_false = parse_expr(sexprs.next().unwrap())?;
+                        ExprEnum::If(Box::new(condition), Box::new(case_true), Box::new(case_false))
+                    } else {
+                        return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
+                    }
+                }
                 "call" => {
                     if arity > 0 {
                         let (identifier, _) = expect_identifier(sexprs.next().unwrap())?;

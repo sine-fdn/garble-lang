@@ -55,6 +55,7 @@ pub enum ExprEnum {
     Op(Op, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
     FnCall(String, Vec<Expr>),
+    If(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
