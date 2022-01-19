@@ -37,4 +37,5 @@ pub enum ExprEnum {
     Let(String, Box<Expr>, Box<Expr>),
     FnCall(String, Vec<Expr>),
     If(Box<Expr>, Box<Expr>, Box<Expr>),
+    Cast(Type, Box<Expr>),
 }

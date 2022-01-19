@@ -172,3 +172,49 @@ fn compile_equals_and_not_equals() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn compile_unsigned_casts() -> Result<(), String> {
+    let prg = "
+(fn main u16 (param x A u16) (param y A u8)
+  (+ (cast u16 (cast u8 x)) (cast u16 y)))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in 200..300 {
+        for y in 0..10 {
+            let expected = (x as u8) as u16 + (y as u16);
+            computation.set_u16(Party::A, x);
+            computation.set_u8(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(
+                computation.get_u16().map_err(|e| e.prettify(prg))?,
+                expected
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_bool_casts() -> Result<(), String> {
+    let prg = "
+(fn main u16 (param x A bool) (param y A u8)
+  (+ (cast u16 x) (cast u16 y)))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in [true, false] {
+        for y in 0..10 {
+            let expected = (x as u16) + (y as u16);
+            computation.set_bool(Party::A, x);
+            computation.set_u8(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(
+                computation.get_u16().map_err(|e| e.prettify(prg))?,
+                expected
+            );
+        }
+    }
+    Ok(())
+}

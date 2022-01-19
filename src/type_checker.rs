@@ -108,6 +108,18 @@ fn expect_type(expr: &typed_ast::Expr, expected: Type) -> Result<(), TypeError> 
     }
 }
 
+fn expect_bool_or_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
+    match ty {
+        Type::Bool | Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 => Ok(()),
+        _ => {
+            return Err(TypeError(
+                TypeErrorEnum::ExpectedBoolOrNumberType(ty.clone()),
+                meta,
+            ));
+        }
+    }
+}
+
 fn unify(e1: &typed_ast::Expr, e2: &typed_ast::Expr, m: MetaInfo) -> Result<Type, TypeError> {
     let typed_ast::Expr(expr1, ty1, meta1) = e1;
     let typed_ast::Expr(expr2, ty2, meta2) = e2;
@@ -193,23 +205,18 @@ impl Expr {
                     let x = x.type_check(env)?;
                     let y = y.type_check(env)?;
                     let ty = unify(&x, &y, meta)?;
-                    match ty {
-                        Type::Bool | Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 => {
-                            (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), ty)
-                        }
-                        _ => {
-                            return Err(TypeError(TypeErrorEnum::ExpectedBoolOrNumberType(ty), meta));
-                        }
-                    }
+                    expect_bool_or_num_type(&ty, meta)?;
+                    (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), ty)
                 }
                 Op::GreaterThan | Op::LessThan => {
                     let x = x.type_check(env)?;
                     let y = y.type_check(env)?;
                     let ty = unify(&x, &y, meta)?;
                     match ty {
-                        Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 => {
-                            (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), Type::Bool)
-                        }
+                        Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 => (
+                            typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)),
+                            Type::Bool,
+                        ),
                         _ => {
                             return Err(TypeError(TypeErrorEnum::ExpectedNumberType(ty), meta));
                         }
@@ -219,14 +226,9 @@ impl Expr {
                     let x = x.type_check(env)?;
                     let y = y.type_check(env)?;
                     let ty = unify(&x, &y, meta)?;
-                    match ty {
-                        Type::Bool | Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 => {
-                            (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), Type::Bool)
-                        }
-                        _ => {
-                            return Err(TypeError(TypeErrorEnum::ExpectedBoolOrNumberType(ty), meta));
-                        }
-                    }
+                    expect_bool_or_num_type(&ty, meta)?;
+                    let expr = typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y));
+                    (expr, Type::Bool)
                 }
             },
             ExprEnum::Let(var, binding, body) => {
@@ -299,6 +301,13 @@ impl Expr {
                     Box::new(case_false),
                 );
                 (expr, ty)
+            }
+            ExprEnum::Cast(ty, expr) => {
+                let expr = expr.type_check(env)?;
+                let typed_ast::Expr(_, expr_ty, _) = &expr;
+                expect_bool_or_num_type(expr_ty, meta)?;
+                expect_bool_or_num_type(&ty, meta)?;
+                (typed_ast::ExprEnum::Cast(ty.clone(), Box::new(expr)), ty.clone())
             }
         };
         Ok(typed_ast::Expr(expr, ty, meta))

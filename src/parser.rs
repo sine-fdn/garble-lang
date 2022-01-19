@@ -197,6 +197,15 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                         return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
                     }
                 }
+                "cast" => {
+                    if arity == 2 {
+                        let (ty, _) = expect_type(sexprs.next().unwrap())?;
+                        let expr = parse_expr(sexprs.next().unwrap())?;
+                        ExprEnum::Cast(ty, Box::new(expr))
+                    } else {
+                        return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
+                    }
+                }
                 _ => {
                     return Err(ParseError(ParseErrorEnum::InvalidExpr, meta));
                 }

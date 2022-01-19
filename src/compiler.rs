@@ -213,6 +213,23 @@ impl Expr {
                 }
                 gate_indexes
             }
+            ExprEnum::Cast(ty, expr) => {
+                let mut expr = expr.compile(fns, env, gates);
+                let size_after_cast = ty.size_in_bits();
+                println!("before: {} -> {}", expr.len(), size_after_cast);
+                let result = match size_after_cast.cmp(&expr.len()) {
+                    std::cmp::Ordering::Equal => expr,
+                    std::cmp::Ordering::Less => {
+                        expr[(expr.len() - size_after_cast)..].to_vec()
+                    }
+                    std::cmp::Ordering::Greater => {
+                        extend_to_bits(&mut expr, size_after_cast);
+                        expr
+                    }
+                };
+                println!("after: {}", result.len());
+                result
+            }
         }
     }
 }
