@@ -1,4 +1,4 @@
-use std::{collections::HashMap, cmp::max};
+use std::{cmp::max, collections::HashMap};
 
 use crate::{
     ast::{Op, ParamDef, Party, Type},
@@ -72,6 +72,38 @@ impl Expr {
                 bits.into_iter().map(|b| b as usize).collect()
             }
             ExprEnum::Identifier(s) => env.get(s).unwrap(),
+            ExprEnum::Op(op@(Op::ShiftLeft | Op::ShiftRight), x, y) => {
+                let x = x.compile(fns, env, gates);
+                let y = y.compile(fns, env, gates);
+                assert_eq!(y.len(), 8);
+                let bits = x.len();
+                let mut shift = 1;
+                let mut bits_unshifted = x;
+                for layer in (0..8).rev() {
+                    let s = y[layer];
+                    let mut bits_shifted = vec![0; bits];
+                    for i in 0..bits {
+                        let unshifted = bits_unshifted[i];
+                        let shifted = if op == &Op::ShiftLeft {
+                            if i + shift >= bits {
+                                0
+                            } else {
+                                bits_unshifted[i + shift]
+                            }
+                        } else {
+                            if i < shift {
+                                0
+                            } else {
+                                bits_unshifted[i - shift]
+                            }
+                        };
+                        bits_shifted[i] = push_mux(gates, shifted, unshifted, s);
+                    }
+                    shift *= 2;
+                    bits_unshifted = bits_shifted;
+                }
+                bits_unshifted
+            }
             ExprEnum::Op(op, x, y) => {
                 let mut x = x.compile(fns, env, gates);
                 let mut y = y.compile(fns, env, gates);
@@ -107,8 +139,7 @@ impl Expr {
                         let mut carry = 0;
                         let mut sum = vec![0; bits];
                         // sequence of full adders:
-                        for i in 0..bits {
-                            let i = bits - 1 - i;
+                        for i in (0..bits).rev() {
                             let x = x[i];
                             let y = y[i];
                             // first half-adder:
@@ -172,6 +203,12 @@ impl Expr {
                             _ => unreachable!(),
                         }
                     }
+                    Op::ShiftLeft => {
+                        unreachable!("handled in the match clause one layer up")
+                    }
+                    Op::ShiftRight => {
+                        todo!()
+                    }
                 }
             }
             ExprEnum::Let(var, binding, body) => {
@@ -219,9 +256,7 @@ impl Expr {
                 println!("before: {} -> {}", expr.len(), size_after_cast);
                 let result = match size_after_cast.cmp(&expr.len()) {
                     std::cmp::Ordering::Equal => expr,
-                    std::cmp::Ordering::Less => {
-                        expr[(expr.len() - size_after_cast)..].to_vec()
-                    }
+                    std::cmp::Ordering::Less => expr[(expr.len() - size_after_cast)..].to_vec(),
                     std::cmp::Ordering::Greater => {
                         extend_to_bits(&mut expr, size_after_cast);
                         expr
@@ -232,6 +267,23 @@ impl Expr {
             }
         }
     }
+}
+
+fn push_not(gates: &mut Vec<Gate>, x: GateIndex) -> GateIndex {
+    push_gate(gates, Gate::Xor(x, 1))
+}
+
+fn push_or(gates: &mut Vec<Gate>, x: GateIndex, y: GateIndex) -> GateIndex {
+    let xor = push_gate(gates, Gate::Xor(x, y));
+    let and = push_gate(gates, Gate::And(x, y));
+    push_gate(gates, Gate::Xor(xor, and))
+}
+
+fn push_mux(gates: &mut Vec<Gate>, x0: GateIndex, x1: GateIndex, s: GateIndex) -> GateIndex {
+    let not_s = push_not(gates, s);
+    let x0_selected = push_gate(gates, Gate::And(x0, s));
+    let x1_selected = push_gate(gates, Gate::And(x1, not_s));
+    push_gate(gates, Gate::Xor(x0_selected, x1_selected))
 }
 
 impl Type {

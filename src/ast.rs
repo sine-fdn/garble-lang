@@ -69,4 +69,6 @@ pub enum Op {
     LessThan,
     Eq,
     NotEq,
+    ShiftLeft,
+    ShiftRight,
 }

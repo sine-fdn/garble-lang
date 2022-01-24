@@ -218,3 +218,31 @@ fn compile_bool_casts() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn compile_bit_shifts() -> Result<(), String> {
+    let prg = "
+(fn main u16 (param mode A bool) (param x A u16) (param y A u8)
+  (if mode
+    (<< x y)
+    (>> x y)))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for mode in [true, false] {
+        for x in 240..270 {
+            for y in 0..20 {
+                let expected = if y >= 16 { 0 } else if mode { x << y } else { x >> y };
+                computation.set_bool(Party::A, mode);
+                computation.set_u16(Party::A, x);
+                computation.set_u8(Party::A, y);
+                computation.run().map_err(|e| e.prettify(prg))?;
+                assert_eq!(
+                    computation.get_u16().map_err(|e| e.prettify(prg))?,
+                    expected
+                );
+            }
+        }
+    }
+    Ok(())
+}
