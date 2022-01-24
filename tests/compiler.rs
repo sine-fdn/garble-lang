@@ -342,6 +342,45 @@ fn compile_greater_than_and_less_than_signed() -> Result<(), String> {
 }
 
 #[test]
+fn compile_bit_shifts_signed() -> Result<(), String> {
+    let prg = "
+(fn main i16 (param mode A bool) (param x A i16) (param y A u8)
+  (if mode
+    (<< x y)
+    (>> x y)))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for mode in [true, false] {
+        for x in -20..20 {
+            for y in 0..20 {
+                // TODO: how do we want to handle overflows?
+                let expected = if y >= 16 && !mode && x < 0 {
+                    // shift right of signed num with overflow:
+                    -1
+                } else if y >= 16 {
+                    // shift with overflow:
+                    0
+                } else if mode {
+                    x << y
+                } else {
+                    x >> y
+                };
+                computation.set_bool(Party::A, mode);
+                computation.set_i16(Party::A, x);
+                computation.set_u8(Party::A, y);
+                computation.run().map_err(|e| e.prettify(prg))?;
+                assert_eq!(
+                    computation.get_i16().map_err(|e| e.prettify(prg))?,
+                    expected
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn compile_add_with_signed_int_coercion() -> Result<(), String> {
     let prg = "
 (fn main i16 (param x A i16)

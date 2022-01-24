@@ -42,6 +42,23 @@ fn push_gate(gates: &mut Vec<Gate>, gate: Gate) -> GateIndex {
     gates.len() + 1 // because index 0 and 1 are reserved for const true/false
 }
 
+fn push_not(gates: &mut Vec<Gate>, x: GateIndex) -> GateIndex {
+    push_gate(gates, Gate::Xor(x, 1))
+}
+
+fn push_or(gates: &mut Vec<Gate>, x: GateIndex, y: GateIndex) -> GateIndex {
+    let xor = push_gate(gates, Gate::Xor(x, y));
+    let and = push_gate(gates, Gate::And(x, y));
+    push_gate(gates, Gate::Xor(xor, and))
+}
+
+fn push_mux(gates: &mut Vec<Gate>, x0: GateIndex, x1: GateIndex, s: GateIndex) -> GateIndex {
+    let not_s = push_not(gates, s);
+    let x0_selected = push_gate(gates, Gate::And(x0, s));
+    let x1_selected = push_gate(gates, Gate::And(x1, not_s));
+    push_gate(gates, Gate::Xor(x0_selected, x1_selected))
+}
+
 fn extend_to_bits(v: &mut Vec<usize>, ty: &Type, bits: usize) {
     if v.len() != bits {
         let old_size = v.len();
@@ -107,6 +124,7 @@ impl Expr {
                 let y = y.compile(fns, env, gates);
                 assert_eq!(y.len(), 8);
                 let bits = x.len();
+                let bit_to_shift_in = x[0];
                 let mut shift = 1;
                 let mut bits_unshifted = x;
                 for layer in (0..8).rev() {
@@ -122,7 +140,7 @@ impl Expr {
                             }
                         } else {
                             if i < shift {
-                                0
+                                bit_to_shift_in
                             } else {
                                 bits_unshifted[i - shift]
                             }
@@ -211,8 +229,8 @@ impl Expr {
                     Op::GreaterThan | Op::LessThan => {
                         let mut acc_gt = 0;
                         let mut acc_lt = 0;
-                        let is_x_signed = matches!(ty_x, Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128);
-                        let is_y_signed = matches!(ty_y, Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128);
+                        let is_x_signed = is_signed(ty_x);
+                        let is_y_signed = is_signed(ty_y);
                         for i in 0..bits {
                             let xor = push_gate(gates, Gate::Xor(x[i], y[i]));
 
@@ -320,21 +338,8 @@ impl Expr {
     }
 }
 
-fn push_not(gates: &mut Vec<Gate>, x: GateIndex) -> GateIndex {
-    push_gate(gates, Gate::Xor(x, 1))
-}
-
-fn push_or(gates: &mut Vec<Gate>, x: GateIndex, y: GateIndex) -> GateIndex {
-    let xor = push_gate(gates, Gate::Xor(x, y));
-    let and = push_gate(gates, Gate::And(x, y));
-    push_gate(gates, Gate::Xor(xor, and))
-}
-
-fn push_mux(gates: &mut Vec<Gate>, x0: GateIndex, x1: GateIndex, s: GateIndex) -> GateIndex {
-    let not_s = push_not(gates, s);
-    let x0_selected = push_gate(gates, Gate::And(x0, s));
-    let x1_selected = push_gate(gates, Gate::And(x1, not_s));
-    push_gate(gates, Gate::Xor(x0_selected, x1_selected))
+fn is_signed(ty: &Type) -> bool {
+    matches!(ty, Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128)
 }
 
 impl Type {
