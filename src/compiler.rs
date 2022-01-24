@@ -146,25 +146,44 @@ impl Expr {
                         }
                         output_bits
                     }
+                    Op::Sub => {
+                        // flip bits of y and increment y to get negative y:
+                        let mut carry = 1;
+                        let mut z = vec![0; bits];
+                        for i in (0..bits).rev() {
+                            let y = push_not(gates, y[i]);
+                            // half-adder:
+                            z[i] = push_gate(gates, Gate::Xor(carry, y));
+                            carry = push_gate(gates, Gate::And(carry, y));
+                        }
+
+                        // now sum x and negative y:
+                        let mut carry = 0;
+                        for i in (0..bits).rev() {
+                            // first half-adder:
+                            let u = push_gate(gates, Gate::Xor(x[i], z[i]));
+                            let v = push_gate(gates, Gate::And(x[i], z[i]));
+                            // second half-adder:
+                            let s = push_gate(gates, Gate::Xor(u, carry));
+                            let w = push_gate(gates, Gate::And(u, carry));
+                            z[i] = s;
+                            carry = push_or(gates, v, w);
+                        }
+                        z
+                    },
                     Op::Add => {
                         let mut carry = 0;
                         let mut sum = vec![0; bits];
                         // sequence of full adders:
                         for i in (0..bits).rev() {
-                            let x = x[i];
-                            let y = y[i];
                             // first half-adder:
-                            let u = push_gate(gates, Gate::Xor(x, y));
-                            let v = push_gate(gates, Gate::And(x, y));
+                            let u = push_gate(gates, Gate::Xor(x[i], y[i]));
+                            let v = push_gate(gates, Gate::And(x[i], y[i]));
                             // second half-adder:
                             let s = push_gate(gates, Gate::Xor(u, carry));
                             let w = push_gate(gates, Gate::And(u, carry));
                             sum[i] = s;
-                            // or gate:
-                            let xor_v_w = push_gate(gates, Gate::Xor(v, w));
-                            let and_v_w = push_gate(gates, Gate::And(v, w));
-                            let or_v_w = push_gate(gates, Gate::Xor(xor_v_w, and_v_w));
-                            carry = or_v_w;
+                            carry = push_or(gates, v, w);
                         }
                         sum
                     }

@@ -147,10 +147,11 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
             let (f, _meta) = expect_identifier(sexprs.next().unwrap())?;
 
             match f.as_str() {
-                "+" | "&" | "^" | "|" | ">" | "<" | "==" | "!=" | "<<" | ">>" => {
+                "+" | "-" | "&" | "^" | "|" | ">" | "<" | "==" | "!=" | "<<" | ">>" => {
                     if arity == 2 {
                         let op = match f.as_str() {
                             "+" => Op::Add,
+                            "-" => Op::Sub,
                             "&" => Op::BitAnd,
                             "^" => Op::BitXor,
                             "|" => Op::BitOr,

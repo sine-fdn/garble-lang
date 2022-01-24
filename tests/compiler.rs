@@ -360,3 +360,23 @@ fn compile_add_with_signed_int_coercion() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn compile_sub() -> Result<(), String> {
+    let prg = "
+(fn main i16 (param x A i16) (param y A i16)
+  (- x y))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in -10..20 {
+        for y in -10..20 {
+            println!("Checking {} and {}", x, y);
+            computation.set_i16(Party::A, x);
+            computation.set_i16(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(computation.get_i16().map_err(|e| e.prettify(prg))?, x - y);
+        }
+    }
+    Ok(())
+}

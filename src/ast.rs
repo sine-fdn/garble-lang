@@ -68,6 +68,7 @@ pub enum ExprEnum {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum Op {
     Add,
+    Sub,
     BitAnd,
     BitXor,
     BitOr,
