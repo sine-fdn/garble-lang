@@ -58,11 +58,18 @@ pub enum ExprEnum {
     NumUnsigned(u128),
     NumSigned(i128),
     Identifier(String),
+    UnaryOp(UnaryOp, Box<Expr>),
     Op(Op, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
     FnCall(String, Vec<Expr>),
     If(Box<Expr>, Box<Expr>, Box<Expr>),
     Cast(Type, Box<Expr>),
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum UnaryOp {
+    Not,
+    Neg
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]

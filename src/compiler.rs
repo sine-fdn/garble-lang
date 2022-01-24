@@ -1,7 +1,7 @@
 use std::{cmp::max, collections::HashMap};
 
 use crate::{
-    ast::{Op, ParamDef, Party, Type},
+    ast::{Op, ParamDef, Party, Type, UnaryOp},
     circuit::{Circuit, Gate, GateIndex},
     env::Env,
     typed_ast::{Expr, ExprEnum, FnDef, Program},
@@ -81,6 +81,27 @@ impl Expr {
                 bits.into_iter().map(|b| b as usize).collect()
             }
             ExprEnum::Identifier(s) => env.get(s).unwrap(),
+            ExprEnum::UnaryOp(UnaryOp::Neg, x) => {
+                let x = x.compile(fns, env, gates);
+                // flip bits and increment to get negate:
+                let mut carry = 1;
+                let mut neg = vec![0; x.len()];
+                for i in (0..x.len()).rev() {
+                    let x = push_not(gates, x[i]);
+                    // half-adder:
+                    neg[i] = push_gate(gates, Gate::Xor(carry, x));
+                    carry = push_gate(gates, Gate::And(carry, x));
+                }
+                neg
+            }
+            ExprEnum::UnaryOp(UnaryOp::Not, x) => {
+                let x = x.compile(fns, env, gates);
+                let mut flipped = vec![0; x.len()];
+                for (i, x) in x.iter().enumerate() {
+                    flipped[i] = push_not(gates, *x);
+                }
+                flipped
+            }
             ExprEnum::Op(op @ (Op::ShiftLeft | Op::ShiftRight), x, y) => {
                 let x = x.compile(fns, env, gates);
                 let y = y.compile(fns, env, gates);

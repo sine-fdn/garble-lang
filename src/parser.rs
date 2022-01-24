@@ -1,4 +1,4 @@
-use crate::ast::{Expr, ExprEnum, FnDef, MainDef, Op, ParamDef, Party, Program, Type};
+use crate::ast::{Expr, ExprEnum, FnDef, MainDef, Op, ParamDef, Party, Program, Type, UnaryOp};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct MetaInfo {
@@ -147,6 +147,15 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
             let (f, _meta) = expect_identifier(sexprs.next().unwrap())?;
 
             match f.as_str() {
+                "-" | "!" if arity == 1 => {
+                    let op = match f.as_str() {
+                        "-" => UnaryOp::Neg,
+                        "!" => UnaryOp::Not,
+                        _ => unreachable!(),
+                    };
+                    let x = parse_expr(sexprs.next().unwrap())?;
+                    ExprEnum::UnaryOp(op, Box::new(x))
+                },
                 "+" | "-" | "&" | "^" | "|" | ">" | "<" | "==" | "!=" | "<<" | ">>" => {
                     if arity == 2 {
                         let op = match f.as_str() {

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    ast::{Expr, ExprEnum, Op, ParamDef, Program, Type},
+    ast::{Expr, ExprEnum, Op, ParamDef, Program, Type, UnaryOp},
     env::Env,
     parser::MetaInfo,
     typed_ast,
@@ -125,6 +125,18 @@ fn expect_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
         | Type::I32
         | Type::I64
         | Type::I128 => Ok(()),
+        _ => {
+            return Err(TypeError(
+                TypeErrorEnum::ExpectedNumberType(ty.clone()),
+                meta,
+            ));
+        }
+    }
+}
+
+fn expect_signed_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
+    match ty {
+        Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 => Ok(()),
         _ => {
             return Err(TypeError(
                 TypeErrorEnum::ExpectedNumberType(ty.clone()),
@@ -295,6 +307,18 @@ impl Expr {
                         meta,
                     ));
                 }
+            }
+            ExprEnum::UnaryOp(UnaryOp::Neg, x) => {
+                let x = x.type_check(env)?;
+                let ty = x.1.clone();
+                expect_signed_num_type(&ty, x.2)?;
+                (typed_ast::ExprEnum::UnaryOp(UnaryOp::Neg, Box::new(x)), ty)
+            }
+            ExprEnum::UnaryOp(UnaryOp::Not, x) => {
+                let x = x.type_check(env)?;
+                let ty = x.1.clone();
+                expect_bool_or_num_type(&ty, x.2)?;
+                (typed_ast::ExprEnum::UnaryOp(UnaryOp::Not, Box::new(x)), ty)
             }
             ExprEnum::Op(op, x, y) => match op {
                 Op::Add | Op::Sub => {

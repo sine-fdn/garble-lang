@@ -380,3 +380,47 @@ fn compile_sub() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn compile_unary_negation() -> Result<(), String> {
+    let prg = "
+(fn main i16 (param x A i16)
+  (- x))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in -127..127 {
+        computation.set_i16(Party::A, x);
+        computation.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(computation.get_i16().map_err(|e| e.prettify(prg))?, -x);
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_unary_not() -> Result<(), String> {
+    let prg = "
+(fn main i16 (param x A i16)
+  (! x))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in -127..127 {
+        computation.set_i16(Party::A, x);
+        computation.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(computation.get_i16().map_err(|e| e.prettify(prg))?, !x);
+    }
+
+    let prg = "
+(fn main bool (param x A bool)
+  (! x))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for b in [true, false] {
+        computation.set_bool(Party::A, b);
+        computation.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(computation.get_bool().map_err(|e| e.prettify(prg))?, !b);
+    }
+    Ok(())
+}

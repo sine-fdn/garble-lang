@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Op, ParamDef, Party, Type},
+    ast::{Op, ParamDef, Party, Type, UnaryOp},
     parser::MetaInfo,
 };
 
@@ -34,6 +34,7 @@ pub enum ExprEnum {
     NumUnsigned(u128),
     NumSigned(i128),
     Identifier(String),
+    UnaryOp(UnaryOp, Box<Expr>),
     Op(Op, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
     FnCall(String, Vec<Expr>),
