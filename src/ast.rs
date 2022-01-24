@@ -31,6 +31,11 @@ pub enum Type {
     U32,
     U64,
     U128,
+    I8,
+    I16,
+    I32,
+    I64,
+    I128,
     Fn(Vec<Type>, Box<Type>)
 }
 
@@ -51,6 +56,7 @@ pub enum ExprEnum {
     True,
     False,
     NumUnsigned(u128),
+    NumSigned(i128),
     Identifier(String),
     Op(Op, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),

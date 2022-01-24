@@ -32,6 +32,7 @@ pub enum ExprEnum {
     True,
     False,
     NumUnsigned(u128),
+    NumSigned(i128),
     Identifier(String),
     Op(Op, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),

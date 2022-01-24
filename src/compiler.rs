@@ -42,12 +42,16 @@ fn push_gate(gates: &mut Vec<Gate>, gate: Gate) -> GateIndex {
     gates.len() + 1 // because index 0 and 1 are reserved for const true/false
 }
 
-fn extend_to_bits(v: &mut Vec<usize>, bits: usize) {
+fn extend_to_bits(v: &mut Vec<usize>, ty: &Type, bits: usize) {
     if v.len() != bits {
         let old_size = v.len();
         v.resize(bits, 0);
         v.copy_within(0..old_size, bits - old_size);
-        v[0..old_size].fill(0);
+        if let Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 = ty {
+            v[0..old_size].fill(1);
+        } else {
+            v[0..old_size].fill(0);
+        }
     }
 }
 
@@ -71,8 +75,13 @@ impl Expr {
                 unsigned_to_bits(*n, ty.size_in_bits(), &mut bits);
                 bits.into_iter().map(|b| b as usize).collect()
             }
+            ExprEnum::NumSigned(n) => {
+                let mut bits = Vec::with_capacity(ty.size_in_bits());
+                signed_to_bits(*n, ty.size_in_bits(), &mut bits);
+                bits.into_iter().map(|b| b as usize).collect()
+            }
             ExprEnum::Identifier(s) => env.get(s).unwrap(),
-            ExprEnum::Op(op@(Op::ShiftLeft | Op::ShiftRight), x, y) => {
+            ExprEnum::Op(op @ (Op::ShiftLeft | Op::ShiftRight), x, y) => {
                 let x = x.compile(fns, env, gates);
                 let y = y.compile(fns, env, gates);
                 assert_eq!(y.len(), 8);
@@ -105,11 +114,13 @@ impl Expr {
                 bits_unshifted
             }
             ExprEnum::Op(op, x, y) => {
+                let ty_x = &x.1;
+                let ty_y = &y.1;
                 let mut x = x.compile(fns, env, gates);
                 let mut y = y.compile(fns, env, gates);
                 let bits = max(x.len(), y.len());
-                extend_to_bits(&mut x, bits);
-                extend_to_bits(&mut y, bits);
+                extend_to_bits(&mut x, ty_x, bits);
+                extend_to_bits(&mut y, ty_y, bits);
                 match op {
                     Op::BitAnd => {
                         let mut output_bits = vec![0; bits];
@@ -160,30 +171,31 @@ impl Expr {
                     Op::GreaterThan | Op::LessThan => {
                         let mut acc_gt = 0;
                         let mut acc_lt = 0;
+                        let is_x_signed = matches!(ty_x, Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128);
+                        let is_y_signed = matches!(ty_y, Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128);
                         for i in 0..bits {
-                            // greater-than for the current bit:
                             let xor = push_gate(gates, Gate::Xor(x[i], y[i]));
-                            let gt = push_gate(gates, Gate::And(xor, x[i]));
 
-                            // less-than for the current bit:
-                            let lt = push_gate(gates, Gate::And(xor, y[i]));
+                            let (gt, lt) = if i == 0 && (is_x_signed || is_y_signed) {
+                                let lt = push_gate(gates, Gate::And(xor, x[i]));
+                                let gt = push_gate(gates, Gate::And(xor, y[i]));
+                                (gt, lt)
+                            } else {
+                                let gt = push_gate(gates, Gate::And(xor, x[i]));
+                                let lt = push_gate(gates, Gate::And(xor, y[i]));
+                                (gt, lt)
+                            };
 
-                            // greater-than or'ed with accumulator:
-                            let xor = push_gate(gates, Gate::Xor(gt, acc_gt));
-                            let and = push_gate(gates, Gate::And(gt, acc_gt));
-                            let gt = push_gate(gates, Gate::Xor(xor, and));
+                            let gt = push_or(gates, gt, acc_gt);
+                            let lt = push_or(gates, lt, acc_lt);
 
-                            // less-than or'ed with accumulator:
-                            let xor = push_gate(gates, Gate::Xor(lt, acc_lt));
-                            let and = push_gate(gates, Gate::And(lt, acc_lt));
-                            let lt = push_gate(gates, Gate::Xor(xor, and));
-
-                            let not_acc_gt = push_gate(gates, Gate::Xor(acc_gt, 1));
-                            let not_acc_lt = push_gate(gates, Gate::Xor(acc_lt, 1));
+                            let not_acc_gt = push_not(gates, acc_gt);
+                            let not_acc_lt = push_not(gates, acc_lt);
 
                             acc_gt = push_gate(gates, Gate::And(gt, not_acc_lt));
                             acc_lt = push_gate(gates, Gate::And(lt, not_acc_gt))
                         }
+
                         match op {
                             Op::GreaterThan => vec![acc_gt],
                             Op::LessThan => vec![acc_lt],
@@ -251,18 +263,17 @@ impl Expr {
                 gate_indexes
             }
             ExprEnum::Cast(ty, expr) => {
+                let ty_expr = &expr.1;
                 let mut expr = expr.compile(fns, env, gates);
                 let size_after_cast = ty.size_in_bits();
-                println!("before: {} -> {}", expr.len(), size_after_cast);
                 let result = match size_after_cast.cmp(&expr.len()) {
                     std::cmp::Ordering::Equal => expr,
                     std::cmp::Ordering::Less => expr[(expr.len() - size_after_cast)..].to_vec(),
                     std::cmp::Ordering::Greater => {
-                        extend_to_bits(&mut expr, size_after_cast);
+                        extend_to_bits(&mut expr, ty_expr, size_after_cast);
                         expr
                     }
                 };
-                println!("after: {}", result.len());
                 result
             }
         }
@@ -290,11 +301,11 @@ impl Type {
     fn size_in_bits(&self) -> usize {
         match self {
             Type::Bool => 1,
-            Type::U8 => 8,
-            Type::U16 => 16,
-            Type::U32 => 32,
-            Type::U64 => 64,
-            Type::U128 => 128,
+            Type::U8 | Type::I8 => 8,
+            Type::U16 | Type::I16 => 16,
+            Type::U32 | Type::I32 => 32,
+            Type::U64 | Type::I64 => 64,
+            Type::U128 | Type::I128 => 128,
             Type::Fn(_, _) => panic!("Fn types cannot be directly mapped to bits"),
         }
     }
@@ -414,6 +425,31 @@ impl Computation {
         unsigned_to_bits(n, 128, inputs);
     }
 
+    pub fn set_i8(&mut self, p: Party, n: i8) {
+        let inputs = self.get_input(p);
+        signed_to_bits(n as i128, 8, inputs);
+    }
+
+    pub fn set_i16(&mut self, p: Party, n: i16) {
+        let inputs = self.get_input(p);
+        signed_to_bits(n as i128, 16, inputs);
+    }
+
+    pub fn set_i32(&mut self, p: Party, n: i32) {
+        let inputs = self.get_input(p);
+        signed_to_bits(n as i128, 32, inputs);
+    }
+
+    pub fn set_i64(&mut self, p: Party, n: i64) {
+        let inputs = self.get_input(p);
+        signed_to_bits(n as i128, 64, inputs);
+    }
+
+    pub fn set_i128(&mut self, p: Party, n: i128) {
+        let inputs = self.get_input(p);
+        signed_to_bits(n, 128, inputs);
+    }
+
     fn get_unsigned(&self, ty: Type) -> Result<u128, ComputeError> {
         let output = self.get_output()?;
         let size = ty.size_in_bits();
@@ -421,6 +457,23 @@ impl Computation {
             let mut n = 0;
             for i in 0..size {
                 n += (output[i] as u128) << (size - 1 - i);
+            }
+            Ok(n)
+        } else {
+            Err(ComputeError::OutputTypeMismatch {
+                expected: ty,
+                actual_bits: output.len(),
+            })
+        }
+    }
+
+    fn get_signed(&self, ty: Type) -> Result<i128, ComputeError> {
+        let output = self.get_output()?;
+        let size = ty.size_in_bits();
+        if output.len() == size {
+            let mut n = 0;
+            for i in 0..size {
+                n += (output[i] as i128) << (size - 1 - i);
             }
             Ok(n)
         } else {
@@ -450,9 +503,35 @@ impl Computation {
     pub fn get_u128(&self) -> Result<u128, ComputeError> {
         self.get_unsigned(Type::U128)
     }
+
+    pub fn get_i8(&self) -> Result<i8, ComputeError> {
+        self.get_signed(Type::I8).map(|n| n as i8)
+    }
+
+    pub fn get_i16(&self) -> Result<i16, ComputeError> {
+        self.get_signed(Type::I16).map(|n| n as i16)
+    }
+
+    pub fn get_i32(&self) -> Result<i32, ComputeError> {
+        self.get_signed(Type::I32).map(|n| n as i32)
+    }
+
+    pub fn get_i64(&self) -> Result<i64, ComputeError> {
+        self.get_signed(Type::I64).map(|n| n as i64)
+    }
+
+    pub fn get_i128(&self) -> Result<i128, ComputeError> {
+        self.get_signed(Type::I128)
+    }
 }
 
 fn unsigned_to_bits(n: u128, size: usize, bits: &mut Vec<bool>) {
+    for i in 0..size {
+        bits.push((n >> (size - 1 - i) & 1) == 1);
+    }
+}
+
+fn signed_to_bits(n: i128, size: usize, bits: &mut Vec<bool>) {
     for i in 0..size {
         bits.push((n >> (size - 1 - i) & 1) == 1);
     }

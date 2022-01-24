@@ -126,7 +126,7 @@ fn compile_bit_ops_for_numbers() -> Result<(), String> {
 }
 
 #[test]
-fn compile_greater_than_and_less_then() -> Result<(), String> {
+fn compile_greater_than_and_less_than() -> Result<(), String> {
     let prg = "
 (fn main bool (param x A u16) (param y A u16)
   (&
@@ -232,7 +232,13 @@ fn compile_bit_shifts() -> Result<(), String> {
     for mode in [true, false] {
         for x in 240..270 {
             for y in 0..20 {
-                let expected = if y >= 16 { 0 } else if mode { x << y } else { x >> y };
+                let expected = if y >= 16 {
+                    0
+                } else if mode {
+                    x << y
+                } else {
+                    x >> y
+                };
                 computation.set_bool(Party::A, mode);
                 computation.set_u16(Party::A, x);
                 computation.set_u8(Party::A, y);
@@ -243,6 +249,114 @@ fn compile_bit_shifts() -> Result<(), String> {
                 );
             }
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_signed_nums() -> Result<(), String> {
+    let prg = "
+(fn main i8 (param x A i8)
+  x)
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in -128..127 {
+        println!("Checking {}", x);
+        computation.set_i8(Party::A, x);
+        computation.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(computation.get_i8().map_err(|e| e.prettify(prg))?, x);
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_signed_add() -> Result<(), String> {
+    let prg = "
+(fn main i8 (param x A i8) (param y A i8)
+  (+ x y))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in -64..64 {
+        for y in -64..63 {
+            println!("Checking {} + {}", x, y);
+            computation.set_i8(Party::A, x);
+            computation.set_i8(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(computation.get_i8().map_err(|e| e.prettify(prg))?, x + y);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_bit_ops_for_signed_numbers() -> Result<(), String> {
+    let prg = "
+(fn main i16 (param x A i16) (param y A i16) (param z A i16)
+  (| x (& y (^ z 2))))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in -10..10 {
+        for y in -10..10 {
+            for z in -10..10 {
+                let expected = x | (y & (z ^ 2));
+                computation.set_i16(Party::A, x);
+                computation.set_i16(Party::A, y);
+                computation.set_i16(Party::A, z);
+                computation.run().map_err(|e| e.prettify(prg))?;
+                assert_eq!(
+                    computation.get_i16().map_err(|e| e.prettify(prg))?,
+                    expected
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_greater_than_and_less_than_signed() -> Result<(), String> {
+    let prg = "
+(fn main bool (param x A i16) (param y A i16)
+  (&
+    (> x y)
+    (< y x)))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in -10..10 {
+        for y in -10..10 {
+            let expected = (x > y) && (y < x);
+            computation.set_i16(Party::A, x);
+            computation.set_i16(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(
+                computation.get_bool().map_err(|e| e.prettify(prg))?,
+                expected
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_add_with_signed_int_coercion() -> Result<(), String> {
+    let prg = "
+(fn main i16 (param x A i16)
+  (+ x -10))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in -10..10 {
+        let expected = x + -10;
+        computation.set_i16(Party::A, x);
+        computation.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(
+            computation.get_i16().map_err(|e| e.prettify(prg))?,
+            expected
+        );
     }
     Ok(())
 }

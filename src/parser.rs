@@ -39,6 +39,7 @@ enum SexprEnum {
     True,
     False,
     NumUnsigned(u128),
+    NumSigned(i128),
     List(Vec<Sexpr>),
     Identifier(String),
 }
@@ -138,6 +139,7 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
         SexprEnum::True => ExprEnum::True,
         SexprEnum::False => ExprEnum::False,
         SexprEnum::NumUnsigned(n) => ExprEnum::NumUnsigned(n),
+        SexprEnum::NumSigned(n) => ExprEnum::NumSigned(n),
         SexprEnum::Identifier(s) => ExprEnum::Identifier(s),
         SexprEnum::List(sexprs) => {
             let arity = sexprs.len() - 1;
@@ -182,7 +184,11 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                         let condition = parse_expr(sexprs.next().unwrap())?;
                         let case_true = parse_expr(sexprs.next().unwrap())?;
                         let case_false = parse_expr(sexprs.next().unwrap())?;
-                        ExprEnum::If(Box::new(condition), Box::new(case_true), Box::new(case_false))
+                        ExprEnum::If(
+                            Box::new(condition),
+                            Box::new(case_true),
+                            Box::new(case_false),
+                        )
                     } else {
                         return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
                     }
@@ -268,6 +274,11 @@ fn expect_type(sexpr: Sexpr) -> Result<(Type, MetaInfo), ParseError> {
                 "u32" => Type::U32,
                 "u64" => Type::U64,
                 "u128" => Type::U128,
+                "i8" => Type::I8,
+                "i16" => Type::I16,
+                "i32" => Type::I32,
+                "i64" => Type::I64,
+                "i128" => Type::I128,
                 _ => return Err(ParseError(ParseErrorEnum::ExpectedType, meta)),
             };
             Ok((ty, meta))
@@ -298,6 +309,8 @@ fn parse_into_sexprs(prg: &str) -> Result<Vec<Sexpr>, ParseError> {
                         };
                         let sexpr = if let Ok(n) = token.parse::<u128>() {
                             SexprEnum::NumUnsigned(n)
+                        } else if let Ok(n) = token.parse::<i128>() {
+                            SexprEnum::NumSigned(n)
                         } else if token.as_str() == "true" {
                             SexprEnum::True
                         } else if token.as_str() == "false" {
