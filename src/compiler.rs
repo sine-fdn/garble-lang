@@ -59,6 +59,34 @@ fn push_mux(gates: &mut Vec<Gate>, x0: GateIndex, x1: GateIndex, s: GateIndex) -
     push_gate(gates, Gate::Xor(x0_selected, x1_selected))
 }
 
+fn push_adder(
+    gates: &mut Vec<Gate>,
+    x: GateIndex,
+    y: GateIndex,
+    carry: GateIndex,
+) -> (GateIndex, GateIndex) {
+    // first half-adder:
+    let u = push_gate(gates, Gate::Xor(x, y));
+    let v = push_gate(gates, Gate::And(x, y));
+    // second half-adder:
+    let s = push_gate(gates, Gate::Xor(u, carry));
+    let w = push_gate(gates, Gate::And(u, carry));
+
+    let carry = push_or(gates, v, w);
+    (s, carry)
+}
+
+fn push_multiplier(
+    gates: &mut Vec<Gate>,
+    x: GateIndex,
+    y: GateIndex,
+    z: GateIndex,
+    carry: GateIndex,
+) -> (GateIndex, GateIndex) {
+    let x_and_y = push_gate(gates, Gate::And(x, y));
+    push_adder(gates, x_and_y, z, carry)
+}
+
 fn extend_to_bits(v: &mut Vec<usize>, ty: &Type, bits: usize) {
     if v.len() != bits {
         let old_size = v.len();
@@ -209,22 +237,46 @@ impl Expr {
                             carry = push_or(gates, v, w);
                         }
                         z
-                    },
+                    }
                     Op::Add => {
                         let mut carry = 0;
                         let mut sum = vec![0; bits];
                         // sequence of full adders:
                         for i in (0..bits).rev() {
-                            // first half-adder:
-                            let u = push_gate(gates, Gate::Xor(x[i], y[i]));
-                            let v = push_gate(gates, Gate::And(x[i], y[i]));
-                            // second half-adder:
-                            let s = push_gate(gates, Gate::Xor(u, carry));
-                            let w = push_gate(gates, Gate::And(u, carry));
+                            let (s, c) = push_adder(gates, x[i], y[i], carry);
                             sum[i] = s;
-                            carry = push_or(gates, v, w);
+                            carry = c;
                         }
                         sum
+                    }
+                    Op::Mul => {
+                        let mut sums: Vec<Vec<GateIndex>> = vec![vec![0; bits]; bits];
+                        let mut carries: Vec<Vec<GateIndex>> = vec![vec![0; bits]; bits];
+                        let lsb_index = bits - 1;
+                        for i in (0..bits).rev() {
+                            for j in (0..bits).rev() {
+                                let carry = if j == lsb_index {
+                                    0
+                                } else {
+                                    carries[i][j + 1]
+                                };
+                                let z = if i == lsb_index {
+                                    0
+                                } else if j == 0 {
+                                    carries[i + 1][j]
+                                } else {
+                                    sums[i + 1][j - 1]
+                                };
+                                let (s, c) = push_multiplier(gates, x[i], y[j], z, carry);
+                                sums[i][j] = s;
+                                carries[i][j] = c;
+                            }
+                        }
+                        let mut result = vec![0; bits];
+                        for (i, s) in sums.into_iter().enumerate() {
+                            result[i] = s[lsb_index];
+                        }
+                        result
                     }
                     Op::GreaterThan | Op::LessThan => {
                         let mut acc_gt = 0;
@@ -339,7 +391,10 @@ impl Expr {
 }
 
 fn is_signed(ty: &Type) -> bool {
-    matches!(ty, Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128)
+    matches!(
+        ty,
+        Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128
+    )
 }
 
 impl Type {

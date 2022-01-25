@@ -76,6 +76,7 @@ pub enum UnaryOp {
 pub enum Op {
     Add,
     Sub,
+    Mul,
     BitAnd,
     BitXor,
     BitOr,

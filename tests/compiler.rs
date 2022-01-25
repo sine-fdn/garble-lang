@@ -262,7 +262,6 @@ fn compile_signed_nums() -> Result<(), String> {
     let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -128..127 {
-        println!("Checking {}", x);
         computation.set_i8(Party::A, x);
         computation.run().map_err(|e| e.prettify(prg))?;
         assert_eq!(computation.get_i8().map_err(|e| e.prettify(prg))?, x);
@@ -280,7 +279,6 @@ fn compile_signed_add() -> Result<(), String> {
     let mut computation: Computation = circuit.into();
     for x in -64..64 {
         for y in -64..63 {
-            println!("Checking {} + {}", x, y);
             computation.set_i8(Party::A, x);
             computation.set_i8(Party::A, y);
             computation.run().map_err(|e| e.prettify(prg))?;
@@ -317,7 +315,7 @@ fn compile_bit_ops_for_signed_numbers() -> Result<(), String> {
 }
 
 #[test]
-fn compile_greater_than_and_less_than_signed() -> Result<(), String> {
+fn compile_signed_greater_than_and_less_than() -> Result<(), String> {
     let prg = "
 (fn main bool (param x A i16) (param y A i16)
   (&
@@ -342,7 +340,7 @@ fn compile_greater_than_and_less_than_signed() -> Result<(), String> {
 }
 
 #[test]
-fn compile_bit_shifts_signed() -> Result<(), String> {
+fn compile_signed_bit_shifts() -> Result<(), String> {
     let prg = "
 (fn main i16 (param mode A bool) (param x A i16) (param y A u8)
   (if mode
@@ -410,7 +408,6 @@ fn compile_sub() -> Result<(), String> {
     let mut computation: Computation = circuit.into();
     for x in -10..20 {
         for y in -10..20 {
-            println!("Checking {} and {}", x, y);
             computation.set_i16(Party::A, x);
             computation.set_i16(Party::A, y);
             computation.run().map_err(|e| e.prettify(prg))?;
@@ -460,6 +457,44 @@ fn compile_unary_not() -> Result<(), String> {
         computation.set_bool(Party::A, b);
         computation.run().map_err(|e| e.prettify(prg))?;
         assert_eq!(computation.get_bool().map_err(|e| e.prettify(prg))?, !b);
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_unsigned_mul() -> Result<(), String> {
+    let prg = "
+(fn main u16 (param x A u16) (param y A u16)
+  (* x y))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in 0..20 {
+        for y in 250..300 {
+            computation.set_u16(Party::A, x);
+            computation.set_u16(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(computation.get_u16().map_err(|e| e.prettify(prg))?, x * y);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_signed_mul() -> Result<(), String> {
+    let prg = "
+(fn main i16 (param x A i16) (param y A i16)
+  (* x y))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in -10..10 {
+        for y in -10..10 {
+            computation.set_i16(Party::A, x);
+            computation.set_i16(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(computation.get_i16().map_err(|e| e.prettify(prg))?, x * y);
+        }
     }
     Ok(())
 }

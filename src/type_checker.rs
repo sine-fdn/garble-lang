@@ -321,7 +321,7 @@ impl Expr {
                 (typed_ast::ExprEnum::UnaryOp(UnaryOp::Not, Box::new(x)), ty)
             }
             ExprEnum::Op(op, x, y) => match op {
-                Op::Add | Op::Sub => {
+                Op::Add | Op::Sub | Op::Mul => {
                     let x = x.type_check(env)?;
                     let y = y.type_check(env)?;
                     let ty = unify(&x, &y, meta)?;
