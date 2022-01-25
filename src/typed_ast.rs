@@ -34,6 +34,8 @@ pub enum ExprEnum {
     NumUnsigned(u128),
     NumSigned(i128),
     Identifier(String),
+    ArrayLiteral(Box<Expr>, usize),
+    ArrayAccess(Box<Expr>, Box<Expr>),
     UnaryOp(UnaryOp, Box<Expr>),
     Op(Op, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),

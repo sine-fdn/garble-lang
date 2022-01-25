@@ -16,6 +16,7 @@ pub enum TypeErrorEnum {
     MaxNumUnsignedSizeExceeded(Type, u128),
     ExpectedBoolOrNumberType(Type),
     ExpectedNumberType(Type),
+    ExpectedArrayType(Type),
     DuplicateFnParam(String),
     FnCannotBeUsedAsValue(String),
     ExpectedFnType {
@@ -110,6 +111,18 @@ fn expect_type(expr: &typed_ast::Expr, expected: Type) -> Result<(), TypeError> 
     } else {
         let e = TypeErrorEnum::UnexpectedType { expected, actual };
         Err(TypeError(e, *meta))
+    }
+}
+
+fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<Type, TypeError> {
+    match ty {
+        Type::Array(elem, _) => Ok(*elem.clone()),
+        _ => {
+            Err(TypeError(
+                TypeErrorEnum::ExpectedArrayType(ty.clone()),
+                meta,
+            ))
+        }
     }
 }
 
@@ -226,6 +239,7 @@ fn unify(e1: &typed_ast::Expr, e2: &typed_ast::Expr, m: MetaInfo) -> Result<Type
 fn is_coercible_unsigned(n: u128, ty: &Type) -> bool {
     match ty {
         Type::Bool => n <= 1,
+        Type::Usize => n <= usize::MAX as u128,
         Type::U8 => n <= u8::MAX as u128,
         Type::U16 => n <= u16::MAX as u128,
         Type::U32 => n <= u32::MAX as u128,
@@ -237,13 +251,14 @@ fn is_coercible_unsigned(n: u128, ty: &Type) -> bool {
         Type::I64 => n <= i64::MAX as u128,
         Type::I128 => n <= i128::MAX as u128,
         Type::Fn(_, _) => false,
+        Type::Array(_, _) => false,
     }
 }
 
 fn is_coercible_signed(n: i128, ty: &Type) -> bool {
     match ty {
         Type::Bool => n <= 1,
-        Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 => {
+        Type::Usize | Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 => {
             if n < 0 {
                 false
             } else {
@@ -256,6 +271,7 @@ fn is_coercible_signed(n: i128, ty: &Type) -> bool {
         Type::I64 => n >= i64::MIN as i128 && n <= i64::MAX as i128,
         Type::I128 => true,
         Type::Fn(_, _) => false,
+        Type::Array(_, _) => false,
     }
 }
 
@@ -308,6 +324,19 @@ impl Expr {
                     ));
                 }
             }
+            ExprEnum::ArrayLiteral(value, size) => {
+                let value = value.type_check(env)?;
+                let ty = Type::Array(Box::new(value.1.clone()), *size);
+                (typed_ast::ExprEnum::ArrayLiteral(Box::new(value), *size), ty)
+            },
+            ExprEnum::ArrayAccess(value, index) => {
+                let array = value.type_check(env)?;
+                let index = index.type_check(env)?;
+                let typed_ast::Expr(_, array_ty, array_meta) = &array;
+                let elem_ty = expect_array_type(&array_ty, *array_meta)?;
+                expect_type(&index, Type::Usize)?;
+                (typed_ast::ExprEnum::ArrayAccess(Box::new(array), Box::new(index)), elem_ty)
+            },
             ExprEnum::UnaryOp(UnaryOp::Neg, x) => {
                 let x = x.type_check(env)?;
                 let ty = x.1.clone();

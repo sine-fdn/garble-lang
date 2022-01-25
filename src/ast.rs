@@ -26,6 +26,7 @@ pub struct MainDef {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Type {
     Bool,
+    Usize,
     U8,
     U16,
     U32,
@@ -36,7 +37,8 @@ pub enum Type {
     I32,
     I64,
     I128,
-    Fn(Vec<Type>, Box<Type>)
+    Fn(Vec<Type>, Box<Type>),
+    Array(Box<Type>, usize),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -58,6 +60,8 @@ pub enum ExprEnum {
     NumUnsigned(u128),
     NumSigned(i128),
     Identifier(String),
+    ArrayLiteral(Box<Expr>, usize),
+    ArrayAccess(Box<Expr>, Box<Expr>),
     UnaryOp(UnaryOp, Box<Expr>),
     Op(Op, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),

@@ -23,6 +23,7 @@ pub enum ParseErrorEnum {
     InvalidParty,
     InvalidArity(usize),
     InvalidExpr,
+    ArrayMaxSizeExceeded(u128),
 }
 
 pub fn parse(prg: &str) -> Result<Program, ParseError> {
@@ -227,6 +228,28 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                         return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
                     }
                 }
+                "array" => {
+                    if arity == 2 {
+                        let value = parse_expr(sexprs.next().unwrap())?;
+                        let (size, size_meta) = expect_unsigned_num(sexprs.next().unwrap())?;
+                        if size <= usize::MAX as u128 {
+                            ExprEnum::ArrayLiteral(Box::new(value), size as usize)
+                        } else {
+                            return Err(ParseError(ParseErrorEnum::ArrayMaxSizeExceeded(size), size_meta));
+                        }
+                    } else {
+                        return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
+                    }
+                }
+                "get" => {
+                    if arity == 2 {
+                        let value = parse_expr(sexprs.next().unwrap())?;
+                        let index = parse_expr(sexprs.next().unwrap())?;
+                        ExprEnum::ArrayAccess(Box::new(value), Box::new(index))
+                    } else {
+                        return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
+                    }
+                }
                 _ => {
                     return Err(ParseError(ParseErrorEnum::InvalidExpr, meta));
                 }
@@ -282,6 +305,7 @@ fn expect_type(sexpr: Sexpr) -> Result<(Type, MetaInfo), ParseError> {
         Ok((identifier, meta)) => {
             let ty = match identifier.as_str() {
                 "bool" => Type::Bool,
+                "usize" => Type::Usize,
                 "u8" => Type::U8,
                 "u16" => Type::U16,
                 "u32" => Type::U32,
@@ -297,6 +321,14 @@ fn expect_type(sexpr: Sexpr) -> Result<(Type, MetaInfo), ParseError> {
             Ok((ty, meta))
         }
         Err(ParseError(_, meta)) => Err(ParseError(ParseErrorEnum::ExpectedType, meta)),
+    }
+}
+
+fn expect_unsigned_num(sexpr: Sexpr) -> Result<(u128, MetaInfo), ParseError> {
+    let Sexpr(sexpr, meta) = sexpr;
+    match sexpr {
+        SexprEnum::NumUnsigned(n) => Ok((n, meta)),
+        _ => Err(ParseError(ParseErrorEnum::ExpectedIdentifier, meta)),
     }
 }
 

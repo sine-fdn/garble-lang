@@ -53,6 +53,9 @@ fn push_or(gates: &mut Vec<Gate>, x: GateIndex, y: GateIndex) -> GateIndex {
 }
 
 fn push_mux(gates: &mut Vec<Gate>, s: GateIndex, x0: GateIndex, x1: GateIndex) -> GateIndex {
+    if x0 == x1 {
+        return x0;
+    }
     let not_s = push_not(gates, s);
     let x0_selected = push_gate(gates, Gate::And(x0, s));
     let x1_selected = push_gate(gates, Gate::And(x1, not_s));
@@ -245,6 +248,45 @@ impl Expr {
                 bits.into_iter().map(|b| b as usize).collect()
             }
             ExprEnum::Identifier(s) => env.get(s).unwrap(),
+            ExprEnum::ArrayLiteral(elem, size) => {
+                let elem_ty = elem.1.clone();
+                let mut elem = elem.compile(fns, env, gates);
+                extend_to_bits(&mut elem, &elem_ty, elem_ty.size_in_bits());
+                let bits = ty.size_in_bits();
+                let mut array = Vec::with_capacity(bits);
+                for _ in 0..*size {
+                    array.extend_from_slice(&elem);
+                }
+                array
+            }
+            ExprEnum::ArrayAccess(array, index) => {
+                let elem_bits = ty.size_in_bits();
+                let mut array = array.compile(fns, env, gates);
+                let mut index = index.compile(fns, env, gates);
+                extend_to_bits(&mut index, &Type::Usize, Type::Usize.size_in_bits());
+                let out_of_bounds_elem = 1;
+                for mux_layer in (0..index.len()).rev() {
+                    let mut muxed_array = Vec::new();
+                    let s = index[mux_layer];
+                    let mut i = 0;
+                    while i < array.len() {
+                        for _ in 0..elem_bits {
+                            if i + elem_bits < array.len() {
+                                let a0 = array[i];
+                                let a1 = array[i + elem_bits];
+                                muxed_array.push(push_mux(gates, s, a1, a0));
+                            } else if i < array.len() {
+                                let a0 = array[i];
+                                muxed_array.push(push_mux(gates, s, out_of_bounds_elem, a0));
+                            }
+                            i += 1;
+                        }
+                        i += elem_bits;
+                    }
+                    array = muxed_array;
+                }
+                array
+            }
             ExprEnum::UnaryOp(UnaryOp::Neg, x) => {
                 let x = x.compile(fns, env, gates);
                 push_negation_circuit(gates, &x)
@@ -487,11 +529,13 @@ impl Type {
     fn size_in_bits(&self) -> usize {
         match self {
             Type::Bool => 1,
+            Type::Usize => usize::BITS as usize,
             Type::U8 | Type::I8 => 8,
             Type::U16 | Type::I16 => 16,
             Type::U32 | Type::I32 => 32,
             Type::U64 | Type::I64 => 64,
             Type::U128 | Type::I128 => 128,
+            Type::Array(elem, size) => elem.size_in_bits() * size,
             Type::Fn(_, _) => panic!("Fn types cannot be directly mapped to bits"),
         }
     }
@@ -586,6 +630,11 @@ impl Computation {
         }
     }
 
+    pub fn set_usize(&mut self, p: Party, n: usize) {
+        let inputs = self.get_input(p);
+        unsigned_to_bits(n as u128, usize::BITS as usize, inputs);
+    }
+
     pub fn set_u8(&mut self, p: Party, n: u8) {
         let inputs = self.get_input(p);
         unsigned_to_bits(n as u128, 8, inputs);
@@ -668,6 +717,10 @@ impl Computation {
                 actual_bits: output.len(),
             })
         }
+    }
+
+    pub fn get_usize(&self) -> Result<usize, ComputeError> {
+        self.get_unsigned(Type::Usize).map(|n| n as usize)
     }
 
     pub fn get_u8(&self) -> Result<u8, ComputeError> {
