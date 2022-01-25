@@ -156,12 +156,14 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                     let x = parse_expr(sexprs.next().unwrap())?;
                     ExprEnum::UnaryOp(op, Box::new(x))
                 },
-                "+" | "-" | "*" | "&" | "^" | "|" | ">" | "<" | "==" | "!=" | "<<" | ">>" => {
+                "+" | "-" | "*" | "/" | "%" | "&" | "^" | "|" | ">" | "<" | "==" | "!=" | "<<" | ">>" => {
                     if arity == 2 {
                         let op = match f.as_str() {
                             "+" => Op::Add,
                             "-" => Op::Sub,
                             "*" => Op::Mul,
+                            "/" => Op::Div,
+                            "%" => Op::Mod,
                             "&" => Op::BitAnd,
                             "^" => Op::BitXor,
                             "|" => Op::BitOr,

@@ -52,7 +52,7 @@ fn push_or(gates: &mut Vec<Gate>, x: GateIndex, y: GateIndex) -> GateIndex {
     push_gate(gates, Gate::Xor(xor, and))
 }
 
-fn push_mux(gates: &mut Vec<Gate>, x0: GateIndex, x1: GateIndex, s: GateIndex) -> GateIndex {
+fn push_mux(gates: &mut Vec<Gate>, s: GateIndex, x0: GateIndex, x1: GateIndex) -> GateIndex {
     let not_s = push_not(gates, s);
     let x0_selected = push_gate(gates, Gate::And(x0, s));
     let x1_selected = push_gate(gates, Gate::And(x1, not_s));
@@ -85,6 +85,125 @@ fn push_multiplier(
 ) -> (GateIndex, GateIndex) {
     let x_and_y = push_gate(gates, Gate::And(x, y));
     push_adder(gates, x_and_y, z, carry)
+}
+
+fn push_addition_circuit(
+    gates: &mut Vec<Gate>,
+    x: &Vec<GateIndex>,
+    y: &Vec<GateIndex>,
+) -> (Vec<GateIndex>, GateIndex) {
+    assert_eq!(x.len(), y.len());
+    let bits = x.len();
+
+    let mut carry = 0;
+    let mut sum = vec![0; bits];
+    // sequence of full adders:
+    for i in (0..bits).rev() {
+        let (s, c) = push_adder(gates, x[i], y[i], carry);
+        sum[i] = s;
+        carry = c;
+    }
+    (sum, carry)
+}
+
+fn push_negation_circuit(gates: &mut Vec<Gate>, x: &Vec<GateIndex>) -> Vec<GateIndex> {
+    // flip bits and increment to get negate:
+    let mut carry = 1;
+    let mut neg = vec![0; x.len()];
+    for i in (0..x.len()).rev() {
+        let x = push_not(gates, x[i]);
+        // half-adder:
+        neg[i] = push_gate(gates, Gate::Xor(carry, x));
+        carry = push_gate(gates, Gate::And(carry, x));
+    }
+    neg
+}
+
+fn push_subtraction_circuit(
+    gates: &mut Vec<Gate>,
+    x: &Vec<GateIndex>,
+    y: &Vec<GateIndex>,
+) -> (Vec<GateIndex>, GateIndex) {
+    assert_eq!(x.len(), y.len());
+    let bits = x.len();
+
+    // flip bits of y and increment y to get negative y:
+    let mut carry = 1;
+    let mut x_extended = vec![0; bits + 1];
+    x_extended[1..].copy_from_slice(&x);
+    let mut z = vec![0; bits + 1];
+    for i in (0..bits + 1).rev() {
+        let y = if i == 0 { 1 } else { push_not(gates, y[i - 1]) };
+        // half-adder:
+        z[i] = push_gate(gates, Gate::Xor(carry, y));
+        carry = push_gate(gates, Gate::And(carry, y));
+    }
+
+    let (mut sum_extended, _carry) = push_addition_circuit(gates, &x_extended, &z);
+    let sum = sum_extended.split_off(1);
+    (sum, sum_extended[0])
+}
+
+fn push_unsigned_division_circuit(
+    gates: &mut Vec<Gate>,
+    x: &Vec<GateIndex>,
+    y: &Vec<GateIndex>,
+) -> (Vec<GateIndex>, Vec<GateIndex>) {
+    assert_eq!(x.len(), y.len());
+    let bits = x.len();
+
+    let mut quotient = vec![0; bits];
+    let mut remainder = x.clone();
+    for shift_amount in (0..bits).rev() {
+        let mut overflow = 0;
+        let mut y_shifted = vec![0; bits];
+        for shift in 0..shift_amount {
+            overflow = push_or(gates, overflow, y[shift]);
+        }
+        for j in 0..(bits - shift_amount) {
+            y_shifted[j] = y[j + shift_amount];
+        }
+
+        let (x_sub, carry) = push_subtraction_circuit(gates, &remainder, &y_shifted);
+        let carry_or_overflow = push_or(gates, carry, overflow);
+        for i in 0..bits {
+            remainder[i] = push_mux(gates, carry_or_overflow, remainder[i], x_sub[i]);
+        }
+        let quotient_bit = push_not(gates, carry);
+        quotient[bits - shift_amount - 1] = push_mux(gates, overflow, 0, quotient_bit);
+    }
+    (quotient, remainder)
+}
+
+fn push_signed_division_circuit(
+    gates: &mut Vec<Gate>,
+    x: &mut Vec<GateIndex>,
+    y: &mut Vec<GateIndex>,
+) -> (Vec<GateIndex>, Vec<GateIndex>) {
+    assert_eq!(x.len(), y.len());
+    let bits = x.len();
+
+    let is_result_neg = push_gate(gates, Gate::Xor(x[0], y[0]));
+    let x_negated = push_negation_circuit(gates, &x);
+    let x_sign_bit = x[0];
+    for i in 0..bits {
+        x[i] = push_mux(gates, x_sign_bit, x_negated[i], x[i]);
+    }
+    let y_negated = push_negation_circuit(gates, &y);
+    let y_sign_bit = y[0];
+    for i in 0..bits {
+        y[i] = push_mux(gates, y_sign_bit, y_negated[i], y[i]);
+    }
+    let (mut quotient, mut remainder) = push_unsigned_division_circuit(gates, &x, &y);
+    let quot_neg = push_negation_circuit(gates, &quotient);
+    for i in 0..bits {
+        quotient[i] = push_mux(gates, is_result_neg, quot_neg[i], quotient[i]);
+    }
+    let rem_neg = push_negation_circuit(gates, &remainder);
+    for i in 0..bits {
+        remainder[i] = push_mux(gates, x_sign_bit, rem_neg[i], remainder[i]);
+    }
+    (quotient, remainder)
 }
 
 fn extend_to_bits(v: &mut Vec<usize>, ty: &Type, bits: usize) {
@@ -128,16 +247,7 @@ impl Expr {
             ExprEnum::Identifier(s) => env.get(s).unwrap(),
             ExprEnum::UnaryOp(UnaryOp::Neg, x) => {
                 let x = x.compile(fns, env, gates);
-                // flip bits and increment to get negate:
-                let mut carry = 1;
-                let mut neg = vec![0; x.len()];
-                for i in (0..x.len()).rev() {
-                    let x = push_not(gates, x[i]);
-                    // half-adder:
-                    neg[i] = push_gate(gates, Gate::Xor(carry, x));
-                    carry = push_gate(gates, Gate::And(carry, x));
-                }
-                neg
+                push_negation_circuit(gates, &x)
             }
             ExprEnum::UnaryOp(UnaryOp::Not, x) => {
                 let x = x.compile(fns, env, gates);
@@ -173,7 +283,7 @@ impl Expr {
                                 bits_unshifted[i - shift]
                             }
                         };
-                        bits_shifted[i] = push_mux(gates, shifted, unshifted, s);
+                        bits_shifted[i] = push_mux(gates, s, shifted, unshifted);
                     }
                     shift *= 2;
                     bits_unshifted = bits_shifted;
@@ -213,53 +323,15 @@ impl Expr {
                         }
                         output_bits
                     }
-                    Op::Sub => {
-                        // flip bits of y and increment y to get negative y:
-                        let mut carry = 1;
-                        let mut z = vec![0; bits];
-                        for i in (0..bits).rev() {
-                            let y = push_not(gates, y[i]);
-                            // half-adder:
-                            z[i] = push_gate(gates, Gate::Xor(carry, y));
-                            carry = push_gate(gates, Gate::And(carry, y));
-                        }
-
-                        // now sum x and negative y:
-                        let mut carry = 0;
-                        for i in (0..bits).rev() {
-                            // first half-adder:
-                            let u = push_gate(gates, Gate::Xor(x[i], z[i]));
-                            let v = push_gate(gates, Gate::And(x[i], z[i]));
-                            // second half-adder:
-                            let s = push_gate(gates, Gate::Xor(u, carry));
-                            let w = push_gate(gates, Gate::And(u, carry));
-                            z[i] = s;
-                            carry = push_or(gates, v, w);
-                        }
-                        z
-                    }
-                    Op::Add => {
-                        let mut carry = 0;
-                        let mut sum = vec![0; bits];
-                        // sequence of full adders:
-                        for i in (0..bits).rev() {
-                            let (s, c) = push_adder(gates, x[i], y[i], carry);
-                            sum[i] = s;
-                            carry = c;
-                        }
-                        sum
-                    }
+                    Op::Sub => push_subtraction_circuit(gates, &x, &y).0,
+                    Op::Add => push_addition_circuit(gates, &x, &y).0,
                     Op::Mul => {
                         let mut sums: Vec<Vec<GateIndex>> = vec![vec![0; bits]; bits];
                         let mut carries: Vec<Vec<GateIndex>> = vec![vec![0; bits]; bits];
                         let lsb_index = bits - 1;
                         for i in (0..bits).rev() {
                             for j in (0..bits).rev() {
-                                let carry = if j == lsb_index {
-                                    0
-                                } else {
-                                    carries[i][j + 1]
-                                };
+                                let carry = if j == lsb_index { 0 } else { carries[i][j + 1] };
                                 let z = if i == lsb_index {
                                     0
                                 } else if j == 0 {
@@ -277,6 +349,20 @@ impl Expr {
                             result[i] = s[lsb_index];
                         }
                         result
+                    }
+                    Op::Div => {
+                        if is_signed(ty) {
+                            push_signed_division_circuit(gates, &mut x, &mut y).0
+                        } else {
+                            push_unsigned_division_circuit(gates, &x, &y).0
+                        }
+                    }
+                    Op::Mod => {
+                        if is_signed(ty) {
+                            push_signed_division_circuit(gates, &mut x, &mut y).1
+                        } else {
+                            push_unsigned_division_circuit(gates, &x, &y).1
+                        }
                     }
                     Op::GreaterThan | Op::LessThan => {
                         let mut acc_gt = 0;
@@ -329,7 +415,7 @@ impl Expr {
                         unreachable!("handled in the match clause one layer up")
                     }
                     Op::ShiftRight => {
-                        todo!()
+                        unreachable!("handled in the match clause one layer up")
                     }
                 }
             }

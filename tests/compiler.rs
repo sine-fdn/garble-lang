@@ -407,7 +407,7 @@ fn compile_sub() -> Result<(), String> {
     let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..20 {
-        for y in -10..20 {
+        for y in -10..256 {
             computation.set_i16(Party::A, x);
             computation.set_i16(Party::A, y);
             computation.run().map_err(|e| e.prettify(prg))?;
@@ -494,6 +494,112 @@ fn compile_signed_mul() -> Result<(), String> {
             computation.set_i16(Party::A, y);
             computation.run().map_err(|e| e.prettify(prg))?;
             assert_eq!(computation.get_i16().map_err(|e| e.prettify(prg))?, x * y);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_unsigned_div() -> Result<(), String> {
+    let prg = "
+(fn main u8 (param x A u8) (param y A u8)
+  (/ x y))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in 0..255 {
+        for y in 1..10 {
+            computation.set_u8(Party::A, x);
+            computation.set_u8(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(computation.get_u8().map_err(|e| e.prettify(prg))?, x / y);
+        }
+        for y in 250..255 {
+            computation.set_u8(Party::A, x);
+            computation.set_u8(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(computation.get_u8().map_err(|e| e.prettify(prg))?, x / y);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_unsigned_mod() -> Result<(), String> {
+    let prg = "
+(fn main u8 (param x A u8) (param y A u8)
+  (% x y))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in 0..255 {
+        for y in 1..10 {
+            computation.set_u8(Party::A, x);
+            computation.set_u8(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(computation.get_u8().map_err(|e| e.prettify(prg))?, x % y);
+        }
+        for y in 250..255 {
+            computation.set_u8(Party::A, x);
+            computation.set_u8(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(computation.get_u8().map_err(|e| e.prettify(prg))?, x % y);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_signed_div() -> Result<(), String> {
+    let prg = "
+(fn main i8 (param x A i8) (param y A i8)
+  (/ x y))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in -128..127 {
+        for y in -4..5 {
+            if y == -1 || y == 0 {
+                continue;
+            }
+            computation.set_i8(Party::A, x);
+            computation.set_i8(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(computation.get_i8().map_err(|e| e.prettify(prg))?, x / y);
+        }
+        for y in 120..127 {
+            computation.set_i8(Party::A, x);
+            computation.set_i8(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(computation.get_i8().map_err(|e| e.prettify(prg))?, x / y);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_signed_mod() -> Result<(), String> {
+    let prg = "
+(fn main i8 (param x A i8) (param y A i8)
+  (% x y))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in -128..127 {
+        for y in -4..5 {
+            if y == -1 || y == 0 {
+                continue;
+            }
+            computation.set_i8(Party::A, x);
+            computation.set_i8(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(computation.get_i8().map_err(|e| e.prettify(prg))?, x % y);
+        }
+        for y in 120..127 {
+            computation.set_i8(Party::A, x);
+            computation.set_i8(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(computation.get_i8().map_err(|e| e.prettify(prg))?, x % y);
         }
     }
     Ok(())

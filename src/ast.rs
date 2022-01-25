@@ -77,6 +77,8 @@ pub enum Op {
     Add,
     Sub,
     Mul,
+    Div,
+    Mod,
     BitAnd,
     BitXor,
     BitOr,
