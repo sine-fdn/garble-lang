@@ -1,4 +1,6 @@
-use crate::ast::{Expr, ExprEnum, FnDef, MainDef, Op, ParamDef, Party, Program, Type, UnaryOp};
+use crate::ast::{
+    Closure, Expr, ExprEnum, FnDef, MainDef, Op, ParamDef, Party, Program, Type, UnaryOp,
+};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct MetaInfo {
@@ -53,6 +55,38 @@ fn parse_into_ast(mut sexprs: Vec<Sexpr>) -> Result<Program, ParseError> {
     }
     let main = parse_main_def(main)?;
     Ok(Program { fn_defs, main })
+}
+
+fn parse_closure_def(sexpr: Sexpr) -> Result<Closure, ParseError> {
+    let Sexpr(sexpr, meta) = sexpr;
+    match sexpr {
+        SexprEnum::List(mut sexprs) => {
+            let body = parse_expr(sexprs.pop().unwrap())?;
+            let mut sexprs = sexprs.into_iter();
+            if let (Some(keyword_fn), Some(ty)) = (sexprs.next(), sexprs.next()) {
+                expect_keyword(keyword_fn, "lambda")?;
+                let (ty, _) = expect_type(ty)?;
+                let mut params = Vec::new();
+                while let Some(param_def) = sexprs.next() {
+                    let (param_def, _) = expect_fixed_list(param_def, 3)?;
+                    let mut param_def = param_def.into_iter();
+                    expect_keyword(param_def.next().unwrap(), "param")?;
+                    let (identifier, _) = expect_identifier(param_def.next().unwrap())?;
+                    let (ty, _) = expect_type(param_def.next().unwrap())?;
+                    params.push(ParamDef(identifier, ty));
+                }
+                Ok(Closure {
+                    ty,
+                    params,
+                    body,
+                    meta,
+                })
+            } else {
+                return Err(ParseError(ParseErrorEnum::InvalidFnDef, meta));
+            }
+        }
+        _ => Err(ParseError(ParseErrorEnum::InvalidFnDef, meta)),
+    }
 }
 
 fn parse_fn_def(sexpr: Sexpr) -> Result<FnDef, ParseError> {
@@ -156,8 +190,9 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                     };
                     let x = parse_expr(sexprs.next().unwrap())?;
                     ExprEnum::UnaryOp(op, Box::new(x))
-                },
-                "+" | "-" | "*" | "/" | "%" | "&" | "^" | "|" | ">" | "<" | "==" | "!=" | "<<" | ">>" => {
+                }
+                "+" | "-" | "*" | "/" | "%" | "&" | "^" | "|" | ">" | "<" | "==" | "!=" | "<<"
+                | ">>" => {
                     if arity == 2 {
                         let op = match f.as_str() {
                             "+" => Op::Add,
@@ -235,7 +270,10 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                         if size <= usize::MAX as u128 {
                             ExprEnum::ArrayLiteral(Box::new(value), size as usize)
                         } else {
-                            return Err(ParseError(ParseErrorEnum::ArrayMaxSizeExceeded(size), size_meta));
+                            return Err(ParseError(
+                                ParseErrorEnum::ArrayMaxSizeExceeded(size),
+                                size_meta,
+                            ));
                         }
                     } else {
                         return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
@@ -256,6 +294,25 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                         let index = parse_expr(sexprs.next().unwrap())?;
                         let value = parse_expr(sexprs.next().unwrap())?;
                         ExprEnum::ArrayAssignment(Box::new(arr), Box::new(index), Box::new(value))
+                    } else {
+                        return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
+                    }
+                }
+                "fold" => {
+                    if arity == 3 {
+                        let arr = parse_expr(sexprs.next().unwrap())?;
+                        let init_value = parse_expr(sexprs.next().unwrap())?;
+                        let closure = parse_closure_def(sexprs.next().unwrap())?;
+                        ExprEnum::Fold(Box::new(arr), Box::new(init_value), Box::new(closure))
+                    } else {
+                        return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
+                    }
+                }
+                "map" => {
+                    if arity == 2 {
+                        let arr = parse_expr(sexprs.next().unwrap())?;
+                        let closure = parse_closure_def(sexprs.next().unwrap())?;
+                        ExprEnum::Map(Box::new(arr), Box::new(closure))
                     } else {
                         return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
                     }

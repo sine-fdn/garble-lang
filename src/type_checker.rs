@@ -57,7 +57,7 @@ impl Program {
                 param_types.push(ty.clone());
             }
             let body = fn_def.body.type_check(&mut env)?;
-            expect_type(&body, fn_def.ty.clone())?;
+            expect_type(&body, &fn_def.ty)?;
             env.pop();
 
             let fn_type = Type::Fn(param_types, Box::new(fn_def.ty.clone()));
@@ -83,7 +83,7 @@ impl Program {
             params.push((*party, param.clone()));
         }
         let body = self.main.body.type_check(&mut env)?;
-        expect_type(&body, self.main.ty.clone())?;
+        expect_type(&body, &self.main.ty)?;
         let main = typed_ast::MainDef {
             params,
             body,
@@ -93,7 +93,7 @@ impl Program {
     }
 }
 
-fn expect_type(expr: &typed_ast::Expr, expected: Type) -> Result<(), TypeError> {
+fn expect_type(expr: &typed_ast::Expr, expected: &Type) -> Result<(), TypeError> {
     let typed_ast::Expr(expr, actual, meta) = expr;
     let actual = actual.clone();
     if let typed_ast::ExprEnum::NumUnsigned(n) = expr {
@@ -106,17 +106,18 @@ fn expect_type(expr: &typed_ast::Expr, expected: Type) -> Result<(), TypeError> 
             return Ok(());
         }
     }
-    if actual == expected {
+    if &actual == expected {
         Ok(())
     } else {
+        let expected = expected.clone();
         let e = TypeErrorEnum::UnexpectedType { expected, actual };
         Err(TypeError(e, *meta))
     }
 }
 
-fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<Type, TypeError> {
+fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<(Type, usize), TypeError> {
     match ty {
-        Type::Array(elem, _) => Ok(*elem.clone()),
+        Type::Array(elem, size) => Ok((*elem.clone(), *size)),
         _ => Err(TypeError(
             TypeErrorEnum::ExpectedArrayType(ty.clone()),
             meta,
@@ -334,8 +335,8 @@ impl Expr {
                 let arr = arr.type_check(env)?;
                 let index = index.type_check(env)?;
                 let typed_ast::Expr(_, array_ty, array_meta) = &arr;
-                let elem_ty = expect_array_type(&array_ty, *array_meta)?;
-                expect_type(&index, Type::Usize)?;
+                let (elem_ty, _) = expect_array_type(&array_ty, *array_meta)?;
+                expect_type(&index, &Type::Usize)?;
                 (
                     typed_ast::ExprEnum::ArrayAccess(Box::new(arr), Box::new(index)),
                     elem_ty,
@@ -347,9 +348,9 @@ impl Expr {
                 let value = value.type_check(env)?;
                 let typed_ast::Expr(_, array_ty, array_meta) = &arr;
                 let ty = array_ty.clone();
-                let elem_ty = expect_array_type(&array_ty, *array_meta)?;
-                expect_type(&index, Type::Usize)?;
-                expect_type(&value, elem_ty)?;
+                let (elem_ty, _) = expect_array_type(&array_ty, *array_meta)?;
+                expect_type(&index, &Type::Usize)?;
+                expect_type(&value, &elem_ty)?;
                 (
                     typed_ast::ExprEnum::ArrayAssignment(
                         Box::new(arr),
@@ -409,7 +410,7 @@ impl Expr {
                     let y = y.type_check(env)?;
                     let typed_ast::Expr(_, ty_x, meta_x) = x.clone();
                     expect_num_type(&ty_x, meta_x)?;
-                    expect_type(&y, Type::U8)?;
+                    expect_type(&y, &Type::U8)?;
                     (
                         typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)),
                         ty_x.clone(),
@@ -448,7 +449,7 @@ impl Expr {
                         Type::Fn(fn_arg_types, ret_ty) => {
                             if fn_arg_types.len() == arg_types.len() {
                                 for (expected, actual) in fn_arg_types.into_iter().zip(&arg_exprs) {
-                                    expect_type(actual, expected)?;
+                                    expect_type(actual, &expected)?;
                                 }
                                 let expr =
                                     typed_ast::ExprEnum::FnCall(identifier.clone(), arg_exprs);
@@ -478,7 +479,7 @@ impl Expr {
                 let condition = condition.type_check(env)?;
                 let case_true = case_true.type_check(env)?;
                 let case_false = case_false.type_check(env)?;
-                expect_type(&condition, Type::Bool)?;
+                expect_type(&condition, &Type::Bool)?;
                 let ty = unify(&case_true, &case_false, meta)?;
                 let expr = typed_ast::ExprEnum::If(
                     Box::new(condition),
@@ -495,6 +496,88 @@ impl Expr {
                 (
                     typed_ast::ExprEnum::Cast(ty.clone(), Box::new(expr)),
                     ty.clone(),
+                )
+            }
+            ExprEnum::Fold(arr, init, closure) => {
+                let arr = arr.type_check(env)?;
+                let init = init.type_check(env)?;
+                let typed_ast::Expr(_, array_ty, array_meta) = &arr;
+                let (elem_ty, _) = expect_array_type(&array_ty, *array_meta)?;
+                if closure.params.len() != 2 {
+                    let expected = vec![init.1, elem_ty];
+                    let param_types = closure.params.iter().map(|p| p.1.clone()).collect();
+                    let actual = Type::Fn(param_types, Box::new(closure.ty.clone()));
+                    let e = TypeErrorEnum::ExpectedFnType { expected, actual };
+                    return Err(TypeError(e, closure.meta));
+                }
+                let ParamDef(acc_identifier, acc_param_ty) = &closure.params[0];
+                let ParamDef(elem_identifier, elem_param_ty) = &closure.params[1];
+                expect_type(&init, &acc_param_ty)?;
+                if &elem_ty != elem_param_ty {
+                    let expected = elem_param_ty.clone();
+                    let actual = elem_ty;
+                    let e = TypeErrorEnum::UnexpectedType { expected, actual };
+                    return Err(TypeError(e, closure.meta));
+                }
+
+                env.push();
+                env.set(acc_identifier.clone(), acc_param_ty.clone());
+                env.set(elem_identifier.clone(), elem_param_ty.clone());
+                let body = closure.body.type_check(env)?;
+                unify(&init, &body, meta)?;
+                env.pop();
+
+                let ty = closure.ty.clone();
+                expect_type(&body, &ty)?;
+
+                let closure = typed_ast::Closure {
+                    ty: closure.ty.clone(),
+                    params: closure.params.clone(),
+                    body,
+                    meta,
+                };
+                (
+                    typed_ast::ExprEnum::Fold(Box::new(arr), Box::new(init), Box::new(closure)),
+                    ty,
+                )
+            }
+            ExprEnum::Map(arr, closure) => {
+                let arr = arr.type_check(env)?;
+                let typed_ast::Expr(_, array_ty, array_meta) = &arr;
+                let (elem_ty, size) = expect_array_type(&array_ty, *array_meta)?;
+                if closure.params.len() != 1 {
+                    let expected = vec![elem_ty];
+                    let param_types = closure.params.iter().map(|p| p.1.clone()).collect();
+                    let actual = Type::Fn(param_types, Box::new(closure.ty.clone()));
+                    let e = TypeErrorEnum::ExpectedFnType { expected, actual };
+                    return Err(TypeError(e, closure.meta));
+                }
+                let ParamDef(elem_identifier, elem_param_ty) = &closure.params[0];
+                if &elem_ty != elem_param_ty {
+                    let expected = elem_param_ty.clone();
+                    let actual = elem_ty;
+                    let e = TypeErrorEnum::UnexpectedType { expected, actual };
+                    return Err(TypeError(e, closure.meta));
+                }
+
+                env.push();
+                env.set(elem_identifier.clone(), elem_param_ty.clone());
+                let body = closure.body.type_check(env)?;
+                env.pop();
+
+                expect_type(&body, &closure.ty)?;
+
+                let ty = Type::Array(Box::new(closure.ty.clone()), size);
+
+                let closure = typed_ast::Closure {
+                    ty: closure.ty.clone(),
+                    params: closure.params.clone(),
+                    body,
+                    meta,
+                };
+                (
+                    typed_ast::ExprEnum::Map(Box::new(arr), Box::new(closure)),
+                    ty,
                 )
             }
         };

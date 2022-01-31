@@ -555,6 +555,49 @@ impl Expr {
                 };
                 result
             }
+            ExprEnum::Fold(array, init, closure) => {
+                let array = array.compile(fns, env, gates);
+                let mut init = init.compile(fns, env, gates);
+
+                let ParamDef(init_identifier, init_ty) = &closure.params[0];
+                let ParamDef(elem_identifier, elem_ty) = &closure.params[1];
+                let elem_bits = elem_ty.size_in_bits();
+                extend_to_bits(&mut init, init_ty, init_ty.size_in_bits());
+
+                let mut acc = init;
+                let mut i = 0;
+                while i < array.len() {
+                    let elem = &array[i..i + elem_bits];
+                    env.push();
+                    env.set(init_identifier.clone(), acc);
+                    env.set(elem_identifier.clone(), elem.to_vec());
+                    acc = closure.body.compile(fns, env, gates);
+                    env.pop();
+                    i += elem_bits;
+                }
+                acc
+            }
+            ExprEnum::Map(array, closure) => {
+                let array = array.compile(fns, env, gates);
+
+                let ParamDef(elem_identifier, elem_ty) = &closure.params[0];
+                let elem_in_bits = elem_ty.size_in_bits();
+                let elem_out_bits = closure.ty.size_in_bits();
+                let size = array.len() / elem_in_bits;
+
+                let mut i = 0;
+                let mut result = Vec::with_capacity(elem_out_bits * size);
+                while i < array.len() {
+                    let elem_in = &array[i..i + elem_in_bits];
+                    env.push();
+                    env.set(elem_identifier.clone(), elem_in.to_vec());
+                    let elem_out = closure.body.compile(fns, env, gates);
+                    result.extend(elem_out);
+                    env.pop();
+                    i += elem_in_bits;
+                }
+                result
+            }
         }
     }
 }

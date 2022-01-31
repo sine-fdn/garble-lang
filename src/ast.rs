@@ -69,6 +69,16 @@ pub enum ExprEnum {
     FnCall(String, Vec<Expr>),
     If(Box<Expr>, Box<Expr>, Box<Expr>),
     Cast(Type, Box<Expr>),
+    Fold(Box<Expr>, Box<Expr>, Box<Closure>),
+    Map(Box<Expr>, Box<Closure>),
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct Closure {
+    pub ty: Type,
+    pub params: Vec<ParamDef>,
+    pub body: Expr,
+    pub meta: MetaInfo,
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]

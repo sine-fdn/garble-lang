@@ -655,3 +655,53 @@ fn compile_array_assignment() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn compile_fold() -> Result<(), String> {
+    let array_size = 8;
+    let prg = &format!(
+        "
+(fn main i8 (param x A i8)
+  (let arr (array x {})
+    (fold arr 0 (lambda i8 (param acc i8) (param x i8)
+      (+ acc x)))))
+",
+        array_size
+    );
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in -10..10 {
+        computation.set_i8(Party::A, x);
+        computation.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(
+            computation.get_i8().map_err(|e| e.prettify(prg))?,
+            array_size * x
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_map() -> Result<(), String> {
+    let array_size = 8;
+    let prg = &format!(
+        "
+(fn main i8 (param x A i8) (param i A usize)
+  (let arr (array x {})
+    (let arr (map arr (lambda i8 (param x i8) (* x 2)))
+      (get arr i))))
+",
+        array_size
+    );
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for x in -10..10 {
+        for i in 0..array_size {
+            computation.set_i8(Party::A, x);
+            computation.set_usize(Party::A, i);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(computation.get_i8().map_err(|e| e.prettify(prg))?, x * 2);
+        }
+    }
+    Ok(())
+}
