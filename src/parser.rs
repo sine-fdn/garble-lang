@@ -243,9 +243,19 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                 }
                 "get" => {
                     if arity == 2 {
-                        let value = parse_expr(sexprs.next().unwrap())?;
+                        let arr = parse_expr(sexprs.next().unwrap())?;
                         let index = parse_expr(sexprs.next().unwrap())?;
-                        ExprEnum::ArrayAccess(Box::new(value), Box::new(index))
+                        ExprEnum::ArrayAccess(Box::new(arr), Box::new(index))
+                    } else {
+                        return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
+                    }
+                }
+                "set" => {
+                    if arity == 3 {
+                        let arr = parse_expr(sexprs.next().unwrap())?;
+                        let index = parse_expr(sexprs.next().unwrap())?;
+                        let value = parse_expr(sexprs.next().unwrap())?;
+                        ExprEnum::ArrayAssignment(Box::new(arr), Box::new(index), Box::new(value))
                     } else {
                         return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
                     }

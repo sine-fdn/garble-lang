@@ -117,12 +117,10 @@ fn expect_type(expr: &typed_ast::Expr, expected: Type) -> Result<(), TypeError> 
 fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<Type, TypeError> {
     match ty {
         Type::Array(elem, _) => Ok(*elem.clone()),
-        _ => {
-            Err(TypeError(
-                TypeErrorEnum::ExpectedArrayType(ty.clone()),
-                meta,
-            ))
-        }
+        _ => Err(TypeError(
+            TypeErrorEnum::ExpectedArrayType(ty.clone()),
+            meta,
+        )),
     }
 }
 
@@ -327,16 +325,40 @@ impl Expr {
             ExprEnum::ArrayLiteral(value, size) => {
                 let value = value.type_check(env)?;
                 let ty = Type::Array(Box::new(value.1.clone()), *size);
-                (typed_ast::ExprEnum::ArrayLiteral(Box::new(value), *size), ty)
-            },
-            ExprEnum::ArrayAccess(value, index) => {
-                let array = value.type_check(env)?;
+                (
+                    typed_ast::ExprEnum::ArrayLiteral(Box::new(value), *size),
+                    ty,
+                )
+            }
+            ExprEnum::ArrayAccess(arr, index) => {
+                let arr = arr.type_check(env)?;
                 let index = index.type_check(env)?;
-                let typed_ast::Expr(_, array_ty, array_meta) = &array;
+                let typed_ast::Expr(_, array_ty, array_meta) = &arr;
                 let elem_ty = expect_array_type(&array_ty, *array_meta)?;
                 expect_type(&index, Type::Usize)?;
-                (typed_ast::ExprEnum::ArrayAccess(Box::new(array), Box::new(index)), elem_ty)
-            },
+                (
+                    typed_ast::ExprEnum::ArrayAccess(Box::new(arr), Box::new(index)),
+                    elem_ty,
+                )
+            }
+            ExprEnum::ArrayAssignment(arr, index, value) => {
+                let arr = arr.type_check(env)?;
+                let index = index.type_check(env)?;
+                let value = value.type_check(env)?;
+                let typed_ast::Expr(_, array_ty, array_meta) = &arr;
+                let ty = array_ty.clone();
+                let elem_ty = expect_array_type(&array_ty, *array_meta)?;
+                expect_type(&index, Type::Usize)?;
+                expect_type(&value, elem_ty)?;
+                (
+                    typed_ast::ExprEnum::ArrayAssignment(
+                        Box::new(arr),
+                        Box::new(index),
+                        Box::new(value),
+                    ),
+                    ty,
+                )
+            }
             ExprEnum::UnaryOp(UnaryOp::Neg, x) => {
                 let x = x.type_check(env)?;
                 let ty = x.1.clone();

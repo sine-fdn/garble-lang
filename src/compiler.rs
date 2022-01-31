@@ -287,6 +287,47 @@ impl Expr {
                 }
                 array
             }
+            ExprEnum::ArrayAssignment(array, index, value) => {
+                let (elem_ty, size) = match ty {
+                    Type::Array(elem_ty, size) => (elem_ty, size),
+                    _ => panic!(
+                        "Expected array assignment to have an array type, but found {:?}",
+                        ty
+                    ),
+                };
+                let mut array = array.compile(fns, env, gates);
+                let mut index = index.compile(fns, env, gates);
+                let value = value.compile(fns, env, gates);
+                extend_to_bits(&mut index, &Type::Usize, Type::Usize.size_in_bits());
+                let elem_bits = elem_ty.size_in_bits();
+
+                let mut index_negated = vec![0; index.len()];
+                for (i, index) in index.iter().copied().enumerate() {
+                    index_negated[i] = push_not(gates, index);
+                }
+                // for each array element...
+                for i in 0..*size {
+                    // ...and each bit of that array element...
+                    for b in 0..elem_bits {
+                        // ...use a index-length chain of mux, select the value if index == i
+                        let mut x1 = value[b];
+                        for s in 0..index.len() {
+                            let s_must_be_negated = ((i >> (index.len() - s - 1)) & 1) > 0;
+                            let s = if s_must_be_negated {
+                                index_negated[s]
+                            } else {
+                                index[s]
+                            };
+                            // x0 is selected by the mux-chain whenever a single bit of index != i
+                            let x0 = array[i * elem_bits + b];
+                            // x1 is value[b] only if index == i in all bits
+                            x1 = push_mux(gates, s, x0, x1);
+                        }
+                        array[i * elem_bits + b] = x1;
+                    }
+                }
+                array
+            }
             ExprEnum::UnaryOp(UnaryOp::Neg, x) => {
                 let x = x.compile(fns, env, gates);
                 push_negation_circuit(gates, &x)

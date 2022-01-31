@@ -627,3 +627,31 @@ fn compile_array_access() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn compile_array_assignment() -> Result<(), String> {
+    let array_size = 8;
+    let prg = &format!(
+        "
+(fn main i8 (param x A i8) (param i A usize) (param j A usize)
+  (let arr (array x {})
+    (let arr (set arr i (* x 2))
+      (get arr j))))
+",
+        array_size
+    );
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    let x = -5;
+    for i in 0..array_size {
+        for j in 0..array_size {
+            let expected = if i == j { x * 2 } else { x };
+            computation.set_i8(Party::A, x);
+            computation.set_usize(Party::A, i);
+            computation.set_usize(Party::A, j);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(computation.get_i8().map_err(|e| e.prettify(prg))?, expected);
+        }
+    }
+    Ok(())
+}

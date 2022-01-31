@@ -36,6 +36,7 @@ pub enum ExprEnum {
     Identifier(String),
     ArrayLiteral(Box<Expr>, usize),
     ArrayAccess(Box<Expr>, Box<Expr>),
+    ArrayAssignment(Box<Expr>, Box<Expr>, Box<Expr>),
     UnaryOp(UnaryOp, Box<Expr>),
     Op(Op, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
