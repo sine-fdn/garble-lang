@@ -211,11 +211,12 @@ fn push_signed_division_circuit(
 
 fn extend_to_bits(v: &mut Vec<usize>, ty: &Type, bits: usize) {
     if v.len() != bits {
+        let msb = v[0];
         let old_size = v.len();
         v.resize(bits, 0);
         v.copy_within(0..old_size, bits - old_size);
         if let Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 = ty {
-            v[0..old_size].fill(1);
+            v[0..old_size].fill(msb);
         } else {
             v[0..old_size].fill(0);
         }
@@ -597,6 +598,17 @@ impl Expr {
                     i += elem_in_bits;
                 }
                 result
+            }
+            ExprEnum::Range(from, to) => {
+                let size = to - from;
+                let elem_bits = Type::Usize.size_in_bits();
+                let mut array = Vec::with_capacity(elem_bits * size);
+                for i in *from..*to {
+                    for b in (0..elem_bits).rev() {
+                        array.push((i >> b) & 1);
+                    }
+                }
+                array
             }
         }
     }

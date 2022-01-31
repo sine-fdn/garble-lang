@@ -45,6 +45,7 @@ pub enum ExprEnum {
     Cast(Type, Box<Expr>),
     Fold(Box<Expr>, Box<Expr>, Box<Closure>),
     Map(Box<Expr>, Box<Closure>),
+    Range(usize, usize),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

@@ -705,3 +705,85 @@ fn compile_map() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn compile_signed_casts() -> Result<(), String> {
+    // signed to unsigned:
+
+    let prg = "(fn main u8 (param x A i16) (cast u8 x))";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut comp: Computation = circuit.into();
+    for x in -200..200 {
+        comp.set_i16(Party::A, x);
+        comp.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(comp.get_u8().map_err(|e| e.prettify(prg))?, x as u8);
+    }
+
+    let prg = "(fn main u16 (param x A i8) (cast u16 x))";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut comp: Computation = circuit.into();
+    for x in -128..127 {
+        comp.set_i8(Party::A, x);
+        comp.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(comp.get_u16().map_err(|e| e.prettify(prg))?, x as u16);
+    }
+
+    // unsigned to signed:
+
+    let prg = "(fn main i8 (param x A u16) (cast i8 x))";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut comp: Computation = circuit.into();
+    for x in 200..300 {
+        comp.set_u16(Party::A, x);
+        comp.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(comp.get_i8().map_err(|e| e.prettify(prg))?, x as i8);
+    }
+
+    let prg = "(fn main i16 (param x A u8) (cast i16 x))";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut comp: Computation = circuit.into();
+    for x in 200..255 {
+        comp.set_u8(Party::A, x);
+        comp.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(comp.get_i16().map_err(|e| e.prettify(prg))?, x as i16);
+    }
+
+    // signed to signed:
+
+    let prg = "(fn main i8 (param x A i16) (cast i8 x))";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut comp: Computation = circuit.into();
+    for x in -200..200 {
+        comp.set_i16(Party::A, x);
+        comp.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(comp.get_i8().map_err(|e| e.prettify(prg))?, x as i8);
+    }
+
+    let prg = "(fn main i16 (param x A i8) (cast i16 x))";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut comp: Computation = circuit.into();
+    for x in -128..127 {
+        comp.set_i8(Party::A, x);
+        comp.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(comp.get_i16().map_err(|e| e.prettify(prg))?, x as i16);
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_range() -> Result<(), String> {
+    let prg = "
+(fn main i16
+  (let arr (range 1 101)
+    (fold arr 0 (lambda i16 (param acc i16) (param x usize)
+      (+ acc (cast i16 x))))))
+";
+    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    computation.run().map_err(|e| e.prettify(prg))?;
+    assert_eq!(
+        computation.get_i16().map_err(|e| e.prettify(prg))?,
+        50 * 101
+    );
+    Ok(())
+}

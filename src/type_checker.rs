@@ -32,6 +32,7 @@ pub enum TypeErrorEnum {
         actual: Type,
     },
     TypeMismatch((Type, MetaInfo), (Type, MetaInfo)),
+    InvalidRange(usize, usize),
 }
 
 impl Program {
@@ -127,7 +128,8 @@ fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<(Type, usize), TypeErr
 
 fn expect_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
     match ty {
-        Type::U8
+        Type::Usize
+        | Type::U8
         | Type::U16
         | Type::U32
         | Type::U64
@@ -579,6 +581,14 @@ impl Expr {
                     typed_ast::ExprEnum::Map(Box::new(arr), Box::new(closure)),
                     ty,
                 )
+            }
+            ExprEnum::Range(from, to) => {
+                if from >= to {
+                    let e = TypeErrorEnum::InvalidRange(*from, *to);
+                    return Err(TypeError(e, meta));
+                }
+                let ty = Type::Array(Box::new(Type::Usize), to - from);
+                (typed_ast::ExprEnum::Range(*from, *to), ty)
             }
         };
         Ok(typed_ast::Expr(expr, ty, meta))

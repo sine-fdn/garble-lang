@@ -317,6 +317,29 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                         return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
                     }
                 }
+                "range" => {
+                    if arity == 2 {
+                        let (from, from_meta) = expect_unsigned_num(sexprs.next().unwrap())?;
+                        if from <= usize::MAX as u128 {
+                            let (to, to_meta) = expect_unsigned_num(sexprs.next().unwrap())?;
+                            if to <= usize::MAX as u128 {
+                                ExprEnum::Range(from as usize, to as usize)
+                            } else {
+                                return Err(ParseError(
+                                    ParseErrorEnum::ArrayMaxSizeExceeded(to),
+                                    to_meta,
+                                ));
+                            }
+                        } else {
+                            return Err(ParseError(
+                                ParseErrorEnum::ArrayMaxSizeExceeded(from),
+                                from_meta,
+                            ));
+                        }
+                    } else {
+                        return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
+                    }
+                }
                 _ => {
                     return Err(ParseError(ParseErrorEnum::InvalidExpr, meta));
                 }
