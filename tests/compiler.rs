@@ -611,7 +611,7 @@ fn compile_array_access() -> Result<(), String> {
     let prg = &format!(
         "
 (fn main i8 (param x A i8) (param i A usize)
-  (get (array x {}) i))
+  (array-get (array x {}) i))
 ",
         array_size
     );
@@ -635,8 +635,8 @@ fn compile_array_assignment() -> Result<(), String> {
         "
 (fn main i8 (param x A i8) (param i A usize) (param j A usize)
   (let arr (array x {})
-    (let arr (set arr i (* x 2))
-      (get arr j))))
+    (let arr (array-set arr i (* x 2))
+      (array-get arr j))))
 ",
         array_size
     );
@@ -689,7 +689,7 @@ fn compile_map() -> Result<(), String> {
 (fn main i8 (param x A i8) (param i A usize)
   (let arr (array x {})
     (let arr (map arr (lambda i8 (param x i8) (* x 2)))
-      (get arr i))))
+      (array-get arr i))))
 ",
         array_size
     );
@@ -785,5 +785,30 @@ fn compile_range() -> Result<(), String> {
         computation.get_i16().map_err(|e| e.prettify(prg))?,
         50 * 101
     );
+    Ok(())
+}
+
+#[test]
+fn compile_tuple() -> Result<(), String> {
+    for (t, i) in [("i8", 0), ("i8", 1), ("i8", 2), ("bool", 3), ("bool", 4)] {
+        let prg = &format!(
+            "
+(fn main {}
+  (let t (tuple -3 -2 -1 true false)
+    (tuple-get t {})))
+",
+            t, i
+        );
+        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let mut computation: Computation = circuit.into();
+        computation.run().map_err(|e| e.prettify(prg))?;
+        if i <= 2 {
+            assert_eq!(computation.get_i8().map_err(|e| e.prettify(prg))?, i - 3);
+        } else if i == 3 {
+            assert_eq!(computation.get_bool().map_err(|e| e.prettify(prg))?, true);
+        } else if i == 4 {
+            assert_eq!(computation.get_bool().map_err(|e| e.prettify(prg))?, false);
+        }
+    }
     Ok(())
 }

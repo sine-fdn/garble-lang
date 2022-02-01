@@ -26,6 +26,7 @@ pub enum ParseErrorEnum {
     InvalidArity(usize),
     InvalidExpr,
     ArrayMaxSizeExceeded(u128),
+    TupleMaxSizeExceeded(u128),
 }
 
 pub fn parse(prg: &str) -> Result<Program, ParseError> {
@@ -279,7 +280,7 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                         return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
                     }
                 }
-                "get" => {
+                "array-get" => {
                     if arity == 2 {
                         let arr = parse_expr(sexprs.next().unwrap())?;
                         let index = parse_expr(sexprs.next().unwrap())?;
@@ -288,7 +289,7 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                         return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
                     }
                 }
-                "set" => {
+                "array-set" => {
                     if arity == 3 {
                         let arr = parse_expr(sexprs.next().unwrap())?;
                         let index = parse_expr(sexprs.next().unwrap())?;
@@ -340,6 +341,29 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                         return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
                     }
                 }
+                "tuple" => {
+                    let mut parsed = Vec::with_capacity(arity);
+                    for sexpr in sexprs {
+                        parsed.push(parse_expr(sexpr)?);
+                    }
+                    ExprEnum::TupleLiteral(parsed)
+                },
+                "tuple-get" => {
+                    if arity == 2 {
+                        let tuple = parse_expr(sexprs.next().unwrap())?;
+                        let (size, size_meta) = expect_unsigned_num(sexprs.next().unwrap())?;
+                        if size <= usize::MAX as u128 {
+                            ExprEnum::TupleAccess(Box::new(tuple), size as usize)
+                        } else {
+                            return Err(ParseError(
+                                ParseErrorEnum::TupleMaxSizeExceeded(size),
+                                size_meta,
+                            ));
+                        }
+                    } else {
+                        return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
+                    }
+                },
                 _ => {
                     return Err(ParseError(ParseErrorEnum::InvalidExpr, meta));
                 }

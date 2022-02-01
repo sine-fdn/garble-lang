@@ -17,6 +17,8 @@ pub enum TypeErrorEnum {
     ExpectedBoolOrNumberType(Type),
     ExpectedNumberType(Type),
     ExpectedArrayType(Type),
+    ExpectedTupleType(Type),
+    TupleAccessOutOfBounds(usize),
     DuplicateFnParam(String),
     FnCannotBeUsedAsValue(String),
     ExpectedFnType {
@@ -121,6 +123,16 @@ fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<(Type, usize), TypeErr
         Type::Array(elem, size) => Ok((*elem.clone(), *size)),
         _ => Err(TypeError(
             TypeErrorEnum::ExpectedArrayType(ty.clone()),
+            meta,
+        )),
+    }
+}
+
+fn expect_tuple_type(ty: &Type, meta: MetaInfo) -> Result<Vec<Type>, TypeError> {
+    match ty {
+        Type::Tuple(types) => Ok(types.clone()),
+        _ => Err(TypeError(
+            TypeErrorEnum::ExpectedTupleType(ty.clone()),
             meta,
         )),
     }
@@ -253,6 +265,7 @@ fn is_coercible_unsigned(n: u128, ty: &Type) -> bool {
         Type::I128 => n <= i128::MAX as u128,
         Type::Fn(_, _) => false,
         Type::Array(_, _) => false,
+        Type::Tuple(_) => false,
     }
 }
 
@@ -273,6 +286,7 @@ fn is_coercible_signed(n: i128, ty: &Type) -> bool {
         Type::I128 => true,
         Type::Fn(_, _) => false,
         Type::Array(_, _) => false,
+        Type::Tuple(_) => false,
     }
 }
 
@@ -361,6 +375,29 @@ impl Expr {
                     ),
                     ty,
                 )
+            }
+            ExprEnum::TupleLiteral(values) => {
+                let mut typed_values = Vec::with_capacity(values.len());
+                let mut types = Vec::with_capacity(values.len());
+                for v in values {
+                    let typed = v.type_check(env)?;
+                    types.push(typed.1.clone());
+                    typed_values.push(typed);
+                }
+                let ty = Type::Tuple(types);
+                (typed_ast::ExprEnum::TupleLiteral(typed_values), ty)
+            }
+            ExprEnum::TupleAccess(tuple, index) => {
+                let tuple = tuple.type_check(env)?;
+                let typed_ast::Expr(_, ty, meta) = &tuple;
+                let value_types = expect_tuple_type(ty, *meta)?;
+                if *index < value_types.len() {
+                    let ty = value_types[*index].clone();
+                    (typed_ast::ExprEnum::TupleAccess(Box::new(tuple), *index), ty)
+                } else {
+                    let e = TypeErrorEnum::TupleAccessOutOfBounds(*index);
+                    return Err(TypeError(e, *meta));
+                }
             }
             ExprEnum::UnaryOp(UnaryOp::Neg, x) => {
                 let x = x.type_check(env)?;

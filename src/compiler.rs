@@ -329,6 +329,27 @@ impl Expr {
                 }
                 array
             }
+            ExprEnum::TupleLiteral(tuple) => {
+                let mut wires = Vec::with_capacity(ty.size_in_bits());
+                for value in tuple {
+                    wires.extend(value.compile(fns, env, gates));
+                }
+                wires
+            }
+            ExprEnum::TupleAccess(tuple, index) => {
+                let (wires_before, wires_at_index) = match &tuple.1 {
+                    Type::Tuple(values) => {
+                        let mut wires_before = 0;
+                        for v in values[0..*index].iter() {
+                            wires_before += v.size_in_bits();
+                        }
+                        (wires_before, values[*index].size_in_bits())
+                    }
+                    _ => panic!("Expected a tuple type, but found {:?}", tuple.1),
+                };
+                let tuple = tuple.compile(fns, env, gates);
+                tuple[wires_before..wires_before + wires_at_index].to_vec()
+            }
             ExprEnum::UnaryOp(UnaryOp::Neg, x) => {
                 let x = x.compile(fns, env, gates);
                 push_negation_circuit(gates, &x)
@@ -633,6 +654,13 @@ impl Type {
             Type::U128 | Type::I128 => 128,
             Type::Array(elem, size) => elem.size_in_bits() * size,
             Type::Fn(_, _) => panic!("Fn types cannot be directly mapped to bits"),
+            Type::Tuple(values) => {
+                let mut size = 0;
+                for v in values {
+                    size += v.size_in_bits()
+                }
+                size
+            }
         }
     }
 }

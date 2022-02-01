@@ -39,6 +39,7 @@ pub enum Type {
     I128,
     Fn(Vec<Type>, Box<Type>),
     Array(Box<Type>, usize),
+    Tuple(Vec<Type>),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -63,6 +64,8 @@ pub enum ExprEnum {
     ArrayLiteral(Box<Expr>, usize),
     ArrayAccess(Box<Expr>, Box<Expr>),
     ArrayAssignment(Box<Expr>, Box<Expr>, Box<Expr>),
+    TupleLiteral(Vec<Expr>),
+    TupleAccess(Box<Expr>, usize),
     UnaryOp(UnaryOp, Box<Expr>),
     Op(Op, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
