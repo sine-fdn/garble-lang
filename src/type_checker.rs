@@ -1,7 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ast::{Expr, ExprEnum, Op, ParamDef, Program, Type, UnaryOp, VariantExpr, VariantPattern},
+    ast::{
+        Expr, ExprEnum, Op, ParamDef, PatternField, Program, Type, UnaryOp, VariantExpr,
+        VariantExprEnum, VariantPattern, VariantPatternEnum,
+    },
     env::Env,
     parser::MetaInfo,
     typed_ast,
@@ -45,6 +48,7 @@ pub enum TypeErrorEnum {
     },
     TypeMismatch((Type, MetaInfo), (Type, MetaInfo)),
     InvalidRange(usize, usize),
+    PatternFieldLiteralDoesNotMatchType(Type),
 }
 
 struct Defs {
@@ -669,12 +673,16 @@ impl Expr {
             }
             ExprEnum::EnumLiteral(identifier, variant) => {
                 if let Some(enum_def) = defs.enums.get(identifier) {
-                    let variant_name = variant.variant_name();
+                    let VariantExpr(variant_name, variant, meta) = variant.as_ref();
+                    let meta = *meta;
                     if let Some(types) = enum_def.get(variant_name) {
-                        match (variant.as_ref(), types) {
-                            (VariantExpr::Unit(_), None) => {
-                                let variant =
-                                    typed_ast::VariantExpr::Unit(variant_name.to_string());
+                        match (variant, types) {
+                            (VariantExprEnum::Unit, None) => {
+                                let variant = typed_ast::VariantExpr(
+                                    variant_name.to_string(),
+                                    typed_ast::VariantExprEnum::Unit,
+                                    meta,
+                                );
                                 let ty = Type::Enum(identifier.clone());
                                 (
                                     typed_ast::ExprEnum::EnumLiteral(
@@ -684,7 +692,7 @@ impl Expr {
                                     ty,
                                 )
                             }
-                            (VariantExpr::Tuple(_, values), Some(types)) => {
+                            (VariantExprEnum::Tuple(values), Some(types)) => {
                                 if values.len() != types.len() {
                                     let e = TypeErrorEnum::UnexpectedEnumVariantArity {
                                         expected: types.len(),
@@ -698,8 +706,11 @@ impl Expr {
                                     expect_type(&expr, ty)?;
                                     exprs.push(expr);
                                 }
-                                let variant =
-                                    typed_ast::VariantExpr::Tuple(variant_name.to_string(), exprs);
+                                let variant = typed_ast::VariantExpr(
+                                    variant_name.to_string(),
+                                    typed_ast::VariantExprEnum::Tuple(exprs),
+                                    meta,
+                                );
                                 let ty = Type::Enum(identifier.clone());
                                 (
                                     typed_ast::ExprEnum::EnumLiteral(
@@ -709,11 +720,11 @@ impl Expr {
                                     ty,
                                 )
                             }
-                            (VariantExpr::Unit(_), Some(types)) => {
+                            (VariantExprEnum::Unit, Some(types)) => {
                                 let e = TypeErrorEnum::ExpectedEnumVariant(types.clone());
                                 return Err(TypeError(e, meta));
                             }
-                            (VariantExpr::Tuple(_, _), None) => {
+                            (VariantExprEnum::Tuple(_), None) => {
                                 let e = TypeErrorEnum::ExpectedEnumVariant(Vec::new());
                                 return Err(TypeError(e, meta));
                             }
@@ -740,15 +751,15 @@ impl Expr {
                     let mut typed_ret_exprs = Vec::with_capacity(clauses.len());
                     let mut typed_clauses = Vec::with_capacity(clauses.len());
                     for (pattern, expr) in clauses {
-                        let meta = expr.1;
-                        let variant_name = pattern.variant_name();
+                        let VariantPattern(variant_name, pattern, meta) = pattern;
+                        let meta = *meta;
                         env.push();
                         let pattern = if let Some(types) = enum_def.get(variant_name) {
                             match (pattern, types) {
-                                (VariantPattern::Unit(_), None) => {
-                                    typed_ast::VariantPattern::Unit(variant_name.to_string())
+                                (VariantPatternEnum::Unit, None) => {
+                                    typed_ast::VariantPattern(variant_name.to_string(), typed_ast::VariantPatternEnum::Unit, meta)
                                 }
-                                (VariantPattern::Tuple(_, bindings), Some(types)) => {
+                                (VariantPatternEnum::Tuple(bindings), Some(types)) => {
                                     if bindings.len() != types.len() {
                                         let e = TypeErrorEnum::UnexpectedEnumVariantArity {
                                             expected: types.len(),
@@ -756,21 +767,62 @@ impl Expr {
                                         };
                                         return Err(TypeError(e, meta));
                                     }
-                                    let typed_bindings: Vec<(String, Type)> =
-                                        bindings.into_iter().cloned().zip(types.clone()).collect();
-                                    for (identifier, ty) in typed_bindings.iter().cloned() {
-                                        env.set(identifier, ty);
+                                    for binding in bindings.iter().zip(types) {
+                                        match binding {
+                                            (PatternField::Identifier(identifier), ty) => {
+                                                env.set(identifier.clone(), ty.clone());
+                                            }
+                                            (PatternField::True, Type::Bool) => {}
+                                            (PatternField::True, ty) => {
+                                                let e = TypeErrorEnum::PatternFieldLiteralDoesNotMatchType(ty.clone());
+                                                return Err(TypeError(e, meta));
+                                            }
+                                            (PatternField::False, Type::Bool) => {}
+                                            (PatternField::False, ty) => {
+                                                let e = TypeErrorEnum::PatternFieldLiteralDoesNotMatchType(ty.clone());
+                                                return Err(TypeError(e, meta));
+                                            }
+                                            (PatternField::NumUnsigned(n), ty) => {
+                                                if !is_coercible_unsigned(*n, ty) {
+                                                    let e = TypeErrorEnum::PatternFieldLiteralDoesNotMatchType(ty.clone());
+                                                    return Err(TypeError(e, meta));
+                                                }
+                                            }
+                                            (PatternField::NumSigned(n), ty) => {
+                                                if !is_coercible_signed(*n, ty) {
+                                                    let e = TypeErrorEnum::PatternFieldLiteralDoesNotMatchType(ty.clone());
+                                                    return Err(TypeError(e, meta));
+                                                }
+                                            }
+                                            (PatternField::TupleLiteral(_), Type::Tuple(_)) => {
+                                                todo!()
+                                            }
+                                            (PatternField::TupleLiteral(_), ty) => {
+                                                let e = TypeErrorEnum::PatternFieldLiteralDoesNotMatchType(ty.clone());
+                                                return Err(TypeError(e, meta));
+                                            }
+                                            (PatternField::EnumLiteral(_, _), Type::Enum(_)) => {
+                                                todo!()
+                                            }
+                                            (PatternField::EnumLiteral(_, _), ty) => {
+                                                let e = TypeErrorEnum::PatternFieldLiteralDoesNotMatchType(ty.clone());
+                                                return Err(TypeError(e, meta));
+                                            }
+                                        }
                                     }
-                                    typed_ast::VariantPattern::Tuple(
+                                    let typed_bindings =
+                                        bindings.into_iter().cloned().zip(types.clone()).collect();
+                                    typed_ast::VariantPattern(
                                         variant_name.to_string(),
-                                        typed_bindings,
+                                        typed_ast::VariantPatternEnum::Tuple(typed_bindings),
+                                        meta
                                     )
                                 }
-                                (VariantPattern::Unit(_), Some(_)) => {
+                                (VariantPatternEnum::Unit, Some(_)) => {
                                     let e = TypeErrorEnum::ExpectedTupleVariantFoundUnitVariant;
                                     return Err(TypeError(e, meta));
                                 }
-                                (VariantPattern::Tuple(_, _), None) => {
+                                (VariantPatternEnum::Tuple(_), None) => {
                                     let e = TypeErrorEnum::ExpectedUnitVariantFoundTupleVariant;
                                     return Err(TypeError(e, meta));
                                 }

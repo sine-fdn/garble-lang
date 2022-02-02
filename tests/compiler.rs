@@ -816,17 +816,17 @@ fn compile_tuple() -> Result<(), String> {
 #[test]
 fn compile_enum() -> Result<(), String> {
     let prg = "
-(enum foobar
-  (unit-variant foo)
-  (tuple-variant bar u8))
+(enum Foobar
+  (unit-variant Foo)
+  (tuple-variant Bar u8))
 
 (fn main u8 (param b A bool)
   (let choice (if b
-                (enum foobar (tuple-variant bar 6))
-                (enum foobar (unit-variant foo)))
+                (enum Foobar (tuple-variant Bar 6))
+                (enum Foobar (unit-variant Foo)))
     (match choice
-      (clause (unit-variant foo) 5)
-      (clause (tuple-variant bar x) x))))
+      (clause (unit-variant Foo) 5)
+      (clause (tuple-variant Bar x) x))))
 ";
     for b in [false, true] {
         println!("Checking {}", b);
@@ -834,7 +834,52 @@ fn compile_enum() -> Result<(), String> {
         let mut computation: Computation = circuit.into();
         computation.set_bool(Party::A, b);
         computation.run().map_err(|e| e.prettify(prg))?;
-        assert_eq!(computation.get_u8().map_err(|e| e.prettify(prg))?, (b as u8) + 5);
+        assert_eq!(
+            computation.get_u8().map_err(|e| e.prettify(prg))?,
+            (b as u8) + 5
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_enum_with_literals_in_pattern() -> Result<(), String> {
+    let prg = "
+(enum Ops
+  (tuple-variant Mul u8 u8)
+  (tuple-variant Div u8 u8))
+
+(fn main u8 (param choice A u8) (param x A u8) (param y A u8)
+  (let op (if (== choice 0)
+                (enum Ops (tuple-variant Mul x y))
+                (enum Ops (tuple-variant Div x y)))
+    (match op
+      (clause (tuple-variant Div x 0) 42)
+      (clause (tuple-variant Div x y) (/ x y))
+      (clause (tuple-variant Mul x y) (* x y)))))
+";
+    for choice in [0, 1] {
+        for y in [0, 4] {
+            let x = 10;
+            println!("Checking {}, {} and {}", choice, x, y);
+            let expected = if choice == 0 {
+                x * y
+            } else if y == 0 {
+                42
+            } else {
+                x / y
+            };
+            let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+            let mut computation: Computation = circuit.into();
+            computation.set_u8(Party::A, choice);
+            computation.set_u8(Party::A, x);
+            computation.set_u8(Party::A, y);
+            computation.run().map_err(|e| e.prettify(prg))?;
+            assert_eq!(
+                computation.get_u8().map_err(|e| e.prettify(prg))?,
+                expected
+            );
+        }
     }
     Ok(())
 }

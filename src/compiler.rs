@@ -1,10 +1,13 @@
 use std::{cmp::max, collections::HashMap};
 
 use crate::{
-    ast::{Op, ParamDef, Party, Type, UnaryOp},
+    ast::{Op, ParamDef, Party, PatternField, Type, UnaryOp},
     circuit::{Circuit, Gate, GateIndex},
     env::Env,
-    typed_ast::{Expr, ExprEnum, FnDef, Program, VariantExpr, VariantPattern},
+    typed_ast::{
+        Expr, ExprEnum, FnDef, Program, VariantExpr, VariantExprEnum, VariantPattern,
+        VariantPatternEnum,
+    },
 };
 
 impl Program {
@@ -683,15 +686,15 @@ impl Expr {
                 let tag_size = enum_tag_size(enum_def);
                 let max_size = enum_max_size(enum_def);
                 let mut wires = vec![0; max_size];
-                let variant_name = variant.variant_name();
+                let VariantExpr(variant_name, variant, _) = variant.as_ref();
                 let tag_number = enum_tag_number(enum_def, variant_name);
                 for i in 0..tag_size {
                     wires[i] = (tag_number >> (tag_size - i - 1)) & 1;
                 }
                 let mut w = tag_size;
-                match variant.as_ref() {
-                    VariantExpr::Unit(_) => {}
-                    VariantExpr::Tuple(_, fields) => {
+                match variant {
+                    VariantExprEnum::Unit => {}
+                    VariantExprEnum::Tuple(fields) => {
                         for f in fields {
                             let f = f.compile(enums, fns, env, gates);
                             wires[w..w + f.len()].copy_from_slice(&f);
@@ -714,25 +717,64 @@ impl Expr {
                 let tag_size = enum_tag_size(enum_def);
                 let enum_expr = enum_expr.compile(enums, fns, env, gates);
                 let tag = &enum_expr[0..tag_size];
-                let empty_branch = vec![0; ty.size_in_bits()];
-                let mut branches = vec![empty_branch; clauses.len()];
+
+                let has_previous_match = 0;
+                let mut branches = vec![(None, has_previous_match); enum_def.values().len()];
                 for (pattern, expr) in clauses {
+                    let mut is_match_bit = 1;
                     let Expr(_, expr_ty, _) = expr;
+                    let VariantPattern(variant_name, pattern, _) = pattern;
                     env.push();
-                    if let VariantPattern::Tuple(_, bindings) = pattern {
+                    if let VariantPatternEnum::Tuple(bindings) = pattern {
                         let mut w = tag_size;
-                        for (identifier, ty) in bindings {
-                            let binding = enum_expr[w..w + ty.size_in_bits()].to_vec();
-                            env.set(identifier.clone(), binding);
+                        for (field, ty) in bindings {
+                            let expr = match field {
+                                PatternField::Identifier(identifier) => {
+                                    let binding = enum_expr[w..w + ty.size_in_bits()].to_vec();
+                                    env.set(identifier.clone(), binding);
+                                    None
+                                }
+                                PatternField::True => Some(Expr(ExprEnum::True, ty.clone(), *meta)),
+                                PatternField::False => {
+                                    Some(Expr(ExprEnum::False, ty.clone(), *meta))
+                                }
+                                PatternField::NumUnsigned(n) => {
+                                    Some(Expr(ExprEnum::NumUnsigned(*n), ty.clone(), *meta))
+                                }
+                                PatternField::NumSigned(n) => {
+                                    Some(Expr(ExprEnum::NumSigned(*n), ty.clone(), *meta))
+                                }
+                                PatternField::TupleLiteral(_) => todo!(),
+                                PatternField::EnumLiteral(_, _) => todo!(),
+                            };
+                            if let Some(expr) = expr {
+                                let expr = expr.compile(enums, fns, env, gates);
+                                for i in 0..expr.len() {
+                                    let xor = push_gate(gates, Gate::Xor(expr[i], enum_expr[w + i]));
+                                    let eq = push_gate(gates, Gate::Xor(xor, 1));
+                                    is_match_bit = push_gate(gates, Gate::And(is_match_bit, eq));
+                                }
+                            }
                             w += ty.size_in_bits();
                         }
                     }
                     let mut expr = expr.compile(enums, fns, env, gates);
                     env.pop();
                     extend_to_bits(&mut expr, expr_ty, ty.size_in_bits());
-                    let tag = enum_tag_number(&enum_def, pattern.variant_name());
-                    branches[tag] = expr;
+                    let tag = enum_tag_number(&enum_def, variant_name);
+                    let (existing_branch, has_previous_match): &(Option<Vec<usize>>, usize) = branches.get(tag).unwrap();
+                    if let Some(branch) = existing_branch {
+                        let mut combined = vec![0; branch.len()];
+                        for i in 0..branch.len() {
+                            combined[i] = push_mux(gates, *has_previous_match, branch[i], expr[i]);
+                        }
+                        let has_previous_match = push_or(gates, *has_previous_match, is_match_bit);
+                        branches[tag] = (Some(combined), has_previous_match);
+                    } else {
+                        branches[tag] = (Some(expr), is_match_bit);
+                    }
                 }
+                let branches = branches.into_iter().map(|(branch, _)| branch.unwrap()).collect();
                 push_multi_mux(gates, tag, branches)
             }
         }

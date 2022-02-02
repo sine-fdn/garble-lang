@@ -1,5 +1,5 @@
 use crate::{
-    ast::{EnumDef, Op, ParamDef, Party, Type, UnaryOp},
+    ast::{EnumDef, Op, ParamDef, Party, Type, UnaryOp, PatternField},
     parser::MetaInfo,
 };
 
@@ -54,33 +54,21 @@ pub enum ExprEnum {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum VariantExpr {
-    Unit(String),
-    Tuple(String, Vec<Expr>),
-}
+pub struct VariantExpr(pub String, pub VariantExprEnum, pub MetaInfo);
 
-impl VariantExpr {
-    pub fn variant_name(&self) -> &str {
-        match self {
-            VariantExpr::Unit(name) => name.as_str(),
-            VariantExpr::Tuple(name, _) => name.as_str(),
-        }
-    }
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum VariantExprEnum {
+    Unit,
+    Tuple(Vec<Expr>),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum VariantPattern {
-    Unit(String),
-    Tuple(String, Vec<(String, Type)>),
-}
+pub struct VariantPattern(pub String, pub VariantPatternEnum, pub MetaInfo);
 
-impl VariantPattern {
-    pub fn variant_name(&self) -> &str {
-        match self {
-            VariantPattern::Unit(name) => name.as_str(),
-            VariantPattern::Tuple(name, _) => name.as_str(),
-        }
-    }
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum VariantPatternEnum {
+    Unit,
+    Tuple(Vec<(PatternField, Type)>),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

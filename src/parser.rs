@@ -1,6 +1,6 @@
 use crate::ast::{
-    Closure, EnumDef, Expr, ExprEnum, FnDef, MainDef, Op, ParamDef, Party, Program, Type, UnaryOp,
-    Variant, VariantExpr, VariantPattern,
+    Closure, EnumDef, Expr, ExprEnum, FnDef, MainDef, Op, ParamDef, Party, PatternField, Program,
+    Type, UnaryOp, Variant, VariantExpr, VariantPattern, VariantExprEnum, VariantPatternEnum,
 };
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -23,6 +23,7 @@ pub enum ParseErrorEnum {
     InvalidMainFnDef,
     InvalidEnumVariant,
     InvalidEnumPattern,
+    InvalidEnumPatternField,
     ExpectedIdentifier,
     ExpectedListOfLength(usize),
     ExpectedKeyword(String),
@@ -466,16 +467,16 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                                 let variant_expr = match variant_type.as_str() {
                                     "unit-variant" => {
                                         if values.is_empty() {
-                                            VariantExpr::Unit(variant_identifier)
+                                            VariantExpr(variant_identifier, VariantExprEnum::Unit, meta)
                                         } else {
                                             return Err(ParseError(
                                                 ParseErrorEnum::InvalidEnumVariant,
                                                 meta,
-                                            ))
+                                            ));
                                         }
                                     }
                                     "tuple-variant" => {
-                                        VariantExpr::Tuple(variant_identifier, values)
+                                        VariantExpr(variant_identifier, VariantExprEnum::Tuple(values), meta)
                                     }
                                     _ => {
                                         return Err(ParseError(
@@ -510,21 +511,42 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                                 let (variant_identifier, _) =
                                     expect_identifier(variant.next().unwrap())?;
                                 let mut values = Vec::new();
-                                for v in variant {
-                                    let (identifier, _) = expect_identifier(v)?;
-                                    values.push(identifier);
+                                for field in variant {
+                                    let Expr(field, meta) = parse_expr(field)?;
+                                    let field = match field {
+                                        ExprEnum::Identifier(s) => PatternField::Identifier(s),
+                                        ExprEnum::True => PatternField::True,
+                                        ExprEnum::False => PatternField::False,
+                                        ExprEnum::NumUnsigned(n) => PatternField::NumUnsigned(n),
+                                        ExprEnum::NumSigned(n) => PatternField::NumSigned(n),
+                                        ExprEnum::TupleLiteral(fields) => {
+                                            PatternField::TupleLiteral(fields)
+                                        }
+                                        ExprEnum::EnumLiteral(identifier, variant) => {
+                                            PatternField::EnumLiteral(identifier, variant)
+                                        }
+                                        _ => {
+                                            return Err(ParseError(
+                                                ParseErrorEnum::InvalidEnumPatternField,
+                                                meta,
+                                            ))
+                                        }
+                                    };
+                                    values.push(field);
                                 }
                                 match variant_type.as_str() {
-                                    "unit-variant" => if values.is_empty() {
-                                        VariantPattern::Unit(variant_identifier)
-                                    } else {
-                                        return Err(ParseError(
-                                            ParseErrorEnum::InvalidEnumVariant,
-                                            meta,
-                                        ))
+                                    "unit-variant" => {
+                                        if values.is_empty() {
+                                            VariantPattern(variant_identifier, VariantPatternEnum::Unit, meta)
+                                        } else {
+                                            return Err(ParseError(
+                                                ParseErrorEnum::InvalidEnumVariant,
+                                                meta,
+                                            ));
+                                        }
                                     }
                                     "tuple-variant" => {
-                                        VariantPattern::Tuple(variant_identifier, values)
+                                        VariantPattern(variant_identifier, VariantPatternEnum::Tuple(values), meta)
                                     }
                                     _ => {
                                         return Err(ParseError(
