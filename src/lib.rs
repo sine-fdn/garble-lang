@@ -86,7 +86,7 @@ impl Error {
                 msg += &prettify_meta(prg, *meta);
                 msg
             }
-            Error::ComputeError(e) => format!("{:?}", e)
+            Error::ComputeError(e) => format!("{:?}", e),
         };
         println!("{}", msg);
         msg
@@ -94,25 +94,24 @@ impl Error {
 }
 
 fn prettify_meta(prg: &str, meta: MetaInfo) -> String {
+    println!("meta: {:?}", meta);
     let mut msg = "".to_string();
     let lines: Vec<&str> = prg.lines().collect();
     for l in (meta.start.0 as i64 - 2)..(meta.end.0 as i64 + 2) {
         let line_start = meta.start.0 as i64;
         let line_end = meta.end.0 as i64;
+        let line_should_be_highlighted =
+            l >= line_start && (l < line_end || (l == line_end && meta.end.1 > 0));
         if l >= 0 && (l as usize) < lines.len() {
-            if l >= line_start && l <= line_end {
+            if line_should_be_highlighted {
                 msg += &format!("{: >4} > | {}\n", l + 1, lines[l as usize]);
             } else {
                 msg += &format!("       | {}\n", lines[l as usize]);
             }
         }
-        if l >= line_start && l <= line_end {
+        if line_should_be_highlighted {
             msg += "     > | ";
-            let col_start = if l == line_start {
-                meta.start.1
-            } else {
-                0
-            };
+            let col_start = if l == line_start { meta.start.1 } else { 0 };
             let col_end = if l == line_end {
                 meta.end.1
             } else {
