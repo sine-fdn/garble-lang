@@ -4,7 +4,7 @@ use crate::{
     ast::{Op, ParamDef, Party, Type, UnaryOp},
     circuit::{Circuit, Gate, GateIndex},
     env::Env,
-    typed_ast::{Expr, ExprEnum, FnDef, Program},
+    typed_ast::{Expr, ExprEnum, FnDef, Program, VariantExpr, VariantPattern},
 };
 
 impl Program {
@@ -29,7 +29,16 @@ impl Program {
             }
             env.set(identifier.clone(), wires);
         }
-        let output_gates = self.main.body.compile(&fns, &mut env, &mut gates);
+        let mut enums = HashMap::new();
+        for enum_def in &self.enum_defs {
+            let mut variants = HashMap::new();
+            for variant in &enum_def.variants {
+                let types = variant.types().unwrap_or_default();
+                variants.insert(variant.variant_name().to_string(), types);
+            }
+            enums.insert(enum_def.identifier.clone(), variants);
+        }
+        let output_gates = self.main.body.compile(&enums, &fns, &mut env, &mut gates);
         Circuit {
             gates,
             output_gates,
@@ -60,6 +69,43 @@ fn push_mux(gates: &mut Vec<Gate>, s: GateIndex, x0: GateIndex, x1: GateIndex) -
     let x0_selected = push_gate(gates, Gate::And(x0, s));
     let x1_selected = push_gate(gates, Gate::And(x1, not_s));
     push_gate(gates, Gate::Xor(x0_selected, x1_selected))
+}
+
+fn push_multi_mux(
+    gates: &mut Vec<Gate>,
+    index: &[GateIndex],
+    branches: Vec<Vec<GateIndex>>,
+) -> Vec<GateIndex> {
+    let out_of_bounds_elem = 1;
+    let elem_bits = branches[0].len();
+    let mut array = Vec::with_capacity(branches.len() * elem_bits);
+    for branch in branches {
+        assert_eq!(branch.len(), elem_bits);
+        for i in branch {
+            array.push(i);
+        }
+    }
+    for mux_layer in (0..index.len()).rev() {
+        let mut muxed_array = Vec::new();
+        let s = index[mux_layer];
+        let mut i = 0;
+        while i < array.len() {
+            for _ in 0..elem_bits {
+                if i + elem_bits < array.len() {
+                    let a0 = array[i];
+                    let a1 = array[i + elem_bits];
+                    muxed_array.push(push_mux(gates, s, a1, a0));
+                } else if i < array.len() {
+                    let a0 = array[i];
+                    muxed_array.push(push_mux(gates, s, out_of_bounds_elem, a0));
+                }
+                i += 1;
+            }
+            i += elem_bits;
+        }
+        array = muxed_array;
+    }
+    array
 }
 
 fn push_adder(
@@ -226,6 +272,7 @@ fn extend_to_bits(v: &mut Vec<usize>, ty: &Type, bits: usize) {
 impl Expr {
     fn compile(
         &self,
+        enums: &HashMap<String, HashMap<String, Vec<Type>>>,
         fns: &HashMap<String, &FnDef>,
         env: &mut Env<Vec<GateIndex>>,
         gates: &mut Vec<Gate>,
@@ -251,7 +298,7 @@ impl Expr {
             ExprEnum::Identifier(s) => env.get(s).unwrap(),
             ExprEnum::ArrayLiteral(elem, size) => {
                 let elem_ty = elem.1.clone();
-                let mut elem = elem.compile(fns, env, gates);
+                let mut elem = elem.compile(enums, fns, env, gates);
                 extend_to_bits(&mut elem, &elem_ty, elem_ty.size_in_bits());
                 let bits = ty.size_in_bits();
                 let mut array = Vec::with_capacity(bits);
@@ -262,8 +309,8 @@ impl Expr {
             }
             ExprEnum::ArrayAccess(array, index) => {
                 let elem_bits = ty.size_in_bits();
-                let mut array = array.compile(fns, env, gates);
-                let mut index = index.compile(fns, env, gates);
+                let mut array = array.compile(enums, fns, env, gates);
+                let mut index = index.compile(enums, fns, env, gates);
                 extend_to_bits(&mut index, &Type::Usize, Type::Usize.size_in_bits());
                 let out_of_bounds_elem = 1;
                 for mux_layer in (0..index.len()).rev() {
@@ -296,9 +343,9 @@ impl Expr {
                         ty
                     ),
                 };
-                let mut array = array.compile(fns, env, gates);
-                let mut index = index.compile(fns, env, gates);
-                let value = value.compile(fns, env, gates);
+                let mut array = array.compile(enums, fns, env, gates);
+                let mut index = index.compile(enums, fns, env, gates);
+                let value = value.compile(enums, fns, env, gates);
                 extend_to_bits(&mut index, &Type::Usize, Type::Usize.size_in_bits());
                 let elem_bits = elem_ty.size_in_bits();
 
@@ -332,7 +379,7 @@ impl Expr {
             ExprEnum::TupleLiteral(tuple) => {
                 let mut wires = Vec::with_capacity(ty.size_in_bits());
                 for value in tuple {
-                    wires.extend(value.compile(fns, env, gates));
+                    wires.extend(value.compile(enums, fns, env, gates));
                 }
                 wires
             }
@@ -347,15 +394,15 @@ impl Expr {
                     }
                     _ => panic!("Expected a tuple type, but found {:?}", tuple.1),
                 };
-                let tuple = tuple.compile(fns, env, gates);
+                let tuple = tuple.compile(enums, fns, env, gates);
                 tuple[wires_before..wires_before + wires_at_index].to_vec()
             }
             ExprEnum::UnaryOp(UnaryOp::Neg, x) => {
-                let x = x.compile(fns, env, gates);
+                let x = x.compile(enums, fns, env, gates);
                 push_negation_circuit(gates, &x)
             }
             ExprEnum::UnaryOp(UnaryOp::Not, x) => {
-                let x = x.compile(fns, env, gates);
+                let x = x.compile(enums, fns, env, gates);
                 let mut flipped = vec![0; x.len()];
                 for (i, x) in x.iter().enumerate() {
                     flipped[i] = push_not(gates, *x);
@@ -363,8 +410,8 @@ impl Expr {
                 flipped
             }
             ExprEnum::Op(op @ (Op::ShiftLeft | Op::ShiftRight), x, y) => {
-                let x = x.compile(fns, env, gates);
-                let y = y.compile(fns, env, gates);
+                let x = x.compile(enums, fns, env, gates);
+                let y = y.compile(enums, fns, env, gates);
                 assert_eq!(y.len(), 8);
                 let bits = x.len();
                 let bit_to_shift_in = x[0];
@@ -398,8 +445,8 @@ impl Expr {
             ExprEnum::Op(op, x, y) => {
                 let ty_x = &x.1;
                 let ty_y = &y.1;
-                let mut x = x.compile(fns, env, gates);
-                let mut y = y.compile(fns, env, gates);
+                let mut x = x.compile(enums, fns, env, gates);
+                let mut y = y.compile(enums, fns, env, gates);
                 let bits = max(x.len(), y.len());
                 extend_to_bits(&mut x, ty_x, bits);
                 extend_to_bits(&mut y, ty_y, bits);
@@ -525,10 +572,10 @@ impl Expr {
                 }
             }
             ExprEnum::Let(var, binding, body) => {
-                let binding = binding.compile(fns, env, gates);
+                let binding = binding.compile(enums, fns, env, gates);
                 env.push();
                 env.set(var.clone(), binding);
-                let body = body.compile(fns, env, gates);
+                let body = body.compile(enums, fns, env, gates);
                 env.pop();
                 body
             }
@@ -541,14 +588,14 @@ impl Expr {
                     body = Expr(let_expr, ty.clone(), meta.clone())
                 }
                 env.push();
-                let body = body.compile(fns, env, gates);
+                let body = body.compile(enums, fns, env, gates);
                 env.pop();
                 body
             }
             ExprEnum::If(condition, case_true, case_false) => {
-                let condition = condition.compile(fns, env, gates);
-                let case_true = case_true.compile(fns, env, gates);
-                let case_false = case_false.compile(fns, env, gates);
+                let condition = condition.compile(enums, fns, env, gates);
+                let case_true = case_true.compile(enums, fns, env, gates);
+                let case_false = case_false.compile(enums, fns, env, gates);
                 assert_eq!(condition.len(), 1);
                 assert_eq!(case_true.len(), case_false.len());
                 let condition = condition[0];
@@ -565,7 +612,7 @@ impl Expr {
             }
             ExprEnum::Cast(ty, expr) => {
                 let ty_expr = &expr.1;
-                let mut expr = expr.compile(fns, env, gates);
+                let mut expr = expr.compile(enums, fns, env, gates);
                 let size_after_cast = ty.size_in_bits();
                 let result = match size_after_cast.cmp(&expr.len()) {
                     std::cmp::Ordering::Equal => expr,
@@ -578,8 +625,8 @@ impl Expr {
                 result
             }
             ExprEnum::Fold(array, init, closure) => {
-                let array = array.compile(fns, env, gates);
-                let mut init = init.compile(fns, env, gates);
+                let array = array.compile(enums, fns, env, gates);
+                let mut init = init.compile(enums, fns, env, gates);
 
                 let ParamDef(init_identifier, init_ty) = &closure.params[0];
                 let ParamDef(elem_identifier, elem_ty) = &closure.params[1];
@@ -593,14 +640,14 @@ impl Expr {
                     env.push();
                     env.set(init_identifier.clone(), acc);
                     env.set(elem_identifier.clone(), elem.to_vec());
-                    acc = closure.body.compile(fns, env, gates);
+                    acc = closure.body.compile(enums, fns, env, gates);
                     env.pop();
                     i += elem_bits;
                 }
                 acc
             }
             ExprEnum::Map(array, closure) => {
-                let array = array.compile(fns, env, gates);
+                let array = array.compile(enums, fns, env, gates);
 
                 let ParamDef(elem_identifier, elem_ty) = &closure.params[0];
                 let elem_in_bits = elem_ty.size_in_bits();
@@ -613,7 +660,7 @@ impl Expr {
                     let elem_in = &array[i..i + elem_in_bits];
                     env.push();
                     env.set(elem_identifier.clone(), elem_in.to_vec());
-                    let elem_out = closure.body.compile(fns, env, gates);
+                    let elem_out = closure.body.compile(enums, fns, env, gates);
                     result.extend(elem_out);
                     env.pop();
                     i += elem_in_bits;
@@ -631,6 +678,63 @@ impl Expr {
                 }
                 array
             }
+            ExprEnum::EnumLiteral(identifier, variant) => {
+                let enum_def = enums.get(identifier).unwrap();
+                let tag_size = enum_tag_size(enum_def);
+                let max_size = enum_max_size(enum_def);
+                let mut wires = vec![0; max_size];
+                let variant_name = variant.variant_name();
+                let tag_number = enum_tag_number(enum_def, variant_name);
+                for i in 0..tag_size {
+                    wires[i] = (tag_number >> (tag_size - i - 1)) & 1;
+                }
+                let mut w = tag_size;
+                match variant.as_ref() {
+                    VariantExpr::Unit(_) => {}
+                    VariantExpr::Tuple(_, fields) => {
+                        for f in fields {
+                            let f = f.compile(enums, fns, env, gates);
+                            wires[w..w + f.len()].copy_from_slice(&f);
+                            w += f.len();
+                        }
+                    }
+                }
+                wires
+            }
+            ExprEnum::Match(enum_expr, clauses) => {
+                let Expr(_, enum_ty, _) = enum_expr.as_ref();
+                let enum_ty_name = match enum_ty {
+                    Type::Enum(identifier) => identifier,
+                    _ => panic!(
+                        "Expected the enum expr {:?} to have an enum type, but found {:?}",
+                        enum_expr, enum_ty
+                    ),
+                };
+                let enum_def = enums.get(enum_ty_name).unwrap();
+                let tag_size = enum_tag_size(enum_def);
+                let enum_expr = enum_expr.compile(enums, fns, env, gates);
+                let tag = &enum_expr[0..tag_size];
+                let empty_branch = vec![0; ty.size_in_bits()];
+                let mut branches = vec![empty_branch; clauses.len()];
+                for (pattern, expr) in clauses {
+                    let Expr(_, expr_ty, _) = expr;
+                    env.push();
+                    if let VariantPattern::Tuple(_, bindings) = pattern {
+                        let mut w = tag_size;
+                        for (identifier, ty) in bindings {
+                            let binding = enum_expr[w..w + ty.size_in_bits()].to_vec();
+                            env.set(identifier.clone(), binding);
+                            w += ty.size_in_bits();
+                        }
+                    }
+                    let mut expr = expr.compile(enums, fns, env, gates);
+                    env.pop();
+                    extend_to_bits(&mut expr, expr_ty, ty.size_in_bits());
+                    let tag = enum_tag_number(&enum_def, pattern.variant_name());
+                    branches[tag] = expr;
+                }
+                push_multi_mux(gates, tag, branches)
+            }
         }
     }
 }
@@ -640,6 +744,37 @@ fn is_signed(ty: &Type) -> bool {
         ty,
         Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128
     )
+}
+
+fn enum_tag_number(enum_def: &HashMap<String, Vec<Type>>, variant: &str) -> usize {
+    for (i, (name_in_def, _)) in enum_def.iter().enumerate() {
+        if name_in_def.as_str() == variant {
+            return i;
+        }
+    }
+    panic!("Variant {} not found in enum def", variant)
+}
+
+fn enum_tag_size(enum_def: &HashMap<String, Vec<Type>>) -> usize {
+    let mut bits = 0;
+    while (1 << bits) < enum_def.values().len() {
+        bits += 1;
+    }
+    bits
+}
+
+fn enum_max_size(enum_def: &HashMap<String, Vec<Type>>) -> usize {
+    let mut max = 0;
+    for variant in enum_def.values() {
+        let mut sum = 0;
+        for field in variant {
+            sum += field.size_in_bits();
+        }
+        if sum > max {
+            max = sum;
+        }
+    }
+    max + enum_tag_size(enum_def)
 }
 
 impl Type {
@@ -653,7 +788,6 @@ impl Type {
             Type::U64 | Type::I64 => 64,
             Type::U128 | Type::I128 => 128,
             Type::Array(elem, size) => elem.size_in_bits() * size,
-            Type::Fn(_, _) => panic!("Fn types cannot be directly mapped to bits"),
             Type::Tuple(values) => {
                 let mut size = 0;
                 for v in values {
@@ -661,6 +795,8 @@ impl Type {
                 }
                 size
             }
+            Type::Fn(_, _) => panic!("Fn types cannot be directly mapped to bits"),
+            Type::Enum(_) => panic!("Enum types need to be looked up in the enum hashmap"),
         }
     }
 }

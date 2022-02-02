@@ -812,3 +812,29 @@ fn compile_tuple() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn compile_enum() -> Result<(), String> {
+    let prg = "
+(enum foobar
+  (unit-variant foo)
+  (tuple-variant bar u8))
+
+(fn main u8 (param b A bool)
+  (let choice (if b
+                (enum foobar (tuple-variant bar 6))
+                (enum foobar (unit-variant foo)))
+    (match choice
+      (clause (unit-variant foo) 5)
+      (clause (tuple-variant bar x) x))))
+";
+    for b in [false, true] {
+        println!("Checking {}", b);
+        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let mut computation: Computation = circuit.into();
+        computation.set_bool(Party::A, b);
+        computation.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(computation.get_u8().map_err(|e| e.prettify(prg))?, (b as u8) + 5);
+    }
+    Ok(())
+}
