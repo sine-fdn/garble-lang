@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::{
-        Expr, ExprEnum, Op, ParamDef, PatternField, Program, Type, UnaryOp, VariantExpr,
-        VariantExprEnum, VariantPattern, VariantPatternEnum,
+        Expr, ExprEnum, Op, ParamDef, Pattern, PatternEnum, Program, Type, UnaryOp, VariantExpr,
+        VariantExprEnum,
     },
     env::Env,
     parser::MetaInfo,
@@ -48,7 +48,9 @@ pub enum TypeErrorEnum {
     },
     TypeMismatch((Type, MetaInfo), (Type, MetaInfo)),
     InvalidRange(usize, usize),
-    PatternFieldLiteralDoesNotMatchType(Type),
+    PatternDoesNotMatchType(Type),
+    PatternsAreNotExhaustive,
+    TypeDoesNotSupportPatternMatching(Type),
 }
 
 struct Defs {
@@ -170,13 +172,6 @@ fn expect_tuple_type(ty: &Type, meta: MetaInfo) -> Result<Vec<Type>, TypeError> 
             TypeErrorEnum::ExpectedTupleType(ty.clone()),
             meta,
         )),
-    }
-}
-
-fn expect_enum_type(ty: &Type, meta: MetaInfo) -> Result<String, TypeError> {
-    match ty {
-        Type::Enum(name) => Ok(name.clone()),
-        _ => Err(TypeError(TypeErrorEnum::ExpectedEnumType(ty.clone()), meta)),
     }
 }
 
@@ -743,125 +738,429 @@ impl Expr {
             }
             ExprEnum::Match(expr, clauses) => {
                 let expr = expr.type_check(env, defs)?;
-                let enum_name = expect_enum_type(&expr.1, expr.2)?;
+                let ty = &expr.1;
 
-                // TODO: exhaustiveness check
-
-                if let Some(enum_def) = defs.enums.get(&enum_name) {
-                    let mut typed_ret_exprs = Vec::with_capacity(clauses.len());
-                    let mut typed_clauses = Vec::with_capacity(clauses.len());
-                    for (pattern, expr) in clauses {
-                        let VariantPattern(variant_name, pattern, meta) = pattern;
-                        let meta = *meta;
-                        env.push();
-                        let pattern = if let Some(types) = enum_def.get(variant_name) {
-                            match (pattern, types) {
-                                (VariantPatternEnum::Unit, None) => {
-                                    typed_ast::VariantPattern(variant_name.to_string(), typed_ast::VariantPatternEnum::Unit, meta)
-                                }
-                                (VariantPatternEnum::Tuple(bindings), Some(types)) => {
-                                    if bindings.len() != types.len() {
-                                        let e = TypeErrorEnum::UnexpectedEnumVariantArity {
-                                            expected: types.len(),
-                                            actual: bindings.len(),
-                                        };
-                                        return Err(TypeError(e, meta));
-                                    }
-                                    for binding in bindings.iter().zip(types) {
-                                        match binding {
-                                            (PatternField::Identifier(identifier), ty) => {
-                                                env.set(identifier.clone(), ty.clone());
-                                            }
-                                            (PatternField::True, Type::Bool) => {}
-                                            (PatternField::True, ty) => {
-                                                let e = TypeErrorEnum::PatternFieldLiteralDoesNotMatchType(ty.clone());
-                                                return Err(TypeError(e, meta));
-                                            }
-                                            (PatternField::False, Type::Bool) => {}
-                                            (PatternField::False, ty) => {
-                                                let e = TypeErrorEnum::PatternFieldLiteralDoesNotMatchType(ty.clone());
-                                                return Err(TypeError(e, meta));
-                                            }
-                                            (PatternField::NumUnsigned(n), ty) => {
-                                                if !is_coercible_unsigned(*n, ty) {
-                                                    let e = TypeErrorEnum::PatternFieldLiteralDoesNotMatchType(ty.clone());
-                                                    return Err(TypeError(e, meta));
-                                                }
-                                            }
-                                            (PatternField::NumSigned(n), ty) => {
-                                                if !is_coercible_signed(*n, ty) {
-                                                    let e = TypeErrorEnum::PatternFieldLiteralDoesNotMatchType(ty.clone());
-                                                    return Err(TypeError(e, meta));
-                                                }
-                                            }
-                                            (PatternField::TupleLiteral(_), Type::Tuple(_)) => {
-                                                todo!()
-                                            }
-                                            (PatternField::TupleLiteral(_), ty) => {
-                                                let e = TypeErrorEnum::PatternFieldLiteralDoesNotMatchType(ty.clone());
-                                                return Err(TypeError(e, meta));
-                                            }
-                                            (PatternField::EnumLiteral(_, _), Type::Enum(_)) => {
-                                                todo!()
-                                            }
-                                            (PatternField::EnumLiteral(_, _), ty) => {
-                                                let e = TypeErrorEnum::PatternFieldLiteralDoesNotMatchType(ty.clone());
-                                                return Err(TypeError(e, meta));
-                                            }
-                                        }
-                                    }
-                                    let typed_bindings =
-                                        bindings.into_iter().cloned().zip(types.clone()).collect();
-                                    typed_ast::VariantPattern(
-                                        variant_name.to_string(),
-                                        typed_ast::VariantPatternEnum::Tuple(typed_bindings),
-                                        meta
-                                    )
-                                }
-                                (VariantPatternEnum::Unit, Some(_)) => {
-                                    let e = TypeErrorEnum::ExpectedTupleVariantFoundUnitVariant;
-                                    return Err(TypeError(e, meta));
-                                }
-                                (VariantPatternEnum::Tuple(_), None) => {
-                                    let e = TypeErrorEnum::ExpectedUnitVariantFoundTupleVariant;
-                                    return Err(TypeError(e, meta));
-                                }
-                            }
-                        } else {
-                            let e = TypeErrorEnum::UnknownEnumVariant(
-                                enum_name.clone(),
-                                variant_name.to_string(),
-                            );
-                            return Err(TypeError(e, meta));
-                        };
-
-                        let expr = expr.type_check(env, defs)?;
-                        env.pop();
-
-                        typed_ret_exprs.push(expr.clone());
-                        typed_clauses.push((pattern, expr));
+                match ty {
+                    Type::Bool
+                    | Type::Usize
+                    | Type::U8
+                    | Type::U16
+                    | Type::U32
+                    | Type::U64
+                    | Type::U128
+                    | Type::I8
+                    | Type::I16
+                    | Type::I32
+                    | Type::I64
+                    | Type::I128
+                    | Type::Tuple(_)
+                    | Type::Enum(_) => {}
+                    Type::Fn(_, _) | Type::Array(_, _) => {
+                        let e = TypeErrorEnum::TypeDoesNotSupportPatternMatching(ty.clone());
+                        return Err(TypeError(e, meta));
                     }
-                    let mut typed_ret_exprs = typed_ret_exprs.into_iter();
-                    let typed_ast::Expr(_, first_ty, _) = typed_ret_exprs.next().unwrap();
-                    while let Some(typed_ast::Expr(_, ty, meta)) = typed_ret_exprs.next() {
-                        if first_ty != ty {
+                }
+
+                let mut typed_clauses = Vec::with_capacity(clauses.len());
+
+                for (pattern, expr) in clauses {
+                    env.push();
+                    let pattern = pattern.type_check(env, defs, ty.clone())?;
+                    let expr = expr.type_check(env, defs)?;
+                    env.pop();
+                    typed_clauses.push((pattern, expr));
+                }
+
+                let ret_ty = {
+                    let (_, typed_ast::Expr(_, ret_ty, _)) = &typed_clauses.get(0).unwrap();
+
+                    for (_, expr) in typed_clauses.iter() {
+                        let typed_ast::Expr(_, ty, meta) = expr;
+                        if ret_ty != ty {
                             let e = TypeErrorEnum::UnexpectedType {
-                                expected: first_ty,
-                                actual: ty,
+                                expected: ret_ty.clone(),
+                                actual: ty.clone(),
                             };
-                            return Err(TypeError(e, meta));
+                            return Err(TypeError(e, *meta));
                         }
                     }
-                    (
-                        typed_ast::ExprEnum::Match(Box::new(expr), typed_clauses),
-                        first_ty,
-                    )
+                    ret_ty.clone()
+                };
+
+                check_exhaustiveness(&typed_clauses, &ty, &defs, meta)?;
+
+                (
+                    typed_ast::ExprEnum::Match(Box::new(expr), typed_clauses),
+                    ret_ty,
+                )
+            }
+        };
+        Ok(typed_ast::Expr(expr, ty, meta))
+    }
+}
+
+impl Pattern {
+    fn type_check(
+        &self,
+        env: &mut Env<Type>,
+        defs: &Defs,
+        ty: Type,
+    ) -> Result<typed_ast::Pattern, TypeError> {
+        let Pattern(pattern, meta) = self;
+        let meta = *meta;
+        let pattern = match (pattern, &ty) {
+            (PatternEnum::Identifier(s), _) => {
+                env.set(s.clone(), ty.clone());
+                typed_ast::PatternEnum::Identifier(s.clone())
+            }
+            (PatternEnum::True, Type::Bool) => typed_ast::PatternEnum::True,
+            (PatternEnum::False, Type::Bool) => typed_ast::PatternEnum::False,
+            (PatternEnum::NumUnsigned(n), ty) => {
+                expect_num_type(&ty, meta)?;
+                typed_ast::PatternEnum::NumUnsigned(*n)
+            }
+            (PatternEnum::NumSigned(n), ty) => {
+                expect_signed_num_type(&ty, meta)?;
+                typed_ast::PatternEnum::NumSigned(*n)
+            }
+            (PatternEnum::UnsignedInclusiveRange(from, to), ty) => {
+                expect_num_type(&ty, meta)?;
+                typed_ast::PatternEnum::UnsignedInclusiveRange(*from, *to)
+            }
+            (PatternEnum::SignedInclusiveRange(from, to), ty) => {
+                expect_signed_num_type(&ty, meta)?;
+                typed_ast::PatternEnum::SignedInclusiveRange(*from, *to)
+            }
+            (PatternEnum::Tuple(fields), ty) => {
+                let field_types = expect_tuple_type(&ty, meta)?;
+                if field_types.len() != fields.len() {
+                    let e = TypeErrorEnum::UnexpectedEnumVariantArity {
+                        expected: field_types.len(),
+                        actual: fields.len(),
+                    };
+                    return Err(TypeError(e, meta));
+                }
+                let mut typed_fields = Vec::with_capacity(fields.len());
+                for (field, ty) in fields.iter().zip(field_types) {
+                    typed_fields.push(field.type_check(env, defs, ty)?);
+                }
+                typed_ast::PatternEnum::Tuple(typed_fields)
+            }
+            (
+                PatternEnum::EnumUnit(variant_name) | PatternEnum::EnumTuple(variant_name, _),
+                Type::Enum(enum_name),
+            ) => {
+                if let Some(enum_def) = defs.enums.get(enum_name) {
+                    if let Some(variant) = enum_def.get(variant_name) {
+                        match (pattern, variant) {
+                            (PatternEnum::EnumUnit(_), None) => {
+                                typed_ast::PatternEnum::EnumUnit(variant_name.clone())
+                            }
+                            (PatternEnum::EnumTuple(_, fields), Some(field_types)) => {
+                                if field_types.len() != fields.len() {
+                                    let e = TypeErrorEnum::UnexpectedEnumVariantArity {
+                                        expected: field_types.len(),
+                                        actual: fields.len(),
+                                    };
+                                    return Err(TypeError(e, meta));
+                                }
+                                let mut typed_fields = Vec::with_capacity(fields.len());
+                                for (field, ty) in fields.iter().zip(field_types) {
+                                    typed_fields.push(field.type_check(env, defs, ty.clone())?);
+                                }
+                                typed_ast::PatternEnum::EnumTuple(
+                                    variant_name.clone(),
+                                    typed_fields,
+                                )
+                            }
+                            (PatternEnum::EnumUnit(_), Some(_)) => {
+                                let e = TypeErrorEnum::ExpectedTupleVariantFoundUnitVariant;
+                                return Err(TypeError(e, meta));
+                            }
+                            (PatternEnum::EnumTuple(_, _), None) => {
+                                let e = TypeErrorEnum::ExpectedUnitVariantFoundTupleVariant;
+                                return Err(TypeError(e, meta));
+                            }
+                            _ => unreachable!(),
+                        }
+                    } else {
+                        let e = TypeErrorEnum::UnknownEnumVariant(
+                            enum_name.clone(),
+                            variant_name.to_string(),
+                        );
+                        return Err(TypeError(e, meta));
+                    }
                 } else {
                     let e = TypeErrorEnum::UnknownEnum(enum_name.clone());
                     return Err(TypeError(e, meta));
                 }
             }
+            (_, _) => {
+                let e = TypeErrorEnum::PatternDoesNotMatchType(ty);
+                return Err(TypeError(e, meta));
+            }
         };
-        Ok(typed_ast::Expr(expr, ty, meta))
+        Ok(typed_ast::Pattern(pattern, ty, meta))
+    }
+}
+
+fn check_exhaustiveness(
+    clauses: &[(typed_ast::Pattern, typed_ast::Expr)],
+    ty: &Type,
+    defs: &Defs,
+    meta: MetaInfo,
+) -> Result<(), TypeError> {
+    let patterns = clauses.iter().map(|(p, _)| vec![p.clone()]).collect();
+    let wildcard_pattern = vec![typed_ast::Pattern(
+        typed_ast::PatternEnum::Identifier("_".to_string()),
+        ty.clone(),
+        meta,
+    )];
+    if is_useful(patterns, wildcard_pattern, defs) {
+        let e = TypeErrorEnum::PatternsAreNotExhaustive;
+        return Err(TypeError(e, meta));
+    } else {
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+enum Ctor {
+    True,
+    False,
+    UnsignedInclusiveRange(u128, u128),
+    SignedInclusiveRange(i128, i128),
+    Tuple(Vec<Type>),
+    Variant(String, Option<Vec<Type>>),
+}
+
+type PatternStack = Vec<typed_ast::Pattern>;
+
+fn specialize(ctor: &Ctor, pattern: &PatternStack) -> Vec<PatternStack> {
+    let head = pattern.first().unwrap();
+    let tail = pattern.iter().cloned().skip(1);
+    let typed_ast::Pattern(head_enum, _, meta) = head;
+    match ctor {
+        Ctor::True => match head_enum {
+            typed_ast::PatternEnum::Identifier(_) | typed_ast::PatternEnum::True => {
+                vec![tail.collect()]
+            }
+            _ => vec![],
+        },
+        Ctor::False => match head_enum {
+            typed_ast::PatternEnum::Identifier(_) | typed_ast::PatternEnum::False => {
+                vec![tail.collect()]
+            }
+            _ => vec![],
+        },
+        Ctor::Variant(v1, fields) => match head_enum {
+            typed_ast::PatternEnum::Identifier(_) => {
+                let field_types = fields.as_deref().unwrap_or_default();
+                let mut fields = Vec::with_capacity(field_types.len());
+                for ty in field_types {
+                    let wildcard = typed_ast::PatternEnum::Identifier("_".to_string());
+                    let p = typed_ast::Pattern(wildcard, ty.clone(), meta.clone());
+                    fields.push(p);
+                }
+                vec![fields.into_iter().chain(tail).collect()]
+            }
+            typed_ast::PatternEnum::EnumUnit(v2) if v1 == v2 => vec![tail.collect()],
+            typed_ast::PatternEnum::EnumTuple(v2, fields) if v1 == v2 => {
+                vec![fields.into_iter().cloned().chain(tail).collect()]
+            }
+            _ => vec![],
+        },
+        Ctor::UnsignedInclusiveRange(min, max) => match head_enum {
+            typed_ast::PatternEnum::Identifier(_) => vec![tail.collect()],
+            typed_ast::PatternEnum::NumUnsigned(n) if n == min && n == max => vec![tail.collect()],
+            typed_ast::PatternEnum::UnsignedInclusiveRange(n_min, n_max)
+                if n_min <= min && max <= n_max =>
+            {
+                vec![tail.collect()]
+            }
+            _ => vec![],
+        },
+        Ctor::SignedInclusiveRange(min, max) => match head_enum {
+            typed_ast::PatternEnum::Identifier(_) => vec![tail.collect()],
+            typed_ast::PatternEnum::NumUnsigned(n)
+                if *min >= 0 && *max >= 0 && *n == *min as u128 && *n == *max as u128 =>
+            {
+                vec![tail.collect()]
+            }
+            typed_ast::PatternEnum::NumSigned(n) if n == min && n == max => vec![tail.collect()],
+            typed_ast::PatternEnum::UnsignedInclusiveRange(n_min, n_max)
+                if *min >= 0 && *max >= 0 && *n_min <= *min as u128 && *max as u128 <= *n_max =>
+            {
+                vec![tail.collect()]
+            }
+            typed_ast::PatternEnum::SignedInclusiveRange(n_min, n_max)
+                if n_min <= min && max <= n_max =>
+            {
+                vec![tail.collect()]
+            }
+            _ => vec![],
+        },
+        Ctor::Tuple(field_types) => match head_enum {
+            typed_ast::PatternEnum::Identifier(_) => {
+                let mut fields = Vec::with_capacity(field_types.len());
+                for ty in field_types {
+                    let wildcard = typed_ast::PatternEnum::Identifier("_".to_string());
+                    let p = typed_ast::Pattern(wildcard, ty.clone(), meta.clone());
+                    fields.push(p);
+                }
+                vec![fields.into_iter().chain(tail).collect()]
+            }
+            typed_ast::PatternEnum::Tuple(fields) => {
+                vec![fields.into_iter().cloned().chain(tail).collect()]
+            }
+            _ => vec![],
+        },
+    }
+}
+
+fn split_unsigned_range(patterns: &[PatternStack], min: u128, max: u128) -> Vec<Ctor> {
+    let mut split_points = vec![min, max + 1];
+    for p in patterns {
+        let head = p.first().unwrap();
+        let typed_ast::Pattern(head_enum, _, _) = head;
+        match head_enum {
+            typed_ast::PatternEnum::NumUnsigned(n) => split_points.push(*n),
+            typed_ast::PatternEnum::NumSigned(n) if *n >= 0 => split_points.push(*n as u128),
+            typed_ast::PatternEnum::UnsignedInclusiveRange(min, max) => {
+                split_points.push(*min);
+                split_points.push(*max + 1);
+            }
+            typed_ast::PatternEnum::SignedInclusiveRange(min, max) => {
+                if *min >= 0 {
+                    split_points.push(*min as u128);
+                }
+                if *max >= 0 {
+                    split_points.push(*max as u128 + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+    split_points.sort();
+    split_points.dedup();
+    let mut ranges = vec![];
+    for range in split_points.windows(2) {
+        if range[0] < range[1] - 1 {
+            ranges.push(Ctor::UnsignedInclusiveRange(range[0], range[0]));
+        }
+        if range[0] >= min && range[1] - 1 <= max {
+            ranges.push(Ctor::UnsignedInclusiveRange(range[0], range[1] - 1));
+        }
+    }
+    ranges
+}
+
+fn split_signed_range(patterns: &[PatternStack], min: i128, max: i128) -> Vec<Ctor> {
+    let mut split_points = vec![min, max + 1];
+    for p in patterns {
+        let head = p.first().unwrap();
+        let typed_ast::Pattern(head_enum, _, _) = head;
+        match head_enum {
+            typed_ast::PatternEnum::NumUnsigned(n) => split_points.push(*n as i128),
+            typed_ast::PatternEnum::NumSigned(n) if *n >= 0 => split_points.push(*n),
+            typed_ast::PatternEnum::UnsignedInclusiveRange(min, max) => {
+                split_points.push(*min as i128);
+                split_points.push(*max as i128 + 1);
+            }
+            typed_ast::PatternEnum::SignedInclusiveRange(min, max) => {
+                if *min >= 0 {
+                    split_points.push(*min);
+                }
+                if *max >= 0 {
+                    split_points.push(*max + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+    split_points.sort();
+    split_points.dedup();
+    let mut ranges = vec![];
+    for range in split_points.windows(2) {
+        if range[0] < range[1] - 1 {
+            ranges.push(Ctor::SignedInclusiveRange(range[0], range[0]));
+        }
+        if range[0] >= min && range[1] - 1 <= max {
+            ranges.push(Ctor::SignedInclusiveRange(range[0], range[1] - 1));
+        }
+    }
+    ranges
+}
+
+fn split_ctor(patterns: &[PatternStack], q: &PatternStack, defs: &Defs) -> Vec<Ctor> {
+    let head = q.first().unwrap();
+    let typed_ast::Pattern(head_enum, ty, _) = head;
+    match ty {
+        Type::Bool => vec![Ctor::True, Ctor::False],
+        Type::Usize | Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 => {
+            match head_enum {
+                typed_ast::PatternEnum::Identifier(_) => {
+                    split_unsigned_range(patterns, 0, u8::MAX as u128)
+                }
+                typed_ast::PatternEnum::NumUnsigned(n) => {
+                    vec![Ctor::UnsignedInclusiveRange(*n, *n)]
+                }
+                typed_ast::PatternEnum::UnsignedInclusiveRange(min, max) => {
+                    split_unsigned_range(patterns, *min, *max)
+                }
+                _ => panic!("cannot split {:?} for type {:?}", head_enum, ty),
+            }
+        }
+        Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 => match head_enum {
+            typed_ast::PatternEnum::Identifier(_) => {
+                vec![Ctor::SignedInclusiveRange(i8::MIN as i128, i8::MAX as i128)]
+            }
+            typed_ast::PatternEnum::NumUnsigned(n) => {
+                vec![Ctor::SignedInclusiveRange(*n as i128, *n as i128)]
+            }
+            typed_ast::PatternEnum::NumSigned(n) => vec![Ctor::SignedInclusiveRange(*n, *n)],
+            typed_ast::PatternEnum::UnsignedInclusiveRange(min, max) => {
+                split_signed_range(patterns, *min as i128, *max as i128)
+            }
+            typed_ast::PatternEnum::SignedInclusiveRange(min, max) => {
+                split_signed_range(patterns, *min, *max)
+            }
+            _ => panic!("cannot split {:?} for type {:?}", head_enum, ty),
+        },
+        Type::Enum(enum_name) => {
+            let variants = defs.enums.get(enum_name).unwrap();
+            variants
+                .iter()
+                .map(|(name, fields)| Ctor::Variant(name.clone(), fields.clone()))
+                .collect()
+        }
+        Type::Tuple(fields) => {
+            vec![Ctor::Tuple(fields.clone())]
+        }
+        Type::Fn(_, _) | Type::Array(_, _) => {
+            panic!("Type {:?} does not support pattern matching", ty)
+        }
+    }
+}
+
+fn is_useful(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> bool {
+    if patterns.is_empty() {
+        true
+    } else if patterns[0].is_empty() || q.is_empty() {
+        false
+    } else {
+        for ctor in split_ctor(&patterns, &q, defs) {
+            let mut specialized = Vec::new();
+            for p in patterns.iter() {
+                let pattern_specialized = specialize(&ctor, &p);
+                specialized.extend(pattern_specialized);
+            }
+            for q in specialize(&ctor, &q) {
+                if is_useful(specialized.clone(), q.clone(), defs) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 }

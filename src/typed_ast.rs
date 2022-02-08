@@ -1,5 +1,5 @@
 use crate::{
-    ast::{EnumDef, Op, ParamDef, Party, Type, UnaryOp, PatternField},
+    ast::{EnumDef, Op, ParamDef, Party, Type, UnaryOp},
     parser::MetaInfo,
 };
 
@@ -41,7 +41,7 @@ pub enum ExprEnum {
     TupleLiteral(Vec<Expr>),
     TupleAccess(Box<Expr>, usize),
     EnumLiteral(String, Box<VariantExpr>),
-    Match(Box<Expr>, Vec<(VariantPattern, Expr)>),
+    Match(Box<Expr>, Vec<(Pattern, Expr)>),
     UnaryOp(UnaryOp, Box<Expr>),
     Op(Op, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
@@ -63,12 +63,20 @@ pub enum VariantExprEnum {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct VariantPattern(pub String, pub VariantPatternEnum, pub MetaInfo);
+pub struct Pattern(pub PatternEnum, pub Type, pub MetaInfo);
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum VariantPatternEnum {
-    Unit,
-    Tuple(Vec<(PatternField, Type)>),
+pub enum PatternEnum {
+    Identifier(String),
+    True,
+    False,
+    NumUnsigned(u128),
+    NumSigned(i128),
+    Tuple(Vec<Pattern>),
+    EnumUnit(String),
+    EnumTuple(String, Vec<Pattern>),
+    UnsignedInclusiveRange(u128, u128),
+    SignedInclusiveRange(i128, i128),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

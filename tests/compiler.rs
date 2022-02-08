@@ -814,7 +814,40 @@ fn compile_tuple() -> Result<(), String> {
 }
 
 #[test]
-fn compile_enum() -> Result<(), String> {
+fn compile_exhaustive_bool_pattern() -> Result<(), String> {
+    let prg = "
+(enum Foobar
+  (unit-variant Foo)
+  (tuple-variant Bar bool bool))
+
+(fn main u8 (param b A bool)
+  (let choice (if b
+                (enum Foobar (tuple-variant Bar true false))
+                (enum Foobar (unit-variant Foo)))
+    (match choice
+      (clause (tuple-variant Bar false false) 1)
+      (clause (tuple-variant Bar false true) 2)
+      (clause (tuple-variant Bar _ false) 3)
+      (clause (tuple-variant Bar true true) 4)
+      (clause (unit-variant Foo) 5))))
+";
+    for b in [false, true] {
+        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let mut computation: Computation = circuit.into();
+        computation.set_bool(Party::A, b);
+        computation.run().map_err(|e| e.prettify(prg))?;
+        let result = computation.get_u8().map_err(|e| e.prettify(prg))?;
+        if b {
+            assert_eq!(result, 3);
+        } else {
+            assert_eq!(result, 5);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_exhaustive_enum_pattern() -> Result<(), String> {
     let prg = "
 (enum Foobar
   (unit-variant Foo)
@@ -829,7 +862,6 @@ fn compile_enum() -> Result<(), String> {
       (clause (tuple-variant Bar x) x))))
 ";
     for b in [false, true] {
-        println!("Checking {}", b);
         let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.set_bool(Party::A, b);
@@ -843,7 +875,7 @@ fn compile_enum() -> Result<(), String> {
 }
 
 #[test]
-fn compile_enum_with_literals_in_pattern() -> Result<(), String> {
+fn compile_exhaustive_enum_pattern_with_literals() -> Result<(), String> {
     let prg = "
 (enum Ops
   (tuple-variant Mul u8 u8)
@@ -861,7 +893,6 @@ fn compile_enum_with_literals_in_pattern() -> Result<(), String> {
     for choice in [0, 1] {
         for y in [0, 4] {
             let x = 10;
-            println!("Checking {}, {} and {}", choice, x, y);
             let expected = if choice == 0 {
                 x * y
             } else if y == 0 {
@@ -875,11 +906,83 @@ fn compile_enum_with_literals_in_pattern() -> Result<(), String> {
             computation.set_u8(Party::A, x);
             computation.set_u8(Party::A, y);
             computation.run().map_err(|e| e.prettify(prg))?;
-            assert_eq!(
-                computation.get_u8().map_err(|e| e.prettify(prg))?,
-                expected
-            );
+            assert_eq!(computation.get_u8().map_err(|e| e.prettify(prg))?, expected);
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_exhaustive_range_pattern() -> Result<(), String> {
+    let prg = "
+(fn main u8 (param x A u8)
+  (match x
+    (clause (range 0 10) 1)
+    (clause 10 2)
+    (clause 11 2)
+    (clause 13 2)
+    (clause (range 12 100) 2)
+    (clause (range 100 256) 3)))
+";
+    for x in 0..255 {
+        println!("Checking {}", x);
+        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let mut computation: Computation = circuit.into();
+        computation.set_u8(Party::A, x);
+        computation.run().map_err(|e| e.prettify(prg))?;
+        let expected = if x <= 9 {
+            1
+        } else if x <= 99 {
+            2
+        } else {
+            3
+        };
+        assert_eq!(computation.get_u8().map_err(|e| e.prettify(prg))?, expected);
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_exhaustive_tuple_pattern() -> Result<(), String> {
+    let prg = "
+(fn main u8 (param x A u8)
+  (let x (tuple false x -5)
+    (match x
+        (clause (tuple true x y) 1)
+        (clause (tuple false 0 y) 2)
+        (clause (tuple false x y) x))))
+";
+    for x in 0..10 {
+        println!("Checking {}", x);
+        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let mut computation: Computation = circuit.into();
+        computation.set_u8(Party::A, x);
+        computation.run().map_err(|e| e.prettify(prg))?;
+        let expected = if x == 0 { 2 } else { x };
+        assert_eq!(computation.get_u8().map_err(|e| e.prettify(prg))?, expected);
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_exhaustive_nested_pattern() -> Result<(), String> {
+    let prg = "
+(fn main u8 (param x A u8)
+  (let x (tuple x (tuple (* x 2) 1))
+    (match x
+        (clause (tuple 0 _) 1)
+        (clause (tuple (range 1 256) (tuple x_twice 1)) x_twice)
+        (clause (tuple (range 1 256) (tuple _ (range 2 256))) 0)
+        (clause (tuple (range 1 256) (tuple _ 0)) 0))))
+";
+    for x in 0..10 {
+        println!("Checking {}", x);
+        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let mut computation: Computation = circuit.into();
+        computation.set_u8(Party::A, x);
+        computation.run().map_err(|e| e.prettify(prg))?;
+        let expected = if x == 0 { 1 } else { x * 2 };
+        assert_eq!(computation.get_u8().map_err(|e| e.prettify(prg))?, expected);
     }
     Ok(())
 }

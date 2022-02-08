@@ -1,12 +1,24 @@
 use crate::ast::{
-    Closure, EnumDef, Expr, ExprEnum, FnDef, MainDef, Op, ParamDef, Party, PatternField, Program,
-    Type, UnaryOp, Variant, VariantExpr, VariantPattern, VariantExprEnum, VariantPatternEnum,
+    Closure, EnumDef, Expr, ExprEnum, FnDef, MainDef, Op, ParamDef, Party, Pattern, PatternEnum,
+    Program, Type, UnaryOp, Variant, VariantExpr, VariantExprEnum,
 };
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub struct MetaInfo {
     pub start: (usize, usize),
     pub end: (usize, usize),
+}
+
+impl std::fmt::Debug for MetaInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(
+            format!(
+                "{}:{}-{}:{}",
+                self.start.0, self.start.1, self.end.0, self.end.1
+            )
+            .as_str(),
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -23,7 +35,9 @@ pub enum ParseErrorEnum {
     InvalidMainFnDef,
     InvalidEnumVariant,
     InvalidEnumPattern,
-    InvalidEnumPatternField,
+    InvalidEnumPatternEnum,
+    InvalidRangePattern,
+    InvalidPattern,
     ExpectedIdentifier,
     ExpectedListOfLength(usize),
     ExpectedKeyword(String),
@@ -467,7 +481,11 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                                 let variant_expr = match variant_type.as_str() {
                                     "unit-variant" => {
                                         if values.is_empty() {
-                                            VariantExpr(variant_identifier, VariantExprEnum::Unit, meta)
+                                            VariantExpr(
+                                                variant_identifier,
+                                                VariantExprEnum::Unit,
+                                                meta,
+                                            )
                                         } else {
                                             return Err(ParseError(
                                                 ParseErrorEnum::InvalidEnumVariant,
@@ -475,9 +493,11 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                                             ));
                                         }
                                     }
-                                    "tuple-variant" => {
-                                        VariantExpr(variant_identifier, VariantExprEnum::Tuple(values), meta)
-                                    }
+                                    "tuple-variant" => VariantExpr(
+                                        variant_identifier,
+                                        VariantExprEnum::Tuple(values),
+                                        meta,
+                                    ),
                                     _ => {
                                         return Err(ParseError(
                                             ParseErrorEnum::InvalidEnumVariant,
@@ -501,63 +521,10 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
                     let expr = parse_expr(sexprs.next().unwrap())?;
                     let mut clauses = Vec::new();
                     while let Some(clause) = sexprs.next() {
-                        let (clause, meta) = expect_fixed_list(clause, 3)?;
+                        let (clause, _) = expect_fixed_list(clause, 3)?;
                         let mut clause = clause.into_iter();
                         expect_keyword(clause.next().unwrap(), "clause")?;
-                        let pattern =
-                            if let Sexpr(SexprEnum::List(pattern), _) = clause.next().unwrap() {
-                                let mut variant = pattern.into_iter();
-                                let (variant_type, _) = expect_identifier(variant.next().unwrap())?;
-                                let (variant_identifier, _) =
-                                    expect_identifier(variant.next().unwrap())?;
-                                let mut values = Vec::new();
-                                for field in variant {
-                                    let Expr(field, meta) = parse_expr(field)?;
-                                    let field = match field {
-                                        ExprEnum::Identifier(s) => PatternField::Identifier(s),
-                                        ExprEnum::True => PatternField::True,
-                                        ExprEnum::False => PatternField::False,
-                                        ExprEnum::NumUnsigned(n) => PatternField::NumUnsigned(n),
-                                        ExprEnum::NumSigned(n) => PatternField::NumSigned(n),
-                                        ExprEnum::TupleLiteral(fields) => {
-                                            PatternField::TupleLiteral(fields)
-                                        }
-                                        ExprEnum::EnumLiteral(identifier, variant) => {
-                                            PatternField::EnumLiteral(identifier, variant)
-                                        }
-                                        _ => {
-                                            return Err(ParseError(
-                                                ParseErrorEnum::InvalidEnumPatternField,
-                                                meta,
-                                            ))
-                                        }
-                                    };
-                                    values.push(field);
-                                }
-                                match variant_type.as_str() {
-                                    "unit-variant" => {
-                                        if values.is_empty() {
-                                            VariantPattern(variant_identifier, VariantPatternEnum::Unit, meta)
-                                        } else {
-                                            return Err(ParseError(
-                                                ParseErrorEnum::InvalidEnumVariant,
-                                                meta,
-                                            ));
-                                        }
-                                    }
-                                    "tuple-variant" => {
-                                        VariantPattern(variant_identifier, VariantPatternEnum::Tuple(values), meta)
-                                    }
-                                    _ => {
-                                        return Err(ParseError(
-                                            ParseErrorEnum::InvalidEnumPattern,
-                                            meta,
-                                        ))
-                                    }
-                                }
-                            } else {
-                                return Err(ParseError(ParseErrorEnum::InvalidEnumPattern, meta));
-                            };
+                        let pattern = parse_pattern(clause.next().unwrap())?;
                         let body = parse_expr(clause.next().unwrap())?;
                         clauses.push((pattern, body));
                     }
@@ -570,6 +537,77 @@ fn parse_expr(sexpr: Sexpr) -> Result<Expr, ParseError> {
         }
     };
     Ok(Expr(expr, meta))
+}
+
+fn parse_pattern(sexpr: Sexpr) -> Result<Pattern, ParseError> {
+    let Sexpr(sexpr, meta) = sexpr;
+    let pattern = match sexpr {
+        SexprEnum::True => PatternEnum::True,
+        SexprEnum::False => PatternEnum::False,
+        SexprEnum::NumUnsigned(n) => PatternEnum::NumUnsigned(n),
+        SexprEnum::NumSigned(n) => PatternEnum::NumSigned(n),
+        SexprEnum::Identifier(s) => PatternEnum::Identifier(s),
+        SexprEnum::List(sexprs) => {
+            let arity = sexprs.len();
+            if arity < 2 {
+                return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
+            }
+            let mut pattern = sexprs.into_iter();
+            let (pattern_kind, pattern_kind_meta) = expect_identifier(pattern.next().unwrap())?;
+            match pattern_kind.as_str() {
+                "range" => {
+                    if arity != 3 {
+                        return Err(ParseError(ParseErrorEnum::InvalidArity(arity), meta));
+                    }
+                    let Sexpr(min, _) = pattern.next().unwrap();
+                    let Sexpr(max, _) = pattern.next().unwrap();
+                    match (min, max) {
+                        (SexprEnum::NumUnsigned(min), SexprEnum::NumUnsigned(max)) => {
+                            PatternEnum::UnsignedInclusiveRange(min, max - 1)
+                        }
+                        (SexprEnum::NumSigned(min), SexprEnum::NumUnsigned(max))
+                            if max <= i128::MAX as u128 + 1 =>
+                        {
+                            PatternEnum::SignedInclusiveRange(min, (max - 1) as i128)
+                        }
+                        (SexprEnum::NumSigned(min), SexprEnum::NumSigned(max)) => {
+                            PatternEnum::SignedInclusiveRange(min, max - 1)
+                        }
+                        _ => return Err(ParseError(ParseErrorEnum::InvalidRangePattern, meta)),
+                    }
+                }
+                "tuple" => {
+                    let mut fields = Vec::new();
+                    for field in pattern {
+                        fields.push(parse_pattern(field)?);
+                    }
+                    PatternEnum::Tuple(fields)
+                },
+                "unit-variant" | "tuple-variant" => {
+                    let (variant_identifier, _) = expect_identifier(pattern.next().unwrap())?;
+                    let mut fields = Vec::new();
+                    for field in pattern {
+                        fields.push(parse_pattern(field)?);
+                    }
+                    match (pattern_kind.as_str(), fields.len()) {
+                        ("unit-variant", 0) => PatternEnum::EnumUnit(variant_identifier),
+                        ("unit-variant", _) => {
+                            return Err(ParseError(ParseErrorEnum::InvalidEnumVariant, meta))
+                        }
+                        ("tuple-variant", _) => PatternEnum::EnumTuple(variant_identifier, fields),
+                        _ => return Err(ParseError(ParseErrorEnum::InvalidEnumPattern, meta)),
+                    }
+                }
+                _ => {
+                    return Err(ParseError(
+                        ParseErrorEnum::InvalidPattern,
+                        pattern_kind_meta,
+                    ))
+                }
+            }
+        }
+    };
+    Ok(Pattern(pattern, meta))
 }
 
 fn expect_fixed_list(sexpr: Sexpr, n: usize) -> Result<(Vec<Sexpr>, MetaInfo), ParseError> {
