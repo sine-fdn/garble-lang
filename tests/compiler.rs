@@ -196,14 +196,15 @@ fn main(x: A::u16, y: A::u16) -> bool {
 #[test]
 fn compile_unsigned_casts() -> Result<(), String> {
     let prg = "
-(fn main u16 (param x A u16) (param y A u8)
-  (+ (cast u16 (cast u8 x)) (cast u16 y)))
+fn main(x: A::u16, y: A::u8) -> u16 {
+    (x as u8) as u16 + y as u16
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in 200..300 {
         for y in 0..10 {
-            let expected = (x as u8) as u16 + (y as u16);
+            let expected = (x as u8) as u16 + y as u16;
             computation.set_u16(Party::A, x);
             computation.set_u8(Party::A, y);
             computation.run().map_err(|e| e.prettify(prg))?;
@@ -219,10 +220,11 @@ fn compile_unsigned_casts() -> Result<(), String> {
 #[test]
 fn compile_bool_casts() -> Result<(), String> {
     let prg = "
-(fn main u16 (param x A bool) (param y A u8)
-  (+ (cast u16 x) (cast u16 y)))
+fn main(x: A::bool, y: A::u8) -> u16 {
+    x as u16 + y as u16
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in [true, false] {
         for y in 0..10 {
@@ -242,12 +244,11 @@ fn compile_bool_casts() -> Result<(), String> {
 #[test]
 fn compile_bit_shifts() -> Result<(), String> {
     let prg = "
-(fn main u16 (param mode A bool) (param x A u16) (param y A u8)
-  (if mode
-    (<< x y)
-    (>> x y)))
+fn main(mode: A::bool, x: A::u16, y: A::u8) -> u16 {
+    if mode { x << y } else { x >> y }
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for mode in [true, false] {
         for x in 240..270 {
@@ -276,10 +277,11 @@ fn compile_bit_shifts() -> Result<(), String> {
 #[test]
 fn compile_signed_nums() -> Result<(), String> {
     let prg = "
-(fn main i8 (param x A i8)
-  x)
+fn main(x: A::i8) -> i8 {
+    x
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -128..127 {
         computation.set_i8(Party::A, x);
@@ -292,10 +294,11 @@ fn compile_signed_nums() -> Result<(), String> {
 #[test]
 fn compile_signed_add() -> Result<(), String> {
     let prg = "
-(fn main i8 (param x A i8) (param y A i8)
-  (+ x y))
+fn main(x: A::i8, y: A::i8) -> i8 {
+    x + y
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -64..64 {
         for y in -64..63 {
@@ -311,10 +314,11 @@ fn compile_signed_add() -> Result<(), String> {
 #[test]
 fn compile_bit_ops_for_signed_numbers() -> Result<(), String> {
     let prg = "
-(fn main i16 (param x A i16) (param y A i16) (param z A i16)
-  (| x (& y (^ z 2))))
+fn main(x: A::i16, y: A::i16, z: A::i16) -> i16 {
+    x | (y & (z ^ 2))
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..10 {
         for y in -10..10 {
@@ -337,12 +341,11 @@ fn compile_bit_ops_for_signed_numbers() -> Result<(), String> {
 #[test]
 fn compile_signed_greater_than_and_less_than() -> Result<(), String> {
     let prg = "
-(fn main bool (param x A i16) (param y A i16)
-  (&
-    (> x y)
-    (< y x)))
+fn main(x: A::i16, y: A::i16) -> bool {
+    (x > y) & (y < x)
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..10 {
         for y in -10..10 {
@@ -362,12 +365,15 @@ fn compile_signed_greater_than_and_less_than() -> Result<(), String> {
 #[test]
 fn compile_signed_bit_shifts() -> Result<(), String> {
     let prg = "
-(fn main i16 (param mode A bool) (param x A i16) (param y A u8)
-  (if mode
-    (<< x y)
-    (>> x y)))
+fn main(mode: A::bool, x: A::i16, y: A::u8) -> i16 {
+    if mode {
+        x << y
+    } else {
+        x >> y
+    }
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for mode in [true, false] {
         for x in -20..20 {
@@ -401,10 +407,11 @@ fn compile_signed_bit_shifts() -> Result<(), String> {
 #[test]
 fn compile_add_with_signed_int_coercion() -> Result<(), String> {
     let prg = "
-(fn main i16 (param x A i16)
-  (+ x -10))
+fn main(x: A::i16) -> i16 {
+    x + -10
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..10 {
         let expected = x + -10;
@@ -421,10 +428,11 @@ fn compile_add_with_signed_int_coercion() -> Result<(), String> {
 #[test]
 fn compile_sub() -> Result<(), String> {
     let prg = "
-(fn main i16 (param x A i16) (param y A i16)
-  (- x y))
+fn main(x: A::i16, y: A::i16) -> i16 {
+    x - y
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..20 {
         for y in -10..256 {
@@ -440,10 +448,11 @@ fn compile_sub() -> Result<(), String> {
 #[test]
 fn compile_unary_negation() -> Result<(), String> {
     let prg = "
-(fn main i16 (param x A i16)
-  (- x))
+fn main(x: A::i16) -> i16 {
+    -x
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -127..127 {
         computation.set_i16(Party::A, x);
@@ -456,10 +465,11 @@ fn compile_unary_negation() -> Result<(), String> {
 #[test]
 fn compile_unary_not() -> Result<(), String> {
     let prg = "
-(fn main i16 (param x A i16)
-  (! x))
+fn main(x: A::i16) -> i16 {
+    !x
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -127..127 {
         computation.set_i16(Party::A, x);
@@ -468,10 +478,11 @@ fn compile_unary_not() -> Result<(), String> {
     }
 
     let prg = "
-(fn main bool (param x A bool)
-  (! x))
+fn main(x: A::bool) -> bool {
+    !x
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for b in [true, false] {
         computation.set_bool(Party::A, b);
@@ -484,10 +495,11 @@ fn compile_unary_not() -> Result<(), String> {
 #[test]
 fn compile_unsigned_mul() -> Result<(), String> {
     let prg = "
-(fn main u16 (param x A u16) (param y A u16)
-  (* x y))
+fn main(x: A::u16, y: A::u16) -> u16 {
+    x * y
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in 0..20 {
         for y in 250..300 {
@@ -503,10 +515,11 @@ fn compile_unsigned_mul() -> Result<(), String> {
 #[test]
 fn compile_signed_mul() -> Result<(), String> {
     let prg = "
-(fn main i16 (param x A i16) (param y A i16)
-  (* x y))
+fn main(x: A::i16, y: A::i16) -> i16 {
+    x * y
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..10 {
         for y in -10..10 {
@@ -522,10 +535,11 @@ fn compile_signed_mul() -> Result<(), String> {
 #[test]
 fn compile_unsigned_div() -> Result<(), String> {
     let prg = "
-(fn main u8 (param x A u8) (param y A u8)
-  (/ x y))
+fn main(x: A::u8, y: A::u8) -> u8 {
+    x / y
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in 0..255 {
         for y in 1..10 {
@@ -547,10 +561,11 @@ fn compile_unsigned_div() -> Result<(), String> {
 #[test]
 fn compile_unsigned_mod() -> Result<(), String> {
     let prg = "
-(fn main u8 (param x A u8) (param y A u8)
-  (% x y))
+fn main(x: A::u8, y: A::u8) -> u8 {
+    x % y
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in 0..255 {
         for y in 1..10 {
@@ -572,10 +587,11 @@ fn compile_unsigned_mod() -> Result<(), String> {
 #[test]
 fn compile_signed_div() -> Result<(), String> {
     let prg = "
-(fn main i8 (param x A i8) (param y A i8)
-  (/ x y))
+fn main(x: A::i8, y: A::i8) -> i8 {
+    x / y
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -128..127 {
         for y in -4..5 {
@@ -600,10 +616,11 @@ fn compile_signed_div() -> Result<(), String> {
 #[test]
 fn compile_signed_mod() -> Result<(), String> {
     let prg = "
-(fn main i8 (param x A i8) (param y A i8)
-  (% x y))
+fn main(x: A::i8, y: A::i8) -> i8 {
+    x % y
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -128..127 {
         for y in -4..5 {

@@ -146,7 +146,7 @@ impl Parser {
 
         // -> <ty>
         self.expect(&TokenEnum::Arrow)?;
-        let ty = self.parse_type()?;
+        let (ty, _) = self.parse_type()?;
 
         // { ... }
         self.expect(&TokenEnum::LeftBrace)?;
@@ -185,7 +185,7 @@ impl Parser {
 
         // -> <ty>
         self.expect(&TokenEnum::Arrow)?;
-        let ty = self.parse_type()?;
+        let (ty, _) = self.parse_type()?;
 
         // { ... }
         self.expect(&TokenEnum::LeftBrace)?;
@@ -216,7 +216,7 @@ impl Parser {
         // <param>: <type>
         let (param_name, _) = self.expect_identifier()?;
         self.expect(&TokenEnum::Colon)?;
-        let ty = self.parse_type()?;
+        let (ty, _) = self.parse_type()?;
         Ok(ParamDef(param_name, ty))
     }
 
@@ -242,7 +242,7 @@ impl Parser {
             }
         };
         self.expect(&TokenEnum::DoubleColon)?;
-        let ty = self.parse_type()?;
+        let (ty, _) = self.parse_type()?;
         Ok((party, ParamDef(param_name, ty)))
     }
 
@@ -269,8 +269,12 @@ impl Parser {
             let else_expr = self.parse_expr()?;
             self.expect(&TokenEnum::RightBrace)?;
             Ok(Expr(
-                ExprEnum::If(Box::new(cond_expr), Box::new(then_expr), Box::new(else_expr)),
-                meta
+                ExprEnum::If(
+                    Box::new(cond_expr),
+                    Box::new(then_expr),
+                    Box::new(else_expr),
+                ),
+                meta,
             ))
         } else {
             self.parse_equality()
@@ -381,9 +385,9 @@ impl Parser {
     fn parse_factor(&mut self) -> Result<Expr, ()> {
         // *, /, %
         let ops = vec![TokenEnum::Star, TokenEnum::Slash, TokenEnum::Percent];
-        let mut x = self.parse_unary()?;
+        let mut x = self.parse_cast()?;
         while let Some((token, _)) = self.next_matches_one_of(&ops) {
-            let y = self.parse_unary()?;
+            let y = self.parse_cast()?;
             let meta = join_meta(&x, &y);
             let op = match token {
                 TokenEnum::Star => Op::Mul,
@@ -392,6 +396,19 @@ impl Parser {
                 _ => unreachable!(),
             };
             x = Expr(ExprEnum::Op(op, Box::new(x), Box::new(y)), meta);
+        }
+        Ok(x)
+    }
+
+    fn parse_cast(&mut self) -> Result<Expr, ()> {
+        let mut x = self.parse_unary()?;
+        while let Some(_) = self.next_matches(&TokenEnum::KeywordAs) {
+            let (ty, ty_meta) = self.parse_type()?;
+            let meta = MetaInfo {
+                start: x.1.start,
+                end: ty_meta.end,
+            };
+            x = Expr(ExprEnum::Cast(ty, Box::new(x)), meta)
         }
         Ok(x)
     }
@@ -467,7 +484,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn parse_type(&mut self) -> Result<Type, ()> {
+    fn parse_type(&mut self) -> Result<(Type, MetaInfo), ()> {
         let (ty, meta) = self.expect_identifier()?;
         let ty = match ty.as_str() {
             "bool" => Type::Bool,
@@ -487,7 +504,7 @@ impl Parser {
                 return Err(());
             }
         };
-        Ok(ty)
+        Ok((ty, meta))
     }
 
     fn expect_identifier(&mut self) -> Result<(String, MetaInfo), ()> {

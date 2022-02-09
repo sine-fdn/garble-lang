@@ -117,11 +117,11 @@ impl<'a> Scanner<'a> {
                     if self.next_matches('>') {
                         self.push_token(TokenEnum::Arrow);
                     } else {
-                        let mut digits = vec![];
+                        let mut digits = vec!['-'];
                         while let Some(digit) = self.next_matches_digit() {
                             digits.push(digit);
                         }
-                        if digits.is_empty() {
+                        if digits.len() == 1 {
                             self.push_token(TokenEnum::Minus);
                         } else {
                             let n: String = digits.into_iter().collect();
@@ -162,6 +162,7 @@ impl<'a> Scanner<'a> {
                             "if" => self.push_token(TokenEnum::KeywordIf),
                             "else" => self.push_token(TokenEnum::KeywordElse),
                             "match" => self.push_token(TokenEnum::KeywordMatch),
+                            "as" => self.push_token(TokenEnum::KeywordAs),
                             _ => self.push_token(TokenEnum::Identifier(identifier)),
                         }
                     } else {

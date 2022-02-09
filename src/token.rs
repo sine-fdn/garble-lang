@@ -12,6 +12,7 @@ pub enum TokenEnum {
     KeywordIf,
     KeywordElse,
     KeywordMatch,
+    KeywordAs,
     Dot,
     Comma,
     Semicolon,
