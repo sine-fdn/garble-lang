@@ -43,15 +43,13 @@ pub struct RustishParseError(pub RustishParseErrorEnum, pub MetaInfo);
 #[derive(Debug, Clone)]
 
 pub enum RustishParseErrorEnum {
+    InvalidTopLevelDef,
     InvalidParty,
     MissingMainFnDef,
     ExpectedType,
     ExpectedExpr,
-    ExpectedIdentifier(Option<TokenEnum>),
-    UnexpectedToken {
-        expected: TokenEnum,
-        actual: Option<TokenEnum>,
-    },
+    ExpectedIdentifier,
+    UnexpectedToken,
 }
 
 // fn main(x: A::bool) -> bool {
@@ -84,23 +82,95 @@ impl Parser {
     }
 
     fn parse(mut self) -> Result<Program, Vec<RustishParseError>> {
-        if let Ok(main) = self.parse_main_fn_def() {
+        let top_level_keywords = [TokenEnum::KeywordFn];
+        let mut fn_defs = vec![];
+        let mut main_fn_def = None;
+        let mut has_main = false;
+        while let Some(Token(token_enum, meta)) = self.tokens.next() {
+            match token_enum {
+                TokenEnum::KeywordFn => {
+                    if let Some(Token(TokenEnum::Identifier(fn_name), _)) = self.tokens.peek() {
+                        if fn_name.as_str() == "main" {
+                            has_main = true;
+                            if let Ok(main_def) = self.parse_main_fn_def(meta) {
+                                main_fn_def = Some(main_def);
+                            } else {
+                                self.consume_until_one_of(&top_level_keywords);
+                            }
+                        } else {
+                            if let Ok(fn_def) = self.parse_fn_def(meta) {
+                                fn_defs.push(fn_def);
+                            } else {
+                                self.consume_until_one_of(&top_level_keywords);
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    self.push_error(RustishParseErrorEnum::InvalidTopLevelDef, meta);
+                    self.consume_until_one_of(&top_level_keywords);
+                }
+            }
+        }
+        if let Some(main) = main_fn_def {
             Ok(Program {
                 enum_defs: vec![],
-                fn_defs: vec![],
+                fn_defs,
                 main,
             })
         } else {
+            if !has_main {
+                let meta = MetaInfo {
+                    start: (0, 0),
+                    end: (0, 0),
+                };
+                self.push_error(RustishParseErrorEnum::MissingMainFnDef, meta);
+            }
             Err(self.errors)
         }
     }
 
-    fn parse_main_fn_def(&mut self) -> Result<MainDef, ()> {
-        // fn main
-        let start = self.expect(&TokenEnum::KeywordFn)?;
-        let (fn_name, meta) = self.expect_identifier()?;
+    fn parse_fn_def(&mut self, start: MetaInfo) -> Result<FnDef, ()> {
+        // fn keyword was already consumed by the top-level parser
+        let (identifier, _) = self.expect_identifier()?;
+
+        // ( ... )
+        self.expect(&TokenEnum::LeftParen)?;
+        let mut params = vec![];
+        if !self.peek(&TokenEnum::RightParen) {
+            params.extend(self.parse_params()?);
+            self.expect(&TokenEnum::RightParen)?;
+        } else {
+            self.expect(&TokenEnum::RightParen)?;
+        }
+
+        // -> <ty>
+        self.expect(&TokenEnum::Arrow)?;
+        let ty = self.parse_type()?;
+
+        // { ... }
+        self.expect(&TokenEnum::LeftBrace)?;
+        let body = self.parse_expr()?;
+        let end = self.expect(&TokenEnum::RightBrace)?;
+
+        let meta = MetaInfo {
+            start: start.start,
+            end: end.end,
+        };
+        Ok(FnDef {
+            ty,
+            identifier,
+            params,
+            body,
+            meta,
+        })
+    }
+
+    fn parse_main_fn_def(&mut self, start: MetaInfo) -> Result<MainDef, ()> {
+        // fn keyword was already consumed by the top-level parser
+        let (fn_name, _) = self.expect_identifier()?;
         if fn_name.as_str() != "main" {
-            self.push_error(RustishParseErrorEnum::MissingMainFnDef, meta);
+            panic!("this function should not have been called on a non-main fn def");
         }
 
         // ( ... )
@@ -132,6 +202,22 @@ impl Parser {
             body,
             meta,
         })
+    }
+
+    fn parse_params(&mut self) -> Result<Vec<ParamDef>, ()> {
+        let mut params = vec![self.parse_param()?];
+        while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+            params.push(self.parse_param()?);
+        }
+        Ok(params)
+    }
+
+    fn parse_param(&mut self) -> Result<ParamDef, ()> {
+        // <param>: <type>
+        let (param_name, _) = self.expect_identifier()?;
+        self.expect(&TokenEnum::Colon)?;
+        let ty = self.parse_type()?;
+        Ok(ParamDef(param_name, ty))
     }
 
     fn parse_party_params(&mut self) -> Result<Vec<(Party, ParamDef)>, ()> {
@@ -168,7 +254,10 @@ impl Parser {
             let binding = self.parse_expr()?;
             self.expect(&TokenEnum::Semicolon)?;
             let body = self.parse_expr()?;
-            Ok(Expr(ExprEnum::Let(var, Box::new(binding), Box::new(body)), meta))
+            Ok(Expr(
+                ExprEnum::Let(var, Box::new(binding), Box::new(body)),
+                meta,
+            ))
         } else {
             self.parse_equality()
         }
@@ -328,7 +417,22 @@ impl Parser {
                 TokenEnum::Identifier(identifier) => match identifier.as_str() {
                     "true" => Expr(ExprEnum::True, meta),
                     "false" => Expr(ExprEnum::False, meta),
-                    _ => Expr(ExprEnum::Identifier(identifier), meta),
+                    _ => {
+                        if let Some(_) = self.next_matches(&TokenEnum::LeftParen) {
+                            let mut args = vec![self.parse_expr()?];
+                            while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+                                args.push(self.parse_expr()?);
+                            }
+                            let end = self.expect(&TokenEnum::RightParen)?;
+                            let meta = MetaInfo {
+                                start: meta.start,
+                                end: end.end,
+                            };
+                            Expr(ExprEnum::FnCall(identifier, args), meta)
+                        } else {
+                            Expr(ExprEnum::Identifier(identifier), meta)
+                        }
+                    }
                 },
                 TokenEnum::UnsignedNum(n) => Expr(ExprEnum::NumUnsigned(n), meta),
                 TokenEnum::SignedNum(n) => Expr(ExprEnum::NumSigned(n), meta),
@@ -376,8 +480,7 @@ impl Parser {
         if let Some(identifier) = self.next_matches_identifier() {
             Ok(identifier)
         } else {
-            let actual = self.tokens.peek().map(|Token(t, _)| t.clone());
-            self.push_error_for_next(RustishParseErrorEnum::ExpectedIdentifier(actual));
+            self.push_error_for_next(RustishParseErrorEnum::ExpectedIdentifier);
             Err(())
         }
     }
@@ -390,10 +493,19 @@ impl Parser {
                 return Ok(meta);
             }
         }
-        let expected = t.clone();
-        let actual = self.tokens.peek().map(|Token(t, _)| t.clone());
-        self.push_error_for_next(RustishParseErrorEnum::UnexpectedToken { expected, actual });
+        self.push_error_for_next(RustishParseErrorEnum::UnexpectedToken);
         Err(())
+    }
+
+    fn consume_until_one_of(&mut self, options: &[TokenEnum]) {
+        while let Some(Token(token_enum, _)) = self.tokens.peek() {
+            for option in options {
+                if option == token_enum {
+                    return;
+                }
+            }
+            self.tokens.next();
+        }
     }
 
     fn next_matches_one_of(&mut self, options: &[TokenEnum]) -> Option<(TokenEnum, MetaInfo)> {

@@ -73,19 +73,22 @@ fn main(x: A::u16) -> u16 {
     Ok(())
 }
 
-/*#[test]
+#[test]
 fn compile_static_fn_defs() -> Result<(), String> {
     let prg = "
-(fn add u16 (param x u16) (param y u16)
-  (+ x y))
+fn add(x: u16, y: u16) -> u16 {
+    x + y
+}
 
-(fn inc u16 (param x u16)
-  (call add x 1))
+fn inc(x: u16) -> u16 {
+    add(x, 1)
+}
 
-(fn main u16 (param x A u16)
-  (call inc x))
+fn main(x: A::u16) -> u16 {
+    inc(x)
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     computation.set_u16(Party::A, 255);
     computation.run().map_err(|e| e.prettify(prg))?;
@@ -999,4 +1002,3 @@ fn compile_exhaustive_nested_pattern() -> Result<(), String> {
     }
     Ok(())
 }
-*/
