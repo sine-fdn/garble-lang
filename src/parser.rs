@@ -258,6 +258,20 @@ impl Parser {
                 ExprEnum::Let(var, Box::new(binding), Box::new(body)),
                 meta,
             ))
+        } else if let Some(meta) = self.next_matches(&TokenEnum::KeywordIf) {
+            // if <cond> { <then> } else { <else> }
+            let cond_expr = self.parse_expr()?;
+            self.expect(&TokenEnum::LeftBrace)?;
+            let then_expr = self.parse_expr()?;
+            self.expect(&TokenEnum::RightBrace)?;
+            self.expect(&TokenEnum::KeywordElse)?;
+            self.expect(&TokenEnum::LeftBrace)?;
+            let else_expr = self.parse_expr()?;
+            self.expect(&TokenEnum::RightBrace)?;
+            Ok(Expr(
+                ExprEnum::If(Box::new(cond_expr), Box::new(then_expr), Box::new(else_expr)),
+                meta
+            ))
         } else {
             self.parse_equality()
         }

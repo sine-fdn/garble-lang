@@ -156,8 +156,12 @@ impl<'a> Scanner<'a> {
                         }
                         let identifier: String = chars.into_iter().collect();
                         match identifier.as_str() {
+                            "enum" => self.push_token(TokenEnum::KeywordEnum),
                             "fn" => self.push_token(TokenEnum::KeywordFn),
                             "let" => self.push_token(TokenEnum::KeywordLet),
+                            "if" => self.push_token(TokenEnum::KeywordIf),
+                            "else" => self.push_token(TokenEnum::KeywordElse),
+                            "match" => self.push_token(TokenEnum::KeywordMatch),
                             _ => self.push_token(TokenEnum::Identifier(identifier)),
                         }
                     } else {

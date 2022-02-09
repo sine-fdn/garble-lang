@@ -99,12 +99,15 @@ fn main(x: A::u16) -> u16 {
 #[test]
 fn compile_if() -> Result<(), String> {
     let prg = "
-(fn main u8 (param x A bool)
-  (if (^ (& true false) x)
-    100
-    50))
+fn main(x: A::bool) -> u8 {
+    if (true & false) ^ x {
+        100
+    } else {
+        50
+    }
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for b in [true, false] {
         let expected = if b { 100 } else { 50 };
@@ -118,10 +121,11 @@ fn compile_if() -> Result<(), String> {
 #[test]
 fn compile_bit_ops_for_numbers() -> Result<(), String> {
     let prg = "
-(fn main u16 (param x A u16) (param y A u16) (param z A u16)
-  (| x (& y (^ z 2))))
+fn main(x: A::u16, y: A::u16, z: A::u16) -> u16 {
+    x | (y & (z ^ 2))
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in 10..20 {
         for y in 10..20 {
@@ -144,12 +148,11 @@ fn compile_bit_ops_for_numbers() -> Result<(), String> {
 #[test]
 fn compile_greater_than_and_less_than() -> Result<(), String> {
     let prg = "
-(fn main bool (param x A u16) (param y A u16)
-  (&
-    (> x y)
-    (< x 10)))
+fn main(x: A::u16, y: A::u16) -> bool {
+    (x > y) & (x < 10)
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in 5..15 {
         for y in 5..15 {
@@ -169,10 +172,11 @@ fn compile_greater_than_and_less_than() -> Result<(), String> {
 #[test]
 fn compile_equals_and_not_equals() -> Result<(), String> {
     let prg = "
-(fn main bool (param x A u16) (param y A u16)
-  (& (== x y) (!= x 0)))
+fn main(x: A::u16, y: A::u16) -> bool {
+    (x == y) & (x != 0)
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in 0..2 {
         for y in 0..2 {
