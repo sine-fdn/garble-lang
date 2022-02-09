@@ -157,6 +157,7 @@ impl<'a> Scanner<'a> {
                         let identifier: String = chars.into_iter().collect();
                         match identifier.as_str() {
                             "fn" => self.push_token(TokenEnum::KeywordFn),
+                            "let" => self.push_token(TokenEnum::KeywordLet),
                             _ => self.push_token(TokenEnum::Identifier(identifier)),
                         }
                     } else {

@@ -7,6 +7,7 @@ pub enum TokenEnum {
     UnsignedNum(u128),
     SignedNum(i128),
     KeywordFn,
+    KeywordLet,
     Dot,
     Comma,
     Semicolon,

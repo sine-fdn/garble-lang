@@ -161,7 +161,17 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, ()> {
-        self.parse_equality()
+        if let Some(meta) = self.next_matches(&TokenEnum::KeywordLet) {
+            // let <var> = <binding>; <body>
+            let (var, _) = self.expect_identifier()?;
+            self.expect(&TokenEnum::Eq)?;
+            let binding = self.parse_expr()?;
+            self.expect(&TokenEnum::Semicolon)?;
+            let body = self.parse_expr()?;
+            Ok(Expr(ExprEnum::Let(var, Box::new(binding), Box::new(body)), meta))
+        } else {
+            self.parse_equality()
+        }
     }
 
     fn parse_equality(&mut self) -> Result<Expr, ()> {
