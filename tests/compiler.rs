@@ -647,12 +647,13 @@ fn compile_array_access() -> Result<(), String> {
     let array_size = 256;
     let prg = &format!(
         "
-(fn main i8 (param x A i8) (param i A usize)
-  (array-get (array x {}) i))
+fn main(x: A::i8, i: A::usize) -> i8 {{
+    [x; {}][i]
+}}
 ",
         array_size
     );
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..10 {
         for i in 0..array_size {
@@ -670,14 +671,15 @@ fn compile_array_assignment() -> Result<(), String> {
     let array_size = 8;
     let prg = &format!(
         "
-(fn main i8 (param x A i8) (param i A usize) (param j A usize)
-  (let arr (array x {})
-    (let arr (array-set arr i (* x 2))
-      (array-get arr j))))
+fn main(x: A::i8, i: A::usize, j: A::usize) -> i8 {{
+    let arr = [x; {}];
+    let arr = arr[i -> x * 2];
+    arr[j]
+}}
 ",
         array_size
     );
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     let x = -5;
     for i in 0..array_size {

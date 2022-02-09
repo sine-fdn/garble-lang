@@ -43,9 +43,11 @@ pub struct RustishParseError(pub RustishParseErrorEnum, pub MetaInfo);
 #[derive(Debug, Clone)]
 
 pub enum RustishParseErrorEnum {
+    MissingMainFnDef,
     InvalidTopLevelDef,
     InvalidParty,
-    MissingMainFnDef,
+    InvalidArraySize,
+    ExpectedConstantArraySize,
     ExpectedType,
     ExpectedExpr,
     ExpectedIdentifier,
@@ -443,7 +445,7 @@ impl Parser {
     }
 
     fn parse_primary(&mut self) -> Result<Expr, ()> {
-        let expr = if let Some(Token(token_enum, meta)) = self.tokens.next() {
+        let mut expr = if let Some(Token(token_enum, meta)) = self.tokens.next() {
             match token_enum {
                 TokenEnum::Identifier(identifier) => match identifier.as_str() {
                     "true" => Expr(ExprEnum::True, meta),
@@ -472,6 +474,28 @@ impl Parser {
                     self.expect(&TokenEnum::RightParen)?;
                     expr
                 }
+                TokenEnum::LeftBracket => {
+                    let elem = self.parse_expr()?;
+                    self.expect(&TokenEnum::Semicolon)?;
+                    let size = if let Some(Token(TokenEnum::UnsignedNum(n), meta)) =
+                        self.tokens.peek()
+                    {
+                        let n = *n;
+                        let meta = *meta;
+                        self.tokens.next();
+                        if n <= usize::MAX as u128 {
+                            n as usize
+                        } else {
+                            self.push_error(RustishParseErrorEnum::InvalidArraySize, meta);
+                            return Err(());
+                        }
+                    } else {
+                        self.push_error_for_next(RustishParseErrorEnum::ExpectedConstantArraySize);
+                        return Err(());
+                    };
+                    self.expect(&TokenEnum::RightBracket)?;
+                    Expr(ExprEnum::ArrayLiteral(Box::new(elem), size), meta)
+                }
                 _ => {
                     self.push_error(RustishParseErrorEnum::ExpectedExpr, meta);
                     return Err(());
@@ -481,6 +505,25 @@ impl Parser {
             self.push_error_for_next(RustishParseErrorEnum::ExpectedExpr);
             return Err(());
         };
+        while let Some(_) = self.next_matches(&TokenEnum::LeftBracket) {
+            let index = self.parse_expr()?;
+            if let Some(_) = self.next_matches(&TokenEnum::Arrow) {
+                let replacement = self.parse_expr()?;
+                let end = self.expect(&TokenEnum::RightBracket)?;
+                let meta = MetaInfo {
+                    start: expr.1.start,
+                    end: end.end,
+                };
+                expr = Expr(ExprEnum::ArrayAssignment(Box::new(expr), Box::new(index), Box::new(replacement)), meta);
+            } else {
+                let end = self.expect(&TokenEnum::RightBracket)?;
+                let meta = MetaInfo {
+                    start: expr.1.start,
+                    end: end.end,
+                };
+                expr = Expr(ExprEnum::ArrayAccess(Box::new(expr), Box::new(index)), meta);
+            }
+        }
         Ok(expr)
     }
 
