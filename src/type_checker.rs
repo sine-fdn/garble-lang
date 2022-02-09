@@ -6,7 +6,7 @@ use crate::{
         VariantExprEnum,
     },
     env::Env,
-    parser::MetaInfo,
+    token::MetaInfo,
     typed_ast,
 };
 

@@ -1,25 +1,13 @@
-use crate::ast::{
-    Closure, EnumDef, Expr, ExprEnum, FnDef, MainDef, Op, ParamDef, Party, Pattern, PatternEnum,
-    Program, Type, UnaryOp, Variant, VariantExpr, VariantExprEnum,
+use std::{iter::Peekable, vec::IntoIter};
+
+use crate::{
+    ast::{
+        Closure, EnumDef, Expr, ExprEnum, FnDef, MainDef, Op, ParamDef, Party, Pattern,
+        PatternEnum, Program, Type, UnaryOp, Variant, VariantExpr, VariantExprEnum,
+    },
+    scanner::Tokens,
+    token::{MetaInfo, Token, TokenEnum},
 };
-
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
-pub struct MetaInfo {
-    pub start: (usize, usize),
-    pub end: (usize, usize),
-}
-
-impl std::fmt::Debug for MetaInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(
-            format!(
-                "{}:{}-{}:{}",
-                self.start.0, self.start.1, self.end.0, self.end.1
-            )
-            .as_str(),
-        )
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct ParseError(pub ParseErrorEnum, pub MetaInfo);
@@ -47,6 +35,415 @@ pub enum ParseErrorEnum {
     InvalidExpr,
     ArrayMaxSizeExceeded(u128),
     TupleMaxSizeExceeded(u128),
+}
+
+#[derive(Debug, Clone)]
+pub struct RustishParseError(pub RustishParseErrorEnum, pub MetaInfo);
+
+#[derive(Debug, Clone)]
+
+pub enum RustishParseErrorEnum {
+    InvalidParty,
+    MissingMainFnDef,
+    ExpectedType,
+    ExpectedExpr,
+    ExpectedIdentifier(Option<TokenEnum>),
+    UnexpectedToken {
+        expected: TokenEnum,
+        actual: Option<TokenEnum>,
+    },
+}
+
+// fn main(x: A::bool) -> bool {
+//     x ^ y
+// }
+
+// program = main_fn
+// main_fn = KeywordFn Identifier("main") LeftParen (param (Comma param)*)? RightParent Arrow Identifier(_) LeftBrace expr RightBrace
+// param = Identifier(_) Colon Identifier(_) DoubleColon Identifier(_)
+// expr
+
+impl Tokens {
+    pub fn parse(self) -> Result<Program, Vec<RustishParseError>> {
+        println!("{:?}", self.0);
+        Parser::new(self.0).parse()
+    }
+}
+
+struct Parser {
+    tokens: Peekable<IntoIter<Token>>,
+    errors: Vec<RustishParseError>,
+}
+
+impl Parser {
+    fn new(tokens: Vec<Token>) -> Self {
+        Self {
+            tokens: tokens.into_iter().peekable(),
+            errors: vec![],
+        }
+    }
+
+    fn parse(mut self) -> Result<Program, Vec<RustishParseError>> {
+        if let Ok(main) = self.parse_main_fn_def() {
+            Ok(Program {
+                enum_defs: vec![],
+                fn_defs: vec![],
+                main,
+            })
+        } else {
+            Err(self.errors)
+        }
+    }
+
+    fn parse_main_fn_def(&mut self) -> Result<MainDef, ()> {
+        // fn main
+        let start = self.expect(&TokenEnum::KeywordFn)?;
+        let (fn_name, meta) = self.expect_identifier()?;
+        if fn_name.as_str() != "main" {
+            self.push_error(RustishParseErrorEnum::MissingMainFnDef, meta);
+        }
+
+        // ( ... )
+        self.expect(&TokenEnum::LeftParen)?;
+        let mut params = vec![];
+        if !self.peek(&TokenEnum::RightParen) {
+            params.extend(self.parse_party_params()?);
+            self.expect(&TokenEnum::RightParen)?;
+        } else {
+            self.expect(&TokenEnum::RightParen)?;
+        }
+
+        // -> <ty>
+        self.expect(&TokenEnum::Arrow)?;
+        let ty = self.parse_type()?;
+
+        // { ... }
+        self.expect(&TokenEnum::LeftBrace)?;
+        let body = self.parse_expr()?;
+        let end = self.expect(&TokenEnum::RightBrace)?;
+
+        let meta = MetaInfo {
+            start: start.start,
+            end: end.end,
+        };
+        Ok(MainDef {
+            ty,
+            params,
+            body,
+            meta,
+        })
+    }
+
+    fn parse_party_params(&mut self) -> Result<Vec<(Party, ParamDef)>, ()> {
+        let mut params = vec![self.parse_party_param()?];
+        while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+            params.push(self.parse_party_param()?);
+        }
+        Ok(params)
+    }
+
+    fn parse_party_param(&mut self) -> Result<(Party, ParamDef), ()> {
+        // <param>: <party>::<type>
+        let (param_name, _) = self.expect_identifier()?;
+        self.expect(&TokenEnum::Colon)?;
+        let (party, party_meta) = self.expect_identifier()?;
+        let party = match party.as_str() {
+            "A" => Party::A,
+            "B" => Party::B,
+            _ => {
+                self.push_error(RustishParseErrorEnum::InvalidParty, party_meta);
+                return Err(());
+            }
+        };
+        self.expect(&TokenEnum::DoubleColon)?;
+        let ty = self.parse_type()?;
+        Ok((party, ParamDef(param_name, ty)))
+    }
+
+    fn parse_expr(&mut self) -> Result<Expr, ()> {
+        self.parse_equality()
+    }
+
+    fn parse_equality(&mut self) -> Result<Expr, ()> {
+        // ==, !=
+        let ops = vec![TokenEnum::DoubleEq, TokenEnum::BangEq];
+        let mut x = self.parse_comparison()?;
+        while let Some((token, _)) = self.next_matches_one_of(&ops) {
+            let y = self.parse_comparison()?;
+            let meta = join_meta(&x, &y);
+            let op = match token {
+                TokenEnum::DoubleEq => Op::Eq,
+                TokenEnum::BangEq => Op::NotEq,
+                _ => unreachable!(),
+            };
+            x = Expr(ExprEnum::Op(op, Box::new(x), Box::new(y)), meta);
+        }
+        Ok(x)
+    }
+
+    fn parse_comparison(&mut self) -> Result<Expr, ()> {
+        // >, <
+        let ops = vec![TokenEnum::LessThan, TokenEnum::GreaterThan];
+        let mut x = self.parse_logical_or()?;
+        while let Some((token, _)) = self.next_matches_one_of(&ops) {
+            let y = self.parse_logical_or()?;
+            let meta = join_meta(&x, &y);
+            let op = match token {
+                TokenEnum::LessThan => Op::LessThan,
+                TokenEnum::GreaterThan => Op::GreaterThan,
+                _ => unreachable!(),
+            };
+            x = Expr(ExprEnum::Op(op, Box::new(x), Box::new(y)), meta);
+        }
+        Ok(x)
+    }
+
+    fn parse_logical_or(&mut self) -> Result<Expr, ()> {
+        // |
+        let mut x = self.parse_logical_xor()?;
+        while let Some(_) = self.next_matches(&TokenEnum::Bar) {
+            let y = self.parse_logical_xor()?;
+            let meta = join_meta(&x, &y);
+            x = Expr(ExprEnum::Op(Op::BitOr, Box::new(x), Box::new(y)), meta);
+        }
+        Ok(x)
+    }
+
+    fn parse_logical_xor(&mut self) -> Result<Expr, ()> {
+        // ^
+        let mut x = self.parse_logical_and()?;
+        while let Some(_) = self.next_matches(&TokenEnum::Caret) {
+            let y = self.parse_logical_and()?;
+            let meta = join_meta(&x, &y);
+            x = Expr(ExprEnum::Op(Op::BitXor, Box::new(x), Box::new(y)), meta);
+        }
+        Ok(x)
+    }
+
+    fn parse_logical_and(&mut self) -> Result<Expr, ()> {
+        // &
+        let mut x = self.parse_shift()?;
+        while let Some(_) = self.next_matches(&TokenEnum::Ampersand) {
+            let y = self.parse_shift()?;
+            let meta = join_meta(&x, &y);
+            x = Expr(ExprEnum::Op(Op::BitAnd, Box::new(x), Box::new(y)), meta);
+        }
+        Ok(x)
+    }
+
+    fn parse_shift(&mut self) -> Result<Expr, ()> {
+        // <<, >>
+        let ops = vec![TokenEnum::DoubleLessThan, TokenEnum::DoubleGreaterThan];
+        let mut x = self.parse_term()?;
+        while let Some((token, _)) = self.next_matches_one_of(&ops) {
+            let y = self.parse_term()?;
+            let meta = join_meta(&x, &y);
+            let op = match token {
+                TokenEnum::DoubleLessThan => Op::ShiftLeft,
+                TokenEnum::DoubleGreaterThan => Op::ShiftRight,
+                _ => unreachable!(),
+            };
+            x = Expr(ExprEnum::Op(op, Box::new(x), Box::new(y)), meta);
+        }
+        Ok(x)
+    }
+
+    fn parse_term(&mut self) -> Result<Expr, ()> {
+        // +, -
+        let ops = vec![TokenEnum::Plus, TokenEnum::Minus];
+        let mut x = self.parse_factor()?;
+        while let Some((token, _)) = self.next_matches_one_of(&ops) {
+            let y = self.parse_factor()?;
+            let meta = join_meta(&x, &y);
+            let op = match token {
+                TokenEnum::Plus => Op::Add,
+                TokenEnum::Minus => Op::Sub,
+                _ => unreachable!(),
+            };
+            x = Expr(ExprEnum::Op(op, Box::new(x), Box::new(y)), meta);
+        }
+        Ok(x)
+    }
+
+    fn parse_factor(&mut self) -> Result<Expr, ()> {
+        // *, /, %
+        let ops = vec![TokenEnum::Star, TokenEnum::Slash, TokenEnum::Percent];
+        let mut x = self.parse_unary()?;
+        while let Some((token, _)) = self.next_matches_one_of(&ops) {
+            let y = self.parse_unary()?;
+            let meta = join_meta(&x, &y);
+            let op = match token {
+                TokenEnum::Star => Op::Mul,
+                TokenEnum::Percent => Op::Mod,
+                TokenEnum::Slash => Op::Div,
+                _ => unreachable!(),
+            };
+            x = Expr(ExprEnum::Op(op, Box::new(x), Box::new(y)), meta);
+        }
+        Ok(x)
+    }
+
+    fn parse_unary(&mut self) -> Result<Expr, ()> {
+        // -, !
+        if let Some(meta) = self.next_matches(&TokenEnum::Bang) {
+            let primary = self.parse_primary()?;
+            let Expr(_, expr_meta) = primary;
+            let meta = MetaInfo {
+                start: meta.start,
+                end: expr_meta.end,
+            };
+            Ok(Expr(
+                ExprEnum::UnaryOp(UnaryOp::Not, Box::new(primary)),
+                meta,
+            ))
+        } else if let Some(meta) = self.next_matches(&TokenEnum::Minus) {
+            let primary = self.parse_primary()?;
+            let Expr(_, expr_meta) = primary;
+            let meta = MetaInfo {
+                start: meta.start,
+                end: expr_meta.end,
+            };
+            Ok(Expr(
+                ExprEnum::UnaryOp(UnaryOp::Neg, Box::new(primary)),
+                meta,
+            ))
+        } else {
+            self.parse_primary()
+        }
+    }
+
+    fn parse_primary(&mut self) -> Result<Expr, ()> {
+        let expr = if let Some(Token(token_enum, meta)) = self.tokens.next() {
+            match token_enum {
+                TokenEnum::Identifier(identifier) => match identifier.as_str() {
+                    "true" => Expr(ExprEnum::True, meta),
+                    "false" => Expr(ExprEnum::False, meta),
+                    _ => Expr(ExprEnum::Identifier(identifier), meta),
+                },
+                TokenEnum::UnsignedNum(n) => Expr(ExprEnum::NumUnsigned(n), meta),
+                TokenEnum::SignedNum(n) => Expr(ExprEnum::NumSigned(n), meta),
+                TokenEnum::LeftParen => {
+                    let expr = self.parse_expr()?;
+                    self.expect(&TokenEnum::RightParen)?;
+                    expr
+                }
+                _ => {
+                    self.push_error(RustishParseErrorEnum::ExpectedExpr, meta);
+                    return Err(());
+                }
+            }
+        } else {
+            self.push_error_for_next(RustishParseErrorEnum::ExpectedExpr);
+            return Err(());
+        };
+        Ok(expr)
+    }
+
+    fn parse_type(&mut self) -> Result<Type, ()> {
+        let (ty, meta) = self.expect_identifier()?;
+        let ty = match ty.as_str() {
+            "bool" => Type::Bool,
+            "usize" => Type::Usize,
+            "u8" => Type::U8,
+            "u16" => Type::U16,
+            "u32" => Type::U32,
+            "u64" => Type::U64,
+            "u128" => Type::U128,
+            "i8" => Type::I8,
+            "i16" => Type::I16,
+            "i32" => Type::I32,
+            "i64" => Type::I64,
+            "i128" => Type::I128,
+            _ => {
+                self.push_error(RustishParseErrorEnum::ExpectedType, meta);
+                return Err(());
+            }
+        };
+        Ok(ty)
+    }
+
+    fn expect_identifier(&mut self) -> Result<(String, MetaInfo), ()> {
+        if let Some(identifier) = self.next_matches_identifier() {
+            Ok(identifier)
+        } else {
+            let actual = self.tokens.peek().map(|Token(t, _)| t.clone());
+            self.push_error_for_next(RustishParseErrorEnum::ExpectedIdentifier(actual));
+            Err(())
+        }
+    }
+
+    fn expect(&mut self, t: &TokenEnum) -> Result<MetaInfo, ()> {
+        if let Some(Token(next_token, meta)) = self.tokens.peek() {
+            if next_token == t {
+                let meta = *meta;
+                self.tokens.next();
+                return Ok(meta);
+            }
+        }
+        let expected = t.clone();
+        let actual = self.tokens.peek().map(|Token(t, _)| t.clone());
+        self.push_error_for_next(RustishParseErrorEnum::UnexpectedToken { expected, actual });
+        Err(())
+    }
+
+    fn next_matches_one_of(&mut self, options: &[TokenEnum]) -> Option<(TokenEnum, MetaInfo)> {
+        for option in options {
+            if let Some(meta) = self.next_matches(option) {
+                return Some((option.clone(), meta));
+            }
+        }
+        None
+    }
+
+    fn next_matches_identifier(&mut self) -> Option<(String, MetaInfo)> {
+        match self.tokens.peek() {
+            Some(Token(TokenEnum::Identifier(_), _)) => match self.tokens.next() {
+                Some(Token(TokenEnum::Identifier(identifier), meta)) => Some((identifier, meta)),
+                _ => unreachable!(),
+            },
+            _ => None,
+        }
+    }
+
+    fn next_matches(&mut self, t: &TokenEnum) -> Option<MetaInfo> {
+        if self.peek(t) {
+            if let Some(Token(_, meta)) = self.tokens.next() {
+                return Some(meta);
+            }
+        }
+        None
+    }
+
+    fn peek(&mut self, t: &TokenEnum) -> bool {
+        if let Some(Token(next_token, _)) = self.tokens.peek() {
+            return next_token == t;
+        }
+        false
+    }
+
+    fn push_error_for_next(&mut self, err: RustishParseErrorEnum) {
+        let meta = self
+            .tokens
+            .next()
+            .map(|Token(_, meta)| meta)
+            .unwrap_or_else(|| MetaInfo {
+                start: (0, 0),
+                end: (0, 0),
+            });
+        self.errors.push(RustishParseError(err, meta));
+    }
+
+    fn push_error(&mut self, err: RustishParseErrorEnum, meta: MetaInfo) {
+        self.errors.push(RustishParseError(err, meta));
+        self.tokens.next();
+    }
+}
+
+fn join_meta(x: &Expr, y: &Expr) -> MetaInfo {
+    MetaInfo {
+        start: x.1.start,
+        end: y.1.end,
+    }
 }
 
 pub fn parse(prg: &str) -> Result<Program, ParseError> {
@@ -582,7 +979,7 @@ fn parse_pattern(sexpr: Sexpr) -> Result<Pattern, ParseError> {
                         fields.push(parse_pattern(field)?);
                     }
                     PatternEnum::Tuple(fields)
-                },
+                }
                 "unit-variant" | "tuple-variant" => {
                     let (variant_identifier, _) = expect_identifier(pattern.next().unwrap())?;
                     let mut fields = Vec::new();

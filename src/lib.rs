@@ -1,5 +1,7 @@
 use compiler::ComputeError;
-use parser::{MetaInfo, ParseError};
+use parser::{ParseError, RustishParseError};
+use scanner::{scan, ScanError};
+use token::MetaInfo;
 use type_checker::TypeError;
 
 use {circuit::Circuit, parser::parse};
@@ -9,14 +11,38 @@ pub mod circuit;
 pub mod compiler;
 pub mod env;
 pub mod parser;
+pub mod scanner;
+pub mod token;
 pub mod type_checker;
 pub mod typed_ast;
 
+pub fn compile(prg: &str) -> Result<Circuit, Error> {
+    Ok(parse(prg)?.type_check()?.compile())
+}
+
+pub fn compile_rustish(prg: &str) -> Result<Circuit, Error> {
+    Ok(scan(prg)?.parse()?.type_check()?.compile())
+}
+
 #[derive(Debug, Clone)]
 pub enum Error {
+    ScanErrors(Vec<ScanError>),
+    RustishParseError(Vec<RustishParseError>),
     ParseError(ParseError),
     TypeError(TypeError),
     ComputeError(ComputeError),
+}
+
+impl From<Vec<ScanError>> for Error {
+    fn from(e: Vec<ScanError>) -> Self {
+        Self::ScanErrors(e)
+    }
+}
+
+impl From<Vec<RustishParseError>> for Error {
+    fn from(e: Vec<RustishParseError>) -> Self {
+        Self::RustishParseError(e)
+    }
 }
 
 impl From<ParseError> for Error {
@@ -35,10 +61,6 @@ impl From<ComputeError> for Error {
     fn from(e: ComputeError) -> Self {
         Self::ComputeError(e)
     }
-}
-
-pub fn compile(prg: &str) -> Result<Circuit, Error> {
-    Ok(parse(prg)?.type_check()?.compile())
 }
 
 impl ParseError {
@@ -66,6 +88,30 @@ impl Error {
     pub fn prettify(&self, prg: &str) -> String {
         let mut msg = "".to_string();
         let msg = match self {
+            Error::ScanErrors(errs) => {
+                for ScanError(e, meta) in errs {
+                    msg += &format!(
+                        "Scan error on line {}:{}\n",
+                        meta.start.0 + 1,
+                        meta.start.1 + 1
+                    );
+                    msg += &format!("--> {:?}:\n", e);
+                    msg += &prettify_meta(prg, *meta);
+                }
+                msg
+            }
+            Error::RustishParseError(errs) => {
+                for RustishParseError(e, meta) in errs {
+                    msg += &format!(
+                        "Parse error on line {}:{}\n",
+                        meta.start.0 + 1,
+                        meta.start.1 + 1
+                    );
+                    msg += &format!("--> {:?}:\n", e);
+                    msg += &prettify_meta(prg, *meta);
+                }
+                msg
+            }
             Error::ParseError(ParseError(e, meta)) => {
                 msg += &format!(
                     "Parse error on line {}:{}\n",

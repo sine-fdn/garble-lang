@@ -1,4 +1,4 @@
-use crate::parser::MetaInfo;
+use crate::token::MetaInfo;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Program {

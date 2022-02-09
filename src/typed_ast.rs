@@ -1,6 +1,6 @@
 use crate::{
     ast::{EnumDef, Op, ParamDef, Party, Type, UnaryOp},
-    parser::MetaInfo,
+    token::MetaInfo,
 };
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
