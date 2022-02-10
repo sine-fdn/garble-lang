@@ -1,4 +1,4 @@
-use garble_script::{ast::Party, compile, compiler::Computation, compile_rustish};
+use garble_script::{ast::Party, compiler::Computation, compile_rustish};
 
 #[test]
 fn compile_xor() -> Result<(), String> {
@@ -861,23 +861,28 @@ fn main() -> {} {{
 #[test]
 fn compile_exhaustive_bool_pattern() -> Result<(), String> {
     let prg = "
-(enum Foobar
-  (unit-variant Foo)
-  (tuple-variant Bar bool bool))
+enum Foobar {
+    Foo,
+    Bar(bool, bool),
+}
 
-(fn main u8 (param b A bool)
-  (let choice (if b
-                (enum Foobar (tuple-variant Bar true false))
-                (enum Foobar (unit-variant Foo)))
-    (match choice
-      (clause (tuple-variant Bar false false) 1)
-      (clause (tuple-variant Bar false true) 2)
-      (clause (tuple-variant Bar _ false) 3)
-      (clause (tuple-variant Bar true true) 4)
-      (clause (unit-variant Foo) 5))))
+fn main(b: A::bool) -> u8 {
+    let choice = if b {
+        Foobar::Bar(true, false)
+    } else {
+        Foobar::Foo
+    };
+    match choice {
+        Foobar::Bar(false, false) => 1,
+        Foobar::Bar(false, true) => 2,
+        Foobar::Bar(_, false) => 3,
+        Foobar::Bar(true, true) => 4,
+        Foobar::Foo => 5,
+    }
+}
 ";
     for b in [false, true] {
-        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.set_bool(Party::A, b);
         computation.run().map_err(|e| e.prettify(prg))?;
@@ -894,20 +899,25 @@ fn compile_exhaustive_bool_pattern() -> Result<(), String> {
 #[test]
 fn compile_exhaustive_enum_pattern() -> Result<(), String> {
     let prg = "
-(enum Foobar
-  (unit-variant Foo)
-  (tuple-variant Bar u8))
+enum Foobar {
+    Foo,
+    Bar(u8)
+}
 
-(fn main u8 (param b A bool)
-  (let choice (if b
-                (enum Foobar (tuple-variant Bar 6))
-                (enum Foobar (unit-variant Foo)))
-    (match choice
-      (clause (unit-variant Foo) 5)
-      (clause (tuple-variant Bar x) x))))
+fn main(b: A::bool) -> u8 {
+    let choice = if b {
+        Foobar::Bar(6)
+    } else {
+        Foobar::Foo
+    };
+    match choice {
+        Foobar::Foo => 5,
+        Foobar::Bar(x) => x
+    }
+}
 ";
     for b in [false, true] {
-        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.set_bool(Party::A, b);
         computation.run().map_err(|e| e.prettify(prg))?;
@@ -922,18 +932,24 @@ fn compile_exhaustive_enum_pattern() -> Result<(), String> {
 #[test]
 fn compile_exhaustive_enum_pattern_with_literals() -> Result<(), String> {
     let prg = "
-(enum Ops
-  (tuple-variant Mul u8 u8)
-  (tuple-variant Div u8 u8))
+enum Ops {
+    Mul(u8, u8),
+    Div(u8, u8),
+}
 
-(fn main u8 (param choice A u8) (param x A u8) (param y A u8)
-  (let op (if (== choice 0)
-                (enum Ops (tuple-variant Mul x y))
-                (enum Ops (tuple-variant Div x y)))
-    (match op
-      (clause (tuple-variant Div x 0) 42)
-      (clause (tuple-variant Div x y) (/ x y))
-      (clause (tuple-variant Mul x y) (* x y)))))
+fn main(choice: A::u8, x: A::u8, y: A::u8) -> u8 {
+    let op = if choice == 0 {
+        Ops::Mul(x, y)
+    } else {
+        Ops::Div(x, y)
+    };
+
+    match op {
+        Ops::Div(x, 0) => 42,
+        Ops::Div(x, y) => x / y,
+        Ops::Mul(x, y) => x * y,
+    }
+}
 ";
     for choice in [0, 1] {
         for y in [0, 4] {
@@ -945,7 +961,7 @@ fn compile_exhaustive_enum_pattern_with_literals() -> Result<(), String> {
             } else {
                 x / y
             };
-            let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+            let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
             let mut computation: Computation = circuit.into();
             computation.set_u8(Party::A, choice);
             computation.set_u8(Party::A, x);
@@ -960,18 +976,20 @@ fn compile_exhaustive_enum_pattern_with_literals() -> Result<(), String> {
 #[test]
 fn compile_exhaustive_range_pattern() -> Result<(), String> {
     let prg = "
-(fn main u8 (param x A u8)
-  (match x
-    (clause (range 0 10) 1)
-    (clause 10 2)
-    (clause 11 2)
-    (clause 13 2)
-    (clause (range 12 100) 2)
-    (clause (range 100 256) 3)))
+fn main(x: A::u8) -> u8 {
+    match x {
+        0..10 => 1,
+        10 => 2,
+        11 => 2,
+        13 => 2,
+        12..100 => 2,
+        100..256 => 3,
+    }
+}
 ";
     for x in 0..255 {
         println!("Checking {}", x);
-        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.set_u8(Party::A, x);
         computation.run().map_err(|e| e.prettify(prg))?;
@@ -990,16 +1008,18 @@ fn compile_exhaustive_range_pattern() -> Result<(), String> {
 #[test]
 fn compile_exhaustive_tuple_pattern() -> Result<(), String> {
     let prg = "
-(fn main u8 (param x A u8)
-  (let x (tuple false x -5)
-    (match x
-        (clause (tuple true x y) 1)
-        (clause (tuple false 0 y) 2)
-        (clause (tuple false x y) x))))
+fn main(x: A::u8) -> u8 {
+    let x = (false, x, -5);
+    match x {
+        (true, x, y) => 1,
+        (false, 0, y) => 2,
+        (false, x, y) => x,
+    }
+}
 ";
     for x in 0..10 {
         println!("Checking {}", x);
-        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.set_u8(Party::A, x);
         computation.run().map_err(|e| e.prettify(prg))?;
@@ -1012,17 +1032,19 @@ fn compile_exhaustive_tuple_pattern() -> Result<(), String> {
 #[test]
 fn compile_exhaustive_nested_pattern() -> Result<(), String> {
     let prg = "
-(fn main u8 (param x A u8)
-  (let x (tuple x (tuple (* x 2) 1))
-    (match x
-        (clause (tuple 0 _) 1)
-        (clause (tuple (range 1 256) (tuple x_twice 1)) x_twice)
-        (clause (tuple (range 1 256) (tuple _ (range 2 256))) 0)
-        (clause (tuple (range 1 256) (tuple _ 0)) 0))))
+fn main(x: A::u8) -> u8 {
+    let x = (x, (x * 2, 1));
+    match x {
+        (0, _) => 1,
+        (1..256, (x_twice, 1)) => x_twice,
+        (1..256, (_, 1..256)) => 2,
+        (1..256, (_, 0)) => 3,
+    }
+}
 ";
     for x in 0..10 {
         println!("Checking {}", x);
-        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.set_u8(Party::A, x);
         computation.run().map_err(|e| e.prettify(prg))?;

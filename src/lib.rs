@@ -140,7 +140,6 @@ impl Error {
 }
 
 fn prettify_meta(prg: &str, meta: MetaInfo) -> String {
-    println!("meta: {:?}", meta);
     let mut msg = "".to_string();
     let lines: Vec<&str> = prg.lines().collect();
     for l in (meta.start.0 as i64 - 2)..(meta.end.0 as i64 + 2) {
