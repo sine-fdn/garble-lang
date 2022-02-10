@@ -373,10 +373,10 @@ impl Parser {
                             }
                             let meta_end = self.expect(&TokenEnum::RightParen)?;
                             let meta = join_meta(meta_start, meta_end);
-                            Ok(Pattern(PatternEnum::EnumTuple(variant_name, fields), meta))
+                            Ok(Pattern(PatternEnum::EnumTuple(identifier, variant_name, fields), meta))
                         } else {
                             let meta = join_meta(meta, variant_meta);
-                            Ok(Pattern(PatternEnum::EnumUnit(variant_name), meta))
+                            Ok(Pattern(PatternEnum::EnumUnit(identifier, variant_name), meta))
                         }
                     } else {
                         // TODO: need to distinguish between identifier and unit enums

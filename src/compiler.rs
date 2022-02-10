@@ -784,14 +784,7 @@ impl Pattern {
                 }
                 is_match
             }
-            PatternEnum::EnumUnit(variant_name) | PatternEnum::EnumTuple(variant_name, _) => {
-                let enum_name = match ty {
-                    Type::Enum(enum_name) => enum_name,
-                    _ => panic!(
-                        "Expected an enum type for pattern {:?}, but found {:?}",
-                        pattern, ty
-                    ),
-                };
+            PatternEnum::EnumUnit(enum_name, variant_name) | PatternEnum::EnumTuple(enum_name, variant_name, _) => {
                 let enum_def = enums.get(enum_name).unwrap();
                 let tag_size = enum_tag_size(enum_def);
                 let tag_actual = &match_expr[0..tag_size];
@@ -806,8 +799,8 @@ impl Pattern {
                 }
 
                 match pattern {
-                    PatternEnum::EnumUnit(_) => {}
-                    PatternEnum::EnumTuple(_, fields) => {
+                    PatternEnum::EnumUnit(_, _) => {}
+                    PatternEnum::EnumTuple(_, _, fields) => {
                         let mut w = tag_size;
                         let field_types = enum_def.get(variant_name).unwrap();
                         for (field, field_type) in fields.iter().zip(field_types) {

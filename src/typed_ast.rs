@@ -73,8 +73,8 @@ pub enum PatternEnum {
     NumUnsigned(u128),
     NumSigned(i128),
     Tuple(Vec<Pattern>),
-    EnumUnit(String),
-    EnumTuple(String, Vec<Pattern>),
+    EnumUnit(String, String),
+    EnumTuple(String, String, Vec<Pattern>),
     UnsignedInclusiveRange(u128, u128),
     SignedInclusiveRange(i128, i128),
 }

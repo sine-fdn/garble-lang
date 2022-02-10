@@ -840,16 +840,16 @@ impl Pattern {
                 typed_ast::PatternEnum::Tuple(typed_fields)
             }
             (
-                PatternEnum::EnumUnit(variant_name) | PatternEnum::EnumTuple(variant_name, _),
-                Type::Enum(enum_name),
-            ) => {
+                PatternEnum::EnumUnit(enum_name, variant_name) | PatternEnum::EnumTuple(enum_name, variant_name, _),
+                Type::Enum(enum_def_name),
+            ) if enum_name == enum_def_name => {
                 if let Some(enum_def) = defs.enums.get(enum_name) {
                     if let Some(variant) = enum_def.get(variant_name) {
                         match (pattern, variant) {
-                            (PatternEnum::EnumUnit(_), None) => {
-                                typed_ast::PatternEnum::EnumUnit(variant_name.clone())
+                            (PatternEnum::EnumUnit(_, _), None) => {
+                                typed_ast::PatternEnum::EnumUnit(enum_name.clone(), variant_name.clone())
                             }
-                            (PatternEnum::EnumTuple(_, fields), Some(field_types)) => {
+                            (PatternEnum::EnumTuple(_, _, fields), Some(field_types)) => {
                                 if field_types.len() != fields.len() {
                                     let e = TypeErrorEnum::UnexpectedEnumVariantArity {
                                         expected: field_types.len(),
@@ -862,15 +862,16 @@ impl Pattern {
                                     typed_fields.push(field.type_check(env, defs, ty.clone())?);
                                 }
                                 typed_ast::PatternEnum::EnumTuple(
+                                    enum_name.clone(),
                                     variant_name.clone(),
                                     typed_fields,
                                 )
                             }
-                            (PatternEnum::EnumUnit(_), Some(_)) => {
+                            (PatternEnum::EnumUnit(_, _), Some(_)) => {
                                 let e = TypeErrorEnum::ExpectedTupleVariantFoundUnitVariant;
                                 return Err(TypeError(e, meta));
                             }
-                            (PatternEnum::EnumTuple(_, _), None) => {
+                            (PatternEnum::EnumTuple(_, _, _), None) => {
                                 let e = TypeErrorEnum::ExpectedUnitVariantFoundTupleVariant;
                                 return Err(TypeError(e, meta));
                             }
@@ -957,8 +958,8 @@ fn specialize(ctor: &Ctor, pattern: &[typed_ast::Pattern]) -> Vec<PatternStack> 
                 }
                 vec![fields.into_iter().chain(tail).collect()]
             }
-            typed_ast::PatternEnum::EnumUnit(v2) if v1 == v2 => vec![tail.collect()],
-            typed_ast::PatternEnum::EnumTuple(v2, fields) if v1 == v2 => {
+            typed_ast::PatternEnum::EnumUnit(_, v2) if v1 == v2 => vec![tail.collect()],
+            typed_ast::PatternEnum::EnumTuple(_, v2, fields) if v1 == v2 => {
                 vec![fields.iter().cloned().chain(tail).collect()]
             }
             _ => vec![],
