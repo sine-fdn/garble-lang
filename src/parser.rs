@@ -47,21 +47,14 @@ pub enum RustishParseErrorEnum {
     InvalidTopLevelDef,
     InvalidParty,
     InvalidArraySize,
+    InvalidTupleIndexSize,
+    InvalidMethodName,
     ExpectedConstantArraySize,
     ExpectedType,
     ExpectedExpr,
     ExpectedIdentifier,
     UnexpectedToken,
 }
-
-// fn main(x: A::bool) -> bool {
-//     x ^ y
-// }
-
-// program = main_fn
-// main_fn = KeywordFn Identifier("main") LeftParen (param (Comma param)*)? RightParent Arrow Identifier(_) LeftBrace expr RightBrace
-// param = Identifier(_) Colon Identifier(_) DoubleColon Identifier(_)
-// expr
 
 impl Tokens {
     pub fn parse(self) -> Result<Program, Vec<RustishParseError>> {
@@ -155,10 +148,7 @@ impl Parser {
         let body = self.parse_expr()?;
         let end = self.expect(&TokenEnum::RightBrace)?;
 
-        let meta = MetaInfo {
-            start: start.start,
-            end: end.end,
-        };
+        let meta = join_meta(start, end);
         Ok(FnDef {
             ty,
             identifier,
@@ -194,10 +184,7 @@ impl Parser {
         let body = self.parse_expr()?;
         let end = self.expect(&TokenEnum::RightBrace)?;
 
-        let meta = MetaInfo {
-            start: start.start,
-            end: end.end,
-        };
+        let meta = join_meta(start, end);
         Ok(MainDef {
             ty,
             params,
@@ -289,7 +276,7 @@ impl Parser {
         let mut x = self.parse_comparison()?;
         while let Some((token, _)) = self.next_matches_one_of(&ops) {
             let y = self.parse_comparison()?;
-            let meta = join_meta(&x, &y);
+            let meta = join_expr_meta(&x, &y);
             let op = match token {
                 TokenEnum::DoubleEq => Op::Eq,
                 TokenEnum::BangEq => Op::NotEq,
@@ -306,7 +293,7 @@ impl Parser {
         let mut x = self.parse_logical_or()?;
         while let Some((token, _)) = self.next_matches_one_of(&ops) {
             let y = self.parse_logical_or()?;
-            let meta = join_meta(&x, &y);
+            let meta = join_expr_meta(&x, &y);
             let op = match token {
                 TokenEnum::LessThan => Op::LessThan,
                 TokenEnum::GreaterThan => Op::GreaterThan,
@@ -322,7 +309,7 @@ impl Parser {
         let mut x = self.parse_logical_xor()?;
         while let Some(_) = self.next_matches(&TokenEnum::Bar) {
             let y = self.parse_logical_xor()?;
-            let meta = join_meta(&x, &y);
+            let meta = join_expr_meta(&x, &y);
             x = Expr(ExprEnum::Op(Op::BitOr, Box::new(x), Box::new(y)), meta);
         }
         Ok(x)
@@ -333,7 +320,7 @@ impl Parser {
         let mut x = self.parse_logical_and()?;
         while let Some(_) = self.next_matches(&TokenEnum::Caret) {
             let y = self.parse_logical_and()?;
-            let meta = join_meta(&x, &y);
+            let meta = join_expr_meta(&x, &y);
             x = Expr(ExprEnum::Op(Op::BitXor, Box::new(x), Box::new(y)), meta);
         }
         Ok(x)
@@ -344,7 +331,7 @@ impl Parser {
         let mut x = self.parse_shift()?;
         while let Some(_) = self.next_matches(&TokenEnum::Ampersand) {
             let y = self.parse_shift()?;
-            let meta = join_meta(&x, &y);
+            let meta = join_expr_meta(&x, &y);
             x = Expr(ExprEnum::Op(Op::BitAnd, Box::new(x), Box::new(y)), meta);
         }
         Ok(x)
@@ -356,7 +343,7 @@ impl Parser {
         let mut x = self.parse_term()?;
         while let Some((token, _)) = self.next_matches_one_of(&ops) {
             let y = self.parse_term()?;
-            let meta = join_meta(&x, &y);
+            let meta = join_expr_meta(&x, &y);
             let op = match token {
                 TokenEnum::DoubleLessThan => Op::ShiftLeft,
                 TokenEnum::DoubleGreaterThan => Op::ShiftRight,
@@ -373,7 +360,7 @@ impl Parser {
         let mut x = self.parse_factor()?;
         while let Some((token, _)) = self.next_matches_one_of(&ops) {
             let y = self.parse_factor()?;
-            let meta = join_meta(&x, &y);
+            let meta = join_expr_meta(&x, &y);
             let op = match token {
                 TokenEnum::Plus => Op::Add,
                 TokenEnum::Minus => Op::Sub,
@@ -390,7 +377,7 @@ impl Parser {
         let mut x = self.parse_cast()?;
         while let Some((token, _)) = self.next_matches_one_of(&ops) {
             let y = self.parse_cast()?;
-            let meta = join_meta(&x, &y);
+            let meta = join_expr_meta(&x, &y);
             let op = match token {
                 TokenEnum::Star => Op::Mul,
                 TokenEnum::Percent => Op::Mod,
@@ -406,10 +393,7 @@ impl Parser {
         let mut x = self.parse_unary()?;
         while let Some(_) = self.next_matches(&TokenEnum::KeywordAs) {
             let (ty, ty_meta) = self.parse_type()?;
-            let meta = MetaInfo {
-                start: x.1.start,
-                end: ty_meta.end,
-            };
+            let meta = join_meta(x.1, ty_meta);
             x = Expr(ExprEnum::Cast(ty, Box::new(x)), meta)
         }
         Ok(x)
@@ -420,10 +404,7 @@ impl Parser {
         if let Some(meta) = self.next_matches(&TokenEnum::Bang) {
             let primary = self.parse_primary()?;
             let Expr(_, expr_meta) = primary;
-            let meta = MetaInfo {
-                start: meta.start,
-                end: expr_meta.end,
-            };
+            let meta = join_meta(meta, expr_meta);
             Ok(Expr(
                 ExprEnum::UnaryOp(UnaryOp::Not, Box::new(primary)),
                 meta,
@@ -431,10 +412,7 @@ impl Parser {
         } else if let Some(meta) = self.next_matches(&TokenEnum::Minus) {
             let primary = self.parse_primary()?;
             let Expr(_, expr_meta) = primary;
-            let meta = MetaInfo {
-                start: meta.start,
-                end: expr_meta.end,
-            };
+            let meta = join_meta(meta, expr_meta);
             Ok(Expr(
                 ExprEnum::UnaryOp(UnaryOp::Neg, Box::new(primary)),
                 meta,
@@ -457,10 +435,7 @@ impl Parser {
                                 args.push(self.parse_expr()?);
                             }
                             let end = self.expect(&TokenEnum::RightParen)?;
-                            let meta = MetaInfo {
-                                start: meta.start,
-                                end: end.end,
-                            };
+                            let meta = join_meta(meta, end);
                             Expr(ExprEnum::FnCall(identifier, args), meta)
                         } else {
                             Expr(ExprEnum::Identifier(identifier), meta)
@@ -510,21 +485,113 @@ impl Parser {
             if let Some(_) = self.next_matches(&TokenEnum::Arrow) {
                 let replacement = self.parse_expr()?;
                 let end = self.expect(&TokenEnum::RightBracket)?;
-                let meta = MetaInfo {
-                    start: expr.1.start,
-                    end: end.end,
-                };
-                expr = Expr(ExprEnum::ArrayAssignment(Box::new(expr), Box::new(index), Box::new(replacement)), meta);
+                let meta = join_meta(expr.1, end);
+                expr = Expr(
+                    ExprEnum::ArrayAssignment(
+                        Box::new(expr),
+                        Box::new(index),
+                        Box::new(replacement),
+                    ),
+                    meta,
+                );
             } else {
                 let end = self.expect(&TokenEnum::RightBracket)?;
-                let meta = MetaInfo {
-                    start: expr.1.start,
-                    end: end.end,
-                };
+                let meta = join_meta(expr.1, end);
                 expr = Expr(ExprEnum::ArrayAccess(Box::new(expr), Box::new(index)), meta);
             }
         }
+        while let Some(_) = self.next_matches(&TokenEnum::Dot) {
+            let peeked = self.tokens.peek();
+            if let Some(Token(TokenEnum::Identifier(_), _)) = peeked {
+                expr = self.parse_method_call(expr)?;
+            } else if let Some(Token(TokenEnum::UnsignedNum(i), meta_index)) = peeked {
+                let i = *i;
+                let meta_index = *meta_index;
+                if i <= usize::MAX as u128 {
+                    self.tokens.next();
+                    let meta = join_meta(expr.1, meta_index);
+                    expr = Expr(ExprEnum::TupleAccess(Box::new(expr), i as usize), meta)
+                } else {
+                    self.push_error_for_next(RustishParseErrorEnum::InvalidTupleIndexSize);
+                }
+            }
+        }
         Ok(expr)
+    }
+
+    fn parse_method_call(&mut self, recv: Expr) -> Result<Expr, ()> {
+        let (method_name, call_start) = self.expect_identifier()?;
+        match method_name.as_str() {
+            "map" => {
+                // .map(|<param>: <type>| -> <ret_ty> { <body> })
+                self.expect(&TokenEnum::LeftParen)?;
+
+                let closure_start = self.expect(&TokenEnum::Bar)?;
+                let (param_name, _) = self.expect_identifier()?;
+                self.expect(&TokenEnum::Colon)?;
+                let (param_ty, _) = self.parse_type()?;
+                self.expect(&TokenEnum::Bar)?;
+                self.expect(&TokenEnum::Arrow)?;
+                let (ret_ty, _) = self.parse_type()?;
+                self.expect(&TokenEnum::LeftBrace)?;
+                let body = self.parse_expr()?;
+                let closure_end = self.expect(&TokenEnum::RightBrace)?;
+
+                let closure_meta = join_meta(closure_start, closure_end);
+                let closure = Closure {
+                    ty: ret_ty,
+                    params: vec![ParamDef(param_name, param_ty)],
+                    body,
+                    meta: closure_meta,
+                };
+
+                let call_end = self.expect(&TokenEnum::RightParen)?;
+                let meta = join_meta(call_start, call_end);
+                Ok(Expr(ExprEnum::Map(Box::new(recv), Box::new(closure)), meta))
+            }
+            "fold" => {
+                // .fold(<init>, |<param1>: <type1>, <param1>: <type1>| -> <ret_ty> { <body> })
+                self.expect(&TokenEnum::LeftParen)?;
+
+                let init = self.parse_expr()?;
+                self.expect(&TokenEnum::Comma)?;
+
+                let closure_start = self.expect(&TokenEnum::Bar)?;
+
+                let (param1_name, _) = self.expect_identifier()?;
+                self.expect(&TokenEnum::Colon)?;
+                let (param1_ty, _) = self.parse_type()?;
+
+                self.expect(&TokenEnum::Comma)?;
+
+                let (param2_name, _) = self.expect_identifier()?;
+                self.expect(&TokenEnum::Colon)?;
+                let (param2_ty, _) = self.parse_type()?;
+
+                self.expect(&TokenEnum::Bar)?;
+                self.expect(&TokenEnum::Arrow)?;
+                let (ret_ty, _) = self.parse_type()?;
+                self.expect(&TokenEnum::LeftBrace)?;
+                let body = self.parse_expr()?;
+                let closure_end = self.expect(&TokenEnum::RightBrace)?;
+
+                let closure_meta = join_meta(closure_start, closure_end);
+                let closure = Closure {
+                    ty: ret_ty,
+                    params: vec![ParamDef(param1_name, param1_ty), ParamDef(param2_name, param2_ty)],
+                    body,
+                    meta: closure_meta,
+                };
+
+                let call_end = self.expect(&TokenEnum::RightParen)?;
+                let meta = join_meta(call_start, call_end);
+                Ok(Expr(ExprEnum::Fold(Box::new(recv), Box::new(init), Box::new(closure)), meta))
+            }
+            _ => {
+                self.push_error(RustishParseErrorEnum::InvalidMethodName, call_start);
+                Err(())
+            }
+        }
     }
 
     fn parse_type(&mut self) -> Result<(Type, MetaInfo), ()> {
@@ -635,10 +702,14 @@ impl Parser {
     }
 }
 
-fn join_meta(x: &Expr, y: &Expr) -> MetaInfo {
+fn join_expr_meta(x: &Expr, y: &Expr) -> MetaInfo {
+    join_meta(x.1, y.1)
+}
+
+fn join_meta(x: MetaInfo, y: MetaInfo) -> MetaInfo {
     MetaInfo {
-        start: x.1.start,
-        end: y.1.end,
+        start: x.start,
+        end: y.end,
     }
 }
 

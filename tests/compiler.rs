@@ -700,14 +700,16 @@ fn compile_fold() -> Result<(), String> {
     let array_size = 8;
     let prg = &format!(
         "
-(fn main i8 (param x A i8)
-  (let arr (array x {})
-    (fold arr 0 (lambda i8 (param acc i8) (param x i8)
-      (+ acc x)))))
+fn main(x: A::i8) -> i8 {{
+    let arr = [x; {}];
+    arr.fold(0, |acc: i8, x: i8| -> i8 {{
+        acc + x
+    }})
+}}
 ",
         array_size
     );
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..10 {
         computation.set_i8(Party::A, x);
@@ -725,14 +727,15 @@ fn compile_map() -> Result<(), String> {
     let array_size = 8;
     let prg = &format!(
         "
-(fn main i8 (param x A i8) (param i A usize)
-  (let arr (array x {})
-    (let arr (map arr (lambda i8 (param x i8) (* x 2)))
-      (array-get arr i))))
+fn main(x: A::i8, i: A::usize) -> i8 {{
+    let arr = [x; {}];
+    let arr = arr.map(|x: i8| -> i8 {{x * 2}});
+    arr[i]
+}}
 ",
         array_size
     );
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..10 {
         for i in 0..array_size {
@@ -749,8 +752,8 @@ fn compile_map() -> Result<(), String> {
 fn compile_signed_casts() -> Result<(), String> {
     // signed to unsigned:
 
-    let prg = "(fn main u8 (param x A i16) (cast u8 x))";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let prg = "fn main(x: A::i16) -> u8 { x as u8 }";
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut comp: Computation = circuit.into();
     for x in -200..200 {
         comp.set_i16(Party::A, x);
@@ -758,8 +761,8 @@ fn compile_signed_casts() -> Result<(), String> {
         assert_eq!(comp.get_u8().map_err(|e| e.prettify(prg))?, x as u8);
     }
 
-    let prg = "(fn main u16 (param x A i8) (cast u16 x))";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let prg = "fn main(x: A::i8) -> u16 { x as u16 }";
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut comp: Computation = circuit.into();
     for x in -128..127 {
         comp.set_i8(Party::A, x);
@@ -769,8 +772,8 @@ fn compile_signed_casts() -> Result<(), String> {
 
     // unsigned to signed:
 
-    let prg = "(fn main i8 (param x A u16) (cast i8 x))";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let prg = "fn main(x: A::u16) -> i8 { x as i8 }";
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut comp: Computation = circuit.into();
     for x in 200..300 {
         comp.set_u16(Party::A, x);
@@ -778,8 +781,8 @@ fn compile_signed_casts() -> Result<(), String> {
         assert_eq!(comp.get_i8().map_err(|e| e.prettify(prg))?, x as i8);
     }
 
-    let prg = "(fn main i16 (param x A u8) (cast i16 x))";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let prg = "fn main(x: A::u8) -> i16 { x as i16 }";
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut comp: Computation = circuit.into();
     for x in 200..255 {
         comp.set_u8(Party::A, x);
@@ -789,8 +792,8 @@ fn compile_signed_casts() -> Result<(), String> {
 
     // signed to signed:
 
-    let prg = "(fn main i8 (param x A i16) (cast i8 x))";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let prg = "fn main(x: A::i16) -> i8 { x as i8 }";
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut comp: Computation = circuit.into();
     for x in -200..200 {
         comp.set_i16(Party::A, x);
@@ -798,8 +801,8 @@ fn compile_signed_casts() -> Result<(), String> {
         assert_eq!(comp.get_i8().map_err(|e| e.prettify(prg))?, x as i8);
     }
 
-    let prg = "(fn main i16 (param x A i8) (cast i16 x))";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let prg = "fn main(x: A::i8) -> i16 { x as i16 }";
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut comp: Computation = circuit.into();
     for x in -128..127 {
         comp.set_i8(Party::A, x);
