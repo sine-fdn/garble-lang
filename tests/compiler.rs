@@ -815,12 +815,14 @@ fn compile_signed_casts() -> Result<(), String> {
 #[test]
 fn compile_range() -> Result<(), String> {
     let prg = "
-(fn main i16
-  (let arr (range 1 101)
-    (fold arr 0 (lambda i16 (param acc i16) (param x usize)
-      (+ acc (cast i16 x))))))
+fn main() -> i16 {
+    let arr = 1..101;
+    arr.fold(0, |acc: i16, x: usize| -> i16 {
+        acc + (x as i16)
+    })
+}
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     computation.run().map_err(|e| e.prettify(prg))?;
     assert_eq!(

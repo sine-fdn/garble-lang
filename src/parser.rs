@@ -49,10 +49,12 @@ pub enum RustishParseErrorEnum {
     InvalidArraySize,
     InvalidTupleIndexSize,
     InvalidMethodName,
+    InvalidRangeExpr,
     ExpectedConstantArraySize,
     ExpectedType,
     ExpectedExpr,
     ExpectedIdentifier,
+    ExpectedMethodCallOrFieldAccess,
     UnexpectedToken,
 }
 
@@ -442,7 +444,31 @@ impl Parser {
                         }
                     }
                 },
-                TokenEnum::UnsignedNum(n) => Expr(ExprEnum::NumUnsigned(n), meta),
+                TokenEnum::UnsignedNum(n) => {
+                    if let Some(Token(TokenEnum::Dot, _)) = self.tokens.peek() {
+                        self.tokens.next();
+                        self.expect(&TokenEnum::Dot)?;
+                        if let Some(Token(TokenEnum::UnsignedNum(range_end), meta_end)) =
+                            self.tokens.peek()
+                        {
+                            let range_end = *range_end;
+                            let meta_end = *meta_end;
+                            self.tokens.next();
+                            if n < usize::MAX as u128 && range_end < usize::MAX as u128 {
+                                let meta = join_meta(meta, meta_end);
+                                Expr(ExprEnum::Range(n as usize, range_end as usize), meta)
+                            } else {
+                                self.push_error(RustishParseErrorEnum::InvalidRangeExpr, meta_end);
+                                return Err(());
+                            }
+                        } else {
+                            self.push_error_for_next(RustishParseErrorEnum::InvalidRangeExpr);
+                            return Err(());
+                        }
+                    } else {
+                        Expr(ExprEnum::NumUnsigned(n), meta)
+                    }
+                }
                 TokenEnum::SignedNum(n) => Expr(ExprEnum::NumSigned(n), meta),
                 TokenEnum::LeftParen => {
                     let expr = self.parse_expr()?;
@@ -514,6 +540,9 @@ impl Parser {
                 } else {
                     self.push_error_for_next(RustishParseErrorEnum::InvalidTupleIndexSize);
                 }
+            } else {
+                self.push_error_for_next(RustishParseErrorEnum::ExpectedMethodCallOrFieldAccess);
+                return Err(());
             }
         }
         Ok(expr)
@@ -578,14 +607,20 @@ impl Parser {
                 let closure_meta = join_meta(closure_start, closure_end);
                 let closure = Closure {
                     ty: ret_ty,
-                    params: vec![ParamDef(param1_name, param1_ty), ParamDef(param2_name, param2_ty)],
+                    params: vec![
+                        ParamDef(param1_name, param1_ty),
+                        ParamDef(param2_name, param2_ty),
+                    ],
                     body,
                     meta: closure_meta,
                 };
 
                 let call_end = self.expect(&TokenEnum::RightParen)?;
                 let meta = join_meta(call_start, call_end);
-                Ok(Expr(ExprEnum::Fold(Box::new(recv), Box::new(init), Box::new(closure)), meta))
+                Ok(Expr(
+                    ExprEnum::Fold(Box::new(recv), Box::new(init), Box::new(closure)),
+                    meta,
+                ))
             }
             _ => {
                 self.push_error(RustishParseErrorEnum::InvalidMethodName, call_start);
