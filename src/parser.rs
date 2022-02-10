@@ -74,12 +74,10 @@ impl Parser {
                             } else {
                                 self.consume_until_one_of(&top_level_keywords);
                             }
+                        } else if let Ok(fn_def) = self.parse_fn_def(meta) {
+                            fn_defs.push(fn_def);
                         } else {
-                            if let Ok(fn_def) = self.parse_fn_def(meta) {
-                                fn_defs.push(fn_def);
-                            } else {
-                                self.consume_until_one_of(&top_level_keywords);
-                            }
+                            self.consume_until_one_of(&top_level_keywords);
                         }
                     }
                 }
@@ -116,7 +114,7 @@ impl Parser {
 
         let mut variants = vec![self.parse_variant()?];
 
-        while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+        while self.next_matches(&TokenEnum::Comma).is_some() {
             if let Some(Token(TokenEnum::Identifier(_), _)) = self.tokens.peek() {
                 variants.push(self.parse_variant()?);
             }
@@ -133,13 +131,13 @@ impl Parser {
 
     fn parse_variant(&mut self) -> Result<Variant, ()> {
         let (variant_name, _) = self.expect_identifier()?;
-        if let Some(_) = self.next_matches(&TokenEnum::LeftParen) {
+        if self.next_matches(&TokenEnum::LeftParen).is_some() {
             let mut fields = vec![];
             if let Some(Token(TokenEnum::Identifier(_), _)) = self.tokens.peek() {
                 let (ty, _) = self.parse_type()?;
                 fields.push(ty);
             }
-            while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+            while self.next_matches(&TokenEnum::Comma).is_some() {
                 let (ty, _) = self.parse_type()?;
                 fields.push(ty);
             }
@@ -160,10 +158,8 @@ impl Parser {
         let mut params = vec![];
         if !self.peek(&TokenEnum::RightParen) {
             params.extend(self.parse_params()?);
-            self.expect(&TokenEnum::RightParen)?;
-        } else {
-            self.expect(&TokenEnum::RightParen)?;
         }
+        self.expect(&TokenEnum::RightParen)?;
 
         // -> <ty>
         self.expect(&TokenEnum::Arrow)?;
@@ -196,10 +192,8 @@ impl Parser {
         let mut params = vec![];
         if !self.peek(&TokenEnum::RightParen) {
             params.extend(self.parse_party_params()?);
-            self.expect(&TokenEnum::RightParen)?;
-        } else {
-            self.expect(&TokenEnum::RightParen)?;
         }
+        self.expect(&TokenEnum::RightParen)?;
 
         // -> <ty>
         self.expect(&TokenEnum::Arrow)?;
@@ -221,7 +215,7 @@ impl Parser {
 
     fn parse_params(&mut self) -> Result<Vec<ParamDef>, ()> {
         let mut params = vec![self.parse_param()?];
-        while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+        while self.next_matches(&TokenEnum::Comma).is_some() {
             params.push(self.parse_param()?);
         }
         Ok(params)
@@ -237,7 +231,7 @@ impl Parser {
 
     fn parse_party_params(&mut self) -> Result<Vec<(Party, ParamDef)>, ()> {
         let mut params = vec![self.parse_party_param()?];
-        while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+        while self.next_matches(&TokenEnum::Comma).is_some() {
             params.push(self.parse_party_param()?);
         }
         Ok(params)
@@ -310,7 +304,7 @@ impl Parser {
                 let _else_expr = self.parse_expr()?;
                 self.expect(&TokenEnum::RightBrace)?;
 
-                return Err(());
+                Err(())
             }
         } else if let Some(meta) = self.next_matches(&TokenEnum::KeywordMatch) {
             // match <match_expr> { <clause> * }
@@ -325,7 +319,7 @@ impl Parser {
                 has_failed = true;
                 self.consume_until_one_of(&[TokenEnum::Comma, TokenEnum::RightBrace]);
             }
-            while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+            while self.next_matches(&TokenEnum::Comma).is_some() {
                 if !self.peek(&TokenEnum::RightBrace) {
                     if let Ok(clause) = self.parse_match_clause() {
                         clauses.push(clause);
@@ -366,14 +360,14 @@ impl Parser {
                         "false" => return Ok(Pattern(PatternEnum::False, meta)),
                         _ => {}
                     }
-                    if let Some(_) = self.next_matches(&TokenEnum::DoubleColon) {
+                    if self.next_matches(&TokenEnum::DoubleColon).is_some() {
                         let (variant_name, variant_meta) = self.expect_identifier()?;
                         if self.peek(&TokenEnum::LeftParen) {
                             let meta_start = self.expect(&TokenEnum::LeftParen)?;
                             let mut fields = vec![];
                             if !self.peek(&TokenEnum::RightParen) {
                                 fields.push(self.parse_pattern()?);
-                                while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+                                while self.next_matches(&TokenEnum::Comma).is_some() {
                                     fields.push(self.parse_pattern()?);
                                 }
                             }
@@ -410,7 +404,7 @@ impl Parser {
                             ))
                         } else {
                             self.push_error_for_next(ParseErrorEnum::InvalidRangeExpr);
-                            return Err(());
+                            Err(())
                         }
                     } else {
                         Ok(Pattern(PatternEnum::NumUnsigned(n), meta))
@@ -449,7 +443,7 @@ impl Parser {
                             ))
                         } else {
                             self.push_error_for_next(ParseErrorEnum::InvalidRangeExpr);
-                            return Err(());
+                            Err(())
                         }
                     } else {
                         Ok(Pattern(PatternEnum::NumSigned(n), meta))
@@ -460,7 +454,7 @@ impl Parser {
                     let mut fields = vec![];
                     if !self.peek(&TokenEnum::RightParen) {
                         fields.push(self.parse_pattern()?);
-                        while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+                        while self.next_matches(&TokenEnum::Comma).is_some() {
                             fields.push(self.parse_pattern()?);
                         }
                     }
@@ -517,7 +511,7 @@ impl Parser {
     fn parse_logical_or(&mut self) -> Result<Expr, ()> {
         // |
         let mut x = self.parse_logical_xor()?;
-        while let Some(_) = self.next_matches(&TokenEnum::Bar) {
+        while self.next_matches(&TokenEnum::Bar).is_some() {
             let y = self.parse_logical_xor()?;
             let meta = join_expr_meta(&x, &y);
             x = Expr(ExprEnum::Op(Op::BitOr, Box::new(x), Box::new(y)), meta);
@@ -528,7 +522,7 @@ impl Parser {
     fn parse_logical_xor(&mut self) -> Result<Expr, ()> {
         // ^
         let mut x = self.parse_logical_and()?;
-        while let Some(_) = self.next_matches(&TokenEnum::Caret) {
+        while self.next_matches(&TokenEnum::Caret).is_some() {
             let y = self.parse_logical_and()?;
             let meta = join_expr_meta(&x, &y);
             x = Expr(ExprEnum::Op(Op::BitXor, Box::new(x), Box::new(y)), meta);
@@ -539,7 +533,7 @@ impl Parser {
     fn parse_logical_and(&mut self) -> Result<Expr, ()> {
         // &
         let mut x = self.parse_shift()?;
-        while let Some(_) = self.next_matches(&TokenEnum::Ampersand) {
+        while self.next_matches(&TokenEnum::Ampersand).is_some() {
             let y = self.parse_shift()?;
             let meta = join_expr_meta(&x, &y);
             x = Expr(ExprEnum::Op(Op::BitAnd, Box::new(x), Box::new(y)), meta);
@@ -601,7 +595,7 @@ impl Parser {
 
     fn parse_cast(&mut self) -> Result<Expr, ()> {
         let mut x = self.parse_unary()?;
-        while let Some(_) = self.next_matches(&TokenEnum::KeywordAs) {
+        while self.next_matches(&TokenEnum::KeywordAs).is_some() {
             let (ty, ty_meta) = self.parse_type()?;
             let meta = join_meta(x.1, ty_meta);
             x = Expr(ExprEnum::Cast(ty, Box::new(x)), meta)
@@ -639,14 +633,14 @@ impl Parser {
                     "true" => Expr(ExprEnum::True, meta),
                     "false" => Expr(ExprEnum::False, meta),
                     _ => {
-                        if let Some(_) = self.next_matches(&TokenEnum::DoubleColon) {
+                        if self.next_matches(&TokenEnum::DoubleColon).is_some() {
                             let (variant_name, variant_meta) = self.expect_identifier()?;
-                            let variant = if let Some(_) = self.next_matches(&TokenEnum::LeftParen)
+                            let variant = if self.next_matches(&TokenEnum::LeftParen).is_some()
                             {
                                 let mut fields = vec![];
                                 if !self.peek(&TokenEnum::RightParen) {
                                     fields.push(self.parse_expr()?);
-                                    while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+                                    while self.next_matches(&TokenEnum::Comma).is_some() {
                                         fields.push(self.parse_expr()?);
                                     }
                                 }
@@ -661,11 +655,11 @@ impl Parser {
                                 VariantExpr(variant_name, VariantExprEnum::Unit, variant_meta)
                             };
                             Expr(ExprEnum::EnumLiteral(identifier, Box::new(variant)), meta)
-                        } else if let Some(_) = self.next_matches(&TokenEnum::LeftParen) {
+                        } else if self.next_matches(&TokenEnum::LeftParen).is_some() {
                             let mut args = vec![];
                             if !self.peek(&TokenEnum::RightParen) {
                                 args.push(self.parse_expr()?);
-                                while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+                                while self.next_matches(&TokenEnum::Comma).is_some() {
                                     args.push(self.parse_expr()?);
                                 }
                             }
@@ -708,7 +702,7 @@ impl Parser {
                         let expr = self.parse_expr()?;
                         if self.peek(&TokenEnum::Comma) {
                             let mut fields = vec![expr];
-                            while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+                            while self.next_matches(&TokenEnum::Comma).is_some() {
                                 fields.push(self.parse_expr()?);
                             }
                             let tuple_end = self.expect(&TokenEnum::RightParen)?;
@@ -752,9 +746,9 @@ impl Parser {
             self.push_error_for_next(ParseErrorEnum::ExpectedExpr);
             return Err(());
         };
-        while let Some(_) = self.next_matches(&TokenEnum::LeftBracket) {
+        while self.next_matches(&TokenEnum::LeftBracket).is_some() {
             let index = self.parse_expr()?;
-            if let Some(_) = self.next_matches(&TokenEnum::Arrow) {
+            if self.next_matches(&TokenEnum::Arrow).is_some() {
                 let replacement = self.parse_expr()?;
                 let end = self.expect(&TokenEnum::RightBracket)?;
                 let meta = join_meta(expr.1, end);
@@ -772,7 +766,7 @@ impl Parser {
                 expr = Expr(ExprEnum::ArrayAccess(Box::new(expr), Box::new(index)), meta);
             }
         }
-        while let Some(_) = self.next_matches(&TokenEnum::Dot) {
+        while self.next_matches(&TokenEnum::Dot).is_some() {
             let peeked = self.tokens.peek();
             if let Some(Token(TokenEnum::Identifier(_), _)) = peeked {
                 expr = self.parse_method_call(expr)?;

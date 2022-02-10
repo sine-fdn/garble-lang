@@ -85,14 +85,14 @@ fn push_adder(
     carry: GateIndex,
 ) -> (GateIndex, GateIndex) {
     // first half-adder:
-    let u = push_gate(gates, Gate::Xor(x, y));
-    let v = push_gate(gates, Gate::And(x, y));
+    let wire_u = push_gate(gates, Gate::Xor(x, y));
+    let wire_v = push_gate(gates, Gate::And(x, y));
     // second half-adder:
-    let s = push_gate(gates, Gate::Xor(u, carry));
-    let w = push_gate(gates, Gate::And(u, carry));
+    let wire_s = push_gate(gates, Gate::Xor(wire_u, carry));
+    let wire_w = push_gate(gates, Gate::And(wire_u, carry));
 
-    let carry = push_or(gates, v, w);
-    (s, carry)
+    let carry = push_or(gates, wire_v, wire_w);
+    (wire_s, carry)
 }
 
 fn push_multiplier(
@@ -108,8 +108,8 @@ fn push_multiplier(
 
 fn push_addition_circuit(
     gates: &mut Vec<Gate>,
-    x: &Vec<GateIndex>,
-    y: &Vec<GateIndex>,
+    x: &[GateIndex],
+    y: &[GateIndex],
 ) -> (Vec<GateIndex>, GateIndex) {
     assert_eq!(x.len(), y.len());
     let bits = x.len();
@@ -125,7 +125,7 @@ fn push_addition_circuit(
     (sum, carry)
 }
 
-fn push_negation_circuit(gates: &mut Vec<Gate>, x: &Vec<GateIndex>) -> Vec<GateIndex> {
+fn push_negation_circuit(gates: &mut Vec<Gate>, x: &[GateIndex]) -> Vec<GateIndex> {
     // flip bits and increment to get negate:
     let mut carry = 1;
     let mut neg = vec![0; x.len()];
@@ -140,8 +140,8 @@ fn push_negation_circuit(gates: &mut Vec<Gate>, x: &Vec<GateIndex>) -> Vec<GateI
 
 fn push_subtraction_circuit(
     gates: &mut Vec<Gate>,
-    x: &Vec<GateIndex>,
-    y: &Vec<GateIndex>,
+    x: &[GateIndex],
+    y: &[GateIndex],
 ) -> (Vec<GateIndex>, GateIndex) {
     assert_eq!(x.len(), y.len());
     let bits = x.len();
@@ -149,7 +149,7 @@ fn push_subtraction_circuit(
     // flip bits of y and increment y to get negative y:
     let mut carry = 1;
     let mut x_extended = vec![0; bits + 1];
-    x_extended[1..].copy_from_slice(&x);
+    x_extended[1..].copy_from_slice(x);
     let mut z = vec![0; bits + 1];
     for i in (0..bits + 1).rev() {
         let y = if i == 0 { 1 } else { push_not(gates, y[i - 1]) };
@@ -165,23 +165,22 @@ fn push_subtraction_circuit(
 
 fn push_unsigned_division_circuit(
     gates: &mut Vec<Gate>,
-    x: &Vec<GateIndex>,
-    y: &Vec<GateIndex>,
+    x: &[GateIndex],
+    y: &[GateIndex],
 ) -> (Vec<GateIndex>, Vec<GateIndex>) {
     assert_eq!(x.len(), y.len());
     let bits = x.len();
 
     let mut quotient = vec![0; bits];
-    let mut remainder = x.clone();
+    let mut remainder = x.to_vec();
     for shift_amount in (0..bits).rev() {
         let mut overflow = 0;
         let mut y_shifted = vec![0; bits];
-        for shift in 0..shift_amount {
-            overflow = push_or(gates, overflow, y[shift]);
+        for y in y.iter().copied().take(shift_amount) {
+            overflow = push_or(gates, overflow, y);
         }
-        for j in 0..(bits - shift_amount) {
-            y_shifted[j] = y[j + shift_amount];
-        }
+        y_shifted[..(bits - shift_amount)]
+            .clone_from_slice(&y[shift_amount..((bits - shift_amount) + shift_amount)]);
 
         let (x_sub, carry) = push_subtraction_circuit(gates, &remainder, &y_shifted);
         let carry_or_overflow = push_or(gates, carry, overflow);
@@ -203,17 +202,17 @@ fn push_signed_division_circuit(
     let bits = x.len();
 
     let is_result_neg = push_gate(gates, Gate::Xor(x[0], y[0]));
-    let x_negated = push_negation_circuit(gates, &x);
+    let x_negated = push_negation_circuit(gates, x);
     let x_sign_bit = x[0];
     for i in 0..bits {
         x[i] = push_mux(gates, x_sign_bit, x_negated[i], x[i]);
     }
-    let y_negated = push_negation_circuit(gates, &y);
+    let y_negated = push_negation_circuit(gates, y);
     let y_sign_bit = y[0];
     for i in 0..bits {
         y[i] = push_mux(gates, y_sign_bit, y_negated[i], y[i]);
     }
-    let (mut quotient, mut remainder) = push_unsigned_division_circuit(gates, &x, &y);
+    let (mut quotient, mut remainder) = push_unsigned_division_circuit(gates, x, y);
     let quot_neg = push_negation_circuit(gates, &quotient);
     for i in 0..bits {
         quotient[i] = push_mux(gates, is_result_neg, quot_neg[i], quotient[i]);
@@ -240,14 +239,12 @@ fn push_comparator_circuit(
     for i in 0..bits {
         let xor = push_gate(gates, Gate::Xor(x[i], y[i]));
 
+        let xor_and_x = push_gate(gates, Gate::And(xor, x[i]));
+        let xor_and_y = push_gate(gates, Gate::And(xor, y[i]));
         let (gt, lt) = if i == 0 && (is_x_signed || is_y_signed) {
-            let lt = push_gate(gates, Gate::And(xor, x[i]));
-            let gt = push_gate(gates, Gate::And(xor, y[i]));
-            (gt, lt)
+            (xor_and_y, xor_and_x)
         } else {
-            let gt = push_gate(gates, Gate::And(xor, x[i]));
-            let lt = push_gate(gates, Gate::And(xor, y[i]));
-            (gt, lt)
+            (xor_and_x, xor_and_y)
         };
 
         let gt = push_or(gates, gt, acc_gt);
@@ -435,12 +432,10 @@ impl Expr {
                             } else {
                                 bits_unshifted[i + shift]
                             }
+                        } else if i < shift {
+                            bit_to_shift_in
                         } else {
-                            if i < shift {
-                                bit_to_shift_in
-                            } else {
-                                bits_unshifted[i - shift]
-                            }
+                            bits_unshifted[i - shift]
                         };
                         bits_shifted[i] = push_mux(gates, s, shifted, unshifted);
                     }
@@ -498,9 +493,9 @@ impl Expr {
                                 } else {
                                     sums[i + 1][j - 1]
                                 };
-                                let (s, c) = push_multiplier(gates, x[i], y[j], z, carry);
-                                sums[i][j] = s;
-                                carries[i][j] = c;
+                                let (sum, carry) = push_multiplier(gates, x[i], y[j], z, carry);
+                                sums[i][j] = sum;
+                                carries[i][j] = carry;
                             }
                         }
                         let mut result = vec![0; bits];
@@ -525,7 +520,7 @@ impl Expr {
                     }
                     Op::GreaterThan | Op::LessThan => {
                         let (acc_lt, acc_gt) =
-                            push_comparator_circuit(gates, bits, &mut x, ty_x, &mut y, ty_y);
+                            push_comparator_circuit(gates, bits, &x, ty_x, &y, ty_y);
 
                         match op {
                             Op::GreaterThan => vec![acc_gt],
@@ -567,7 +562,7 @@ impl Expr {
                 for (ParamDef(identifier, ty), arg) in fn_def.params.iter().zip(args) {
                     let let_expr =
                         ExprEnum::Let(identifier.clone(), Box::new(arg.clone()), Box::new(body));
-                    body = Expr(let_expr, ty.clone(), meta.clone())
+                    body = Expr(let_expr, ty.clone(), *meta)
                 }
                 env.push();
                 let body = body.compile(enums, fns, env, gates);
@@ -596,15 +591,15 @@ impl Expr {
                 let ty_expr = &expr.1;
                 let mut expr = expr.compile(enums, fns, env, gates);
                 let size_after_cast = ty.size_in_bits();
-                let result = match size_after_cast.cmp(&expr.len()) {
+
+                match size_after_cast.cmp(&expr.len()) {
                     std::cmp::Ordering::Equal => expr,
                     std::cmp::Ordering::Less => expr[(expr.len() - size_after_cast)..].to_vec(),
                     std::cmp::Ordering::Greater => {
                         extend_to_bits(&mut expr, ty_expr, size_after_cast);
                         expr
                     }
-                };
-                result
+                }
             }
             ExprEnum::Fold(array, init, closure) => {
                 let array = array.compile(enums, fns, env, gates);
@@ -667,8 +662,8 @@ impl Expr {
                 let mut wires = vec![0; max_size];
                 let VariantExpr(variant_name, variant, _) = variant.as_ref();
                 let tag_number = enum_tag_number(enum_def, variant_name);
-                for i in 0..tag_size {
-                    wires[i] = (tag_number >> (tag_size - i - 1)) & 1;
+                for (i, wire) in wires.iter_mut().enumerate().take(tag_size) {
+                    *wire = (tag_number >> (tag_size - i - 1)) & 1;
                 }
                 let mut w = tag_size;
                 match variant {
@@ -815,7 +810,7 @@ impl Pattern {
                     PatternEnum::EnumTuple(_, fields) => {
                         let mut w = tag_size;
                         let field_types = enum_def.get(variant_name).unwrap();
-                        for (field, field_type) in fields.into_iter().zip(field_types) {
+                        for (field, field_type) in fields.iter().zip(field_types) {
                             let field_bits = match field_type {
                                 Type::Enum(enum_name) => {
                                     enum_max_size(enums.get(enum_name).unwrap())
@@ -905,10 +900,10 @@ pub struct Computation {
     output: Option<Vec<Option<bool>>>,
 }
 
-impl Into<Computation> for Circuit {
-    fn into(self) -> Computation {
-        Computation {
-            circuit: self,
+impl From<Circuit> for Computation {
+    fn from(circuit: Circuit) -> Self {
+        Self {
+            circuit,
             in_a: vec![],
             in_b: vec![],
             output: None,
@@ -1047,8 +1042,8 @@ impl Computation {
         let size = ty.size_in_bits();
         if output.len() == size {
             let mut n = 0;
-            for i in 0..size {
-                n += (output[i] as u128) << (size - 1 - i);
+            for (i, output) in output.iter().copied().take(size).enumerate() {
+                n += (output as u128) << (size - 1 - i);
             }
             Ok(n)
         } else {
@@ -1064,8 +1059,8 @@ impl Computation {
         let size = ty.size_in_bits();
         if output.len() == size {
             let mut n = 0;
-            for i in 0..size {
-                n += (output[i] as i128) << (size - 1 - i);
+            for (i, output) in output.iter().copied().enumerate().take(size) {
+                n += (output as i128) << (size - 1 - i);
             }
             Ok(n)
         } else {

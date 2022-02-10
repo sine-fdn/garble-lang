@@ -137,12 +137,12 @@ fn expect_type(expr: &typed_ast::Expr, expected: &Type) -> Result<(), TypeError>
     let typed_ast::Expr(expr, actual, meta) = expr;
     let actual = actual.clone();
     if let typed_ast::ExprEnum::NumUnsigned(n) = expr {
-        if is_coercible_unsigned(*n, &expected) {
+        if is_coercible_unsigned(*n, expected) {
             return Ok(());
         }
     }
     if let typed_ast::ExprEnum::NumSigned(n) = expr {
-        if is_coercible_signed(*n, &expected) {
+        if is_coercible_signed(*n, expected) {
             return Ok(());
         }
     }
@@ -188,38 +188,34 @@ fn expect_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
         | Type::I32
         | Type::I64
         | Type::I128 => Ok(()),
-        _ => {
-            return Err(TypeError(
-                TypeErrorEnum::ExpectedNumberType(ty.clone()),
-                meta,
-            ));
-        }
+        _ => Err(TypeError(
+            TypeErrorEnum::ExpectedNumberType(ty.clone()),
+            meta,
+        )),
     }
 }
 
 fn expect_signed_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
     match ty {
         Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 => Ok(()),
-        _ => {
-            return Err(TypeError(
-                TypeErrorEnum::ExpectedNumberType(ty.clone()),
-                meta,
-            ));
-        }
+        _ => Err(TypeError(
+            TypeErrorEnum::ExpectedNumberType(ty.clone()),
+            meta,
+        )),
     }
 }
 
 fn expect_bool_or_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
     if let Type::Bool = ty {
-        Ok(())
-    } else if let Ok(()) = expect_num_type(ty, meta) {
-        Ok(())
-    } else {
-        Err(TypeError(
-            TypeErrorEnum::ExpectedBoolOrNumberType(ty.clone()),
-            meta,
-        ))
+        return Ok(());
+    };
+    if let Ok(()) = expect_num_type(ty, meta) {
+        return Ok(());
     }
+    Err(TypeError(
+        TypeErrorEnum::ExpectedBoolOrNumberType(ty.clone()),
+        meta,
+    ))
 }
 
 fn unify(e1: &typed_ast::Expr, e2: &typed_ast::Expr, m: MetaInfo) -> Result<Type, TypeError> {
@@ -387,7 +383,7 @@ impl Expr {
                 let arr = arr.type_check(env, defs)?;
                 let index = index.type_check(env, defs)?;
                 let typed_ast::Expr(_, array_ty, array_meta) = &arr;
-                let (elem_ty, _) = expect_array_type(&array_ty, *array_meta)?;
+                let (elem_ty, _) = expect_array_type(array_ty, *array_meta)?;
                 expect_type(&index, &Type::Usize)?;
                 (
                     typed_ast::ExprEnum::ArrayAccess(Box::new(arr), Box::new(index)),
@@ -400,7 +396,7 @@ impl Expr {
                 let value = value.type_check(env, defs)?;
                 let typed_ast::Expr(_, array_ty, array_meta) = &arr;
                 let ty = array_ty.clone();
-                let (elem_ty, _) = expect_array_type(&array_ty, *array_meta)?;
+                let (elem_ty, _) = expect_array_type(array_ty, *array_meta)?;
                 expect_type(&index, &Type::Usize)?;
                 expect_type(&value, &elem_ty)?;
                 (
@@ -489,10 +485,7 @@ impl Expr {
                     let typed_ast::Expr(_, ty_x, meta_x) = x.clone();
                     expect_num_type(&ty_x, meta_x)?;
                     expect_type(&y, &Type::U8)?;
-                    (
-                        typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)),
-                        ty_x.clone(),
-                    )
+                    (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), ty_x)
                 }
             },
             ExprEnum::Let(var, binding, body) => {
@@ -570,7 +563,7 @@ impl Expr {
                 let expr = expr.type_check(env, defs)?;
                 let typed_ast::Expr(_, expr_ty, _) = &expr;
                 expect_bool_or_num_type(expr_ty, meta)?;
-                expect_bool_or_num_type(&ty, meta)?;
+                expect_bool_or_num_type(ty, meta)?;
                 (
                     typed_ast::ExprEnum::Cast(ty.clone(), Box::new(expr)),
                     ty.clone(),
@@ -580,7 +573,7 @@ impl Expr {
                 let arr = arr.type_check(env, defs)?;
                 let init = init.type_check(env, defs)?;
                 let typed_ast::Expr(_, array_ty, array_meta) = &arr;
-                let (elem_ty, _) = expect_array_type(&array_ty, *array_meta)?;
+                let (elem_ty, _) = expect_array_type(array_ty, *array_meta)?;
                 if closure.params.len() != 2 {
                     let expected = vec![init.1, elem_ty];
                     let param_types = closure.params.iter().map(|p| p.1.clone()).collect();
@@ -590,7 +583,7 @@ impl Expr {
                 }
                 let ParamDef(acc_identifier, acc_param_ty) = &closure.params[0];
                 let ParamDef(elem_identifier, elem_param_ty) = &closure.params[1];
-                expect_type(&init, &acc_param_ty)?;
+                expect_type(&init, acc_param_ty)?;
                 if &elem_ty != elem_param_ty {
                     let expected = elem_param_ty.clone();
                     let actual = elem_ty;
@@ -622,7 +615,7 @@ impl Expr {
             ExprEnum::Map(arr, closure) => {
                 let arr = arr.type_check(env, defs)?;
                 let typed_ast::Expr(_, array_ty, array_meta) = &arr;
-                let (elem_ty, size) = expect_array_type(&array_ty, *array_meta)?;
+                let (elem_ty, size) = expect_array_type(array_ty, *array_meta)?;
                 if closure.params.len() != 1 {
                     let expected = vec![elem_ty];
                     let param_types = closure.params.iter().map(|p| p.1.clone()).collect();
@@ -787,7 +780,7 @@ impl Expr {
                     ret_ty.clone()
                 };
 
-                check_exhaustiveness(&typed_clauses, &ty, &defs, meta)?;
+                check_exhaustiveness(&typed_clauses, ty, defs, meta)?;
 
                 (
                     typed_ast::ExprEnum::Match(Box::new(expr), typed_clauses),
@@ -816,23 +809,23 @@ impl Pattern {
             (PatternEnum::True, Type::Bool) => typed_ast::PatternEnum::True,
             (PatternEnum::False, Type::Bool) => typed_ast::PatternEnum::False,
             (PatternEnum::NumUnsigned(n), ty) => {
-                expect_num_type(&ty, meta)?;
+                expect_num_type(ty, meta)?;
                 typed_ast::PatternEnum::NumUnsigned(*n)
             }
             (PatternEnum::NumSigned(n), ty) => {
-                expect_signed_num_type(&ty, meta)?;
+                expect_signed_num_type(ty, meta)?;
                 typed_ast::PatternEnum::NumSigned(*n)
             }
             (PatternEnum::UnsignedInclusiveRange(from, to), ty) => {
-                expect_num_type(&ty, meta)?;
+                expect_num_type(ty, meta)?;
                 typed_ast::PatternEnum::UnsignedInclusiveRange(*from, *to)
             }
             (PatternEnum::SignedInclusiveRange(from, to), ty) => {
-                expect_signed_num_type(&ty, meta)?;
+                expect_signed_num_type(ty, meta)?;
                 typed_ast::PatternEnum::SignedInclusiveRange(*from, *to)
             }
             (PatternEnum::Tuple(fields), ty) => {
-                let field_types = expect_tuple_type(&ty, meta)?;
+                let field_types = expect_tuple_type(ty, meta)?;
                 if field_types.len() != fields.len() {
                     let e = TypeErrorEnum::UnexpectedEnumVariantArity {
                         expected: field_types.len(),
@@ -918,7 +911,7 @@ fn check_exhaustiveness(
     )];
     if is_useful(patterns, wildcard_pattern, defs) {
         let e = TypeErrorEnum::PatternsAreNotExhaustive;
-        return Err(TypeError(e, meta));
+        Err(TypeError(e, meta))
     } else {
         Ok(())
     }
@@ -936,7 +929,7 @@ enum Ctor {
 
 type PatternStack = Vec<typed_ast::Pattern>;
 
-fn specialize(ctor: &Ctor, pattern: &PatternStack) -> Vec<PatternStack> {
+fn specialize(ctor: &Ctor, pattern: &[typed_ast::Pattern]) -> Vec<PatternStack> {
     let head = pattern.first().unwrap();
     let tail = pattern.iter().cloned().skip(1);
     let typed_ast::Pattern(head_enum, _, meta) = head;
@@ -959,14 +952,14 @@ fn specialize(ctor: &Ctor, pattern: &PatternStack) -> Vec<PatternStack> {
                 let mut fields = Vec::with_capacity(field_types.len());
                 for ty in field_types {
                     let wildcard = typed_ast::PatternEnum::Identifier("_".to_string());
-                    let p = typed_ast::Pattern(wildcard, ty.clone(), meta.clone());
+                    let p = typed_ast::Pattern(wildcard, ty.clone(), *meta);
                     fields.push(p);
                 }
                 vec![fields.into_iter().chain(tail).collect()]
             }
             typed_ast::PatternEnum::EnumUnit(v2) if v1 == v2 => vec![tail.collect()],
             typed_ast::PatternEnum::EnumTuple(v2, fields) if v1 == v2 => {
-                vec![fields.into_iter().cloned().chain(tail).collect()]
+                vec![fields.iter().cloned().chain(tail).collect()]
             }
             _ => vec![],
         },
@@ -1005,13 +998,13 @@ fn specialize(ctor: &Ctor, pattern: &PatternStack) -> Vec<PatternStack> {
                 let mut fields = Vec::with_capacity(field_types.len());
                 for ty in field_types {
                     let wildcard = typed_ast::PatternEnum::Identifier("_".to_string());
-                    let p = typed_ast::Pattern(wildcard, ty.clone(), meta.clone());
+                    let p = typed_ast::Pattern(wildcard, ty.clone(), *meta);
                     fields.push(p);
                 }
                 vec![fields.into_iter().chain(tail).collect()]
             }
             typed_ast::PatternEnum::Tuple(fields) => {
-                vec![fields.into_iter().cloned().chain(tail).collect()]
+                vec![fields.iter().cloned().chain(tail).collect()]
             }
             _ => vec![],
         },
@@ -1041,7 +1034,7 @@ fn split_unsigned_range(patterns: &[PatternStack], min: u128, max: u128) -> Vec<
             _ => {}
         }
     }
-    split_points.sort();
+    split_points.sort_unstable();
     split_points.dedup();
     let mut ranges = vec![];
     for range in split_points.windows(2) {
@@ -1078,7 +1071,7 @@ fn split_signed_range(patterns: &[PatternStack], min: i128, max: i128) -> Vec<Ct
             _ => {}
         }
     }
-    split_points.sort();
+    split_points.sort_unstable();
     split_points.dedup();
     let mut ranges = vec![];
     for range in split_points.windows(2) {
@@ -1092,7 +1085,7 @@ fn split_signed_range(patterns: &[PatternStack], min: i128, max: i128) -> Vec<Ct
     ranges
 }
 
-fn split_ctor(patterns: &[PatternStack], q: &PatternStack, defs: &Defs) -> Vec<Ctor> {
+fn split_ctor(patterns: &[PatternStack], q: &[typed_ast::Pattern], defs: &Defs) -> Vec<Ctor> {
     let head = q.first().unwrap();
     let typed_ast::Pattern(head_enum, ty, _) = head;
     match ty {
@@ -1152,7 +1145,7 @@ fn is_useful(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> bool 
         for ctor in split_ctor(&patterns, &q, defs) {
             let mut specialized = Vec::new();
             for p in patterns.iter() {
-                let pattern_specialized = specialize(&ctor, &p);
+                let pattern_specialized = specialize(&ctor, p);
                 specialized.extend(pattern_specialized);
             }
             for q in specialize(&ctor, &q) {

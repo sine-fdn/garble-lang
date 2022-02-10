@@ -22,6 +22,6 @@ fn main(choice: A::u8, x: A::u8, y: A::u8) -> u8 {
     }
 }
 ";
-    scan(&prg)?;
+    scan(prg)?;
     Ok(())
 }

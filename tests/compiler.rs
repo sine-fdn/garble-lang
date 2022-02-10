@@ -74,7 +74,7 @@ fn main(x: A::u16) -> u16 {
     y + 1
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     computation.set_u16(Party::A, 255);
     computation.run().map_err(|e| e.prettify(prg))?;
@@ -97,7 +97,7 @@ fn main(x: A::u16) -> u16 {
     inc(x)
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     computation.set_u16(Party::A, 255);
     computation.run().map_err(|e| e.prettify(prg))?;
@@ -116,7 +116,7 @@ fn main(x: A::bool) -> u8 {
     }
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for b in [true, false] {
         let expected = if b { 100 } else { 50 };
@@ -134,7 +134,7 @@ fn main(x: A::u16, y: A::u16, z: A::u16) -> u16 {
     x | (y & (z ^ 2))
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in 10..20 {
         for y in 10..20 {
@@ -161,7 +161,7 @@ fn main(x: A::u16, y: A::u16) -> bool {
     (x > y) & (x < 10)
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in 5..15 {
         for y in 5..15 {
@@ -185,7 +185,7 @@ fn main(x: A::u16, y: A::u16) -> bool {
     (x == y) & (x != 0)
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in 0..2 {
         for y in 0..2 {
@@ -209,7 +209,7 @@ fn main(x: A::u16, y: A::u8) -> u16 {
     (x as u8) as u16 + y as u16
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in 200..300 {
         for y in 0..10 {
@@ -233,7 +233,7 @@ fn main(x: A::bool, y: A::u8) -> u16 {
     x as u16 + y as u16
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in [true, false] {
         for y in 0..10 {
@@ -257,7 +257,7 @@ fn main(mode: A::bool, x: A::u16, y: A::u8) -> u16 {
     if mode { x << y } else { x >> y }
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for mode in [true, false] {
         for x in 240..270 {
@@ -290,7 +290,7 @@ fn main(x: A::i8) -> i8 {
     x
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -128..127 {
         computation.set_i8(Party::A, x);
@@ -307,7 +307,7 @@ fn main(x: A::i8, y: A::i8) -> i8 {
     x + y
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -64..64 {
         for y in -64..63 {
@@ -327,7 +327,7 @@ fn main(x: A::i16, y: A::i16, z: A::i16) -> i16 {
     x | (y & (z ^ 2))
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..10 {
         for y in -10..10 {
@@ -354,7 +354,7 @@ fn main(x: A::i16, y: A::i16) -> bool {
     (x > y) & (y < x)
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..10 {
         for y in -10..10 {
@@ -382,7 +382,7 @@ fn main(mode: A::bool, x: A::i16, y: A::u8) -> i16 {
     }
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for mode in [true, false] {
         for x in -20..20 {
@@ -420,7 +420,7 @@ fn main(x: A::i16) -> i16 {
     x + -10
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..10 {
         let expected = x + -10;
@@ -441,7 +441,7 @@ fn main(x: A::i16, y: A::i16) -> i16 {
     x - y
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..20 {
         for y in -10..256 {
@@ -461,7 +461,7 @@ fn main(x: A::i16) -> i16 {
     -x
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -127..127 {
         computation.set_i16(Party::A, x);
@@ -478,7 +478,7 @@ fn main(x: A::i16) -> i16 {
     !x
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -127..127 {
         computation.set_i16(Party::A, x);
@@ -491,7 +491,7 @@ fn main(x: A::bool) -> bool {
     !x
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for b in [true, false] {
         computation.set_bool(Party::A, b);
@@ -508,7 +508,7 @@ fn main(x: A::u16, y: A::u16) -> u16 {
     x * y
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in 0..20 {
         for y in 250..300 {
@@ -528,7 +528,7 @@ fn main(x: A::i16, y: A::i16) -> i16 {
     x * y
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..10 {
         for y in -10..10 {
@@ -548,7 +548,7 @@ fn main(x: A::u8, y: A::u8) -> u8 {
     x / y
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in 0..255 {
         for y in 1..10 {
@@ -574,7 +574,7 @@ fn main(x: A::u8, y: A::u8) -> u8 {
     x % y
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in 0..255 {
         for y in 1..10 {
@@ -600,7 +600,7 @@ fn main(x: A::i8, y: A::i8) -> i8 {
     x / y
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -128..127 {
         for y in -4..5 {
@@ -629,7 +629,7 @@ fn main(x: A::i8, y: A::i8) -> i8 {
     x % y
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -128..127 {
         for y in -4..5 {
@@ -662,7 +662,7 @@ fn main(x: A::i8, i: A::usize) -> i8 {{
 ",
         array_size
     );
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..10 {
         for i in 0..array_size {
@@ -688,7 +688,7 @@ fn main(x: A::i8, i: A::usize, j: A::usize) -> i8 {{
 ",
         array_size
     );
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     let x = -5;
     for i in 0..array_size {
@@ -718,7 +718,7 @@ fn main(x: A::i8) -> i8 {{
 ",
         array_size
     );
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..10 {
         computation.set_i8(Party::A, x);
@@ -744,7 +744,7 @@ fn main(x: A::i8, i: A::usize) -> i8 {{
 ",
         array_size
     );
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     for x in -10..10 {
         for i in 0..array_size {
@@ -762,7 +762,7 @@ fn compile_signed_casts() -> Result<(), String> {
     // signed to unsigned:
 
     let prg = "fn main(x: A::i16) -> u8 { x as u8 }";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut comp: Computation = circuit.into();
     for x in -200..200 {
         comp.set_i16(Party::A, x);
@@ -771,7 +771,7 @@ fn compile_signed_casts() -> Result<(), String> {
     }
 
     let prg = "fn main(x: A::i8) -> u16 { x as u16 }";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut comp: Computation = circuit.into();
     for x in -128..127 {
         comp.set_i8(Party::A, x);
@@ -782,7 +782,7 @@ fn compile_signed_casts() -> Result<(), String> {
     // unsigned to signed:
 
     let prg = "fn main(x: A::u16) -> i8 { x as i8 }";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut comp: Computation = circuit.into();
     for x in 200..300 {
         comp.set_u16(Party::A, x);
@@ -791,7 +791,7 @@ fn compile_signed_casts() -> Result<(), String> {
     }
 
     let prg = "fn main(x: A::u8) -> i16 { x as i16 }";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut comp: Computation = circuit.into();
     for x in 200..255 {
         comp.set_u8(Party::A, x);
@@ -802,7 +802,7 @@ fn compile_signed_casts() -> Result<(), String> {
     // signed to signed:
 
     let prg = "fn main(x: A::i16) -> i8 { x as i8 }";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut comp: Computation = circuit.into();
     for x in -200..200 {
         comp.set_i16(Party::A, x);
@@ -811,7 +811,7 @@ fn compile_signed_casts() -> Result<(), String> {
     }
 
     let prg = "fn main(x: A::i8) -> i16 { x as i16 }";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut comp: Computation = circuit.into();
     for x in -128..127 {
         comp.set_i8(Party::A, x);
@@ -831,7 +831,7 @@ fn main() -> i16 {
     })
 }
 ";
-    let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
     computation.run().map_err(|e| e.prettify(prg))?;
     assert_eq!(
@@ -853,7 +853,7 @@ fn main() -> {} {{
 ",
             t, i
         );
-        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.run().map_err(|e| e.prettify(prg))?;
         if i <= 2 {
@@ -891,7 +891,7 @@ fn main(b: A::bool) -> u8 {
 }
 ";
     for b in [false, true] {
-        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.set_bool(Party::A, b);
         computation.run().map_err(|e| e.prettify(prg))?;
@@ -926,7 +926,7 @@ fn main(b: A::bool) -> u8 {
 }
 ";
     for b in [false, true] {
-        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.set_bool(Party::A, b);
         computation.run().map_err(|e| e.prettify(prg))?;
@@ -970,7 +970,7 @@ fn main(choice: A::u8, x: A::u8, y: A::u8) -> u8 {
             } else {
                 x / y
             };
-            let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+            let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
             let mut computation: Computation = circuit.into();
             computation.set_u8(Party::A, choice);
             computation.set_u8(Party::A, x);
@@ -998,7 +998,7 @@ fn main(x: A::u8) -> u8 {
 ";
     for x in 0..255 {
         println!("Checking {}", x);
-        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.set_u8(Party::A, x);
         computation.run().map_err(|e| e.prettify(prg))?;
@@ -1028,7 +1028,7 @@ fn main(x: A::u8) -> u8 {
 ";
     for x in 0..10 {
         println!("Checking {}", x);
-        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.set_u8(Party::A, x);
         computation.run().map_err(|e| e.prettify(prg))?;
@@ -1053,7 +1053,7 @@ fn main(x: A::u8) -> u8 {
 ";
     for x in 0..10 {
         println!("Checking {}", x);
-        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.set_u8(Party::A, x);
         computation.run().map_err(|e| e.prettify(prg))?;
