@@ -472,8 +472,18 @@ impl Parser {
                 TokenEnum::SignedNum(n) => Expr(ExprEnum::NumSigned(n), meta),
                 TokenEnum::LeftParen => {
                     let expr = self.parse_expr()?;
-                    self.expect(&TokenEnum::RightParen)?;
-                    expr
+                    if self.peek(&TokenEnum::Comma) {
+                        let mut fields = vec![expr];
+                        while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+                            fields.push(self.parse_expr()?);
+                        }
+                        let tuple_end = self.expect(&TokenEnum::RightParen)?;
+                        let meta = join_meta(meta, tuple_end);
+                        Expr(ExprEnum::TupleLiteral(fields), meta)
+                    } else {
+                        self.expect(&TokenEnum::RightParen)?;
+                        expr
+                    }
                 }
                 TokenEnum::LeftBracket => {
                     let elem = self.parse_expr()?;

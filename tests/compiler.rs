@@ -837,13 +837,14 @@ fn compile_tuple() -> Result<(), String> {
     for (t, i) in [("i8", 0), ("i8", 1), ("i8", 2), ("bool", 3), ("bool", 4)] {
         let prg = &format!(
             "
-(fn main {}
-  (let t (tuple -3 -2 -1 true false)
-    (tuple-get t {})))
+fn main() -> {} {{
+    let t = (-3, -2, -1, true, false);
+    t.{}
+}}
 ",
             t, i
         );
-        let circuit = compile(&prg).map_err(|e| e.prettify(prg))?;
+        let circuit = compile_rustish(&prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.run().map_err(|e| e.prettify(prg))?;
         if i <= 2 {
