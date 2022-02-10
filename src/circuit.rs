@@ -29,12 +29,8 @@ impl Circuit {
             let output_bit = match gate {
                 Gate::InA => *in_a_iter.next().unwrap(),
                 Gate::InB => *in_b_iter.next().unwrap(),
-                Gate::Xor(x, y) => {
-                    output[*x].unwrap() ^ output[*y].unwrap()
-                }
-                Gate::And(x, y) => {
-                    output[*x].unwrap() & output[*y].unwrap()
-                }
+                Gate::Xor(x, y) => output[*x].unwrap() ^ output[*y].unwrap(),
+                Gate::And(x, y) => output[*x].unwrap() & output[*y].unwrap(),
             };
             output[w] = Some(output_bit);
         }

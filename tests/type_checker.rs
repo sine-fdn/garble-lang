@@ -1,47 +1,59 @@
-use garble_script::{parser::parse, type_checker::{TypeError, TypeErrorEnum}};
+use garble_script::{
+    scanner::scan,
+    type_checker::{TypeError, TypeErrorEnum},
+    Error,
+};
 
 #[test]
-fn reject_fns_as_values() -> Result<(), String> {
+fn reject_fns_as_values() -> Result<(), Error> {
     let prg = "
-(fn inc u16 (param x u16)
-  (+ x 1))
+fn inc(x: u16) -> u16 {
+  x + 1
+}
 
-(fn main u16 (param x A u16)
-  (let f inc
-    (call f x)))
+fn main(x: A::u16) -> u16 {
+  let f = inc;
+  f(x)
+}
 ";
-    let e = parse(prg)
-        .map_err(|e| e.prettify(prg))?
-        .type_check();
-    assert!(matches!(e, Err(TypeError(TypeErrorEnum::FnCannotBeUsedAsValue(_), _))));
+    let e = scan(prg)?.parse()?.type_check();
+    assert!(matches!(
+        e,
+        Err(TypeError(TypeErrorEnum::FnCannotBeUsedAsValue(_), _))
+    ));
     Ok(())
 }
 
 #[test]
-fn reject_duplicate_fn_params() -> Result<(), String> {
+fn reject_duplicate_fn_params() -> Result<(), Error> {
     let prg = "
-(fn add u16 (param x u16) (param x u16)
-  (+ x x))
+fn add(x: u16, x: u16) -> u16 {
+  x + x
+}
 
-(fn main u16 (param x A u16)
-  (call add x 1))
+fn main(x: A::u16) -> u16 {
+  add(x, 1)
+}
 ";
-    let e = parse(prg)
-        .map_err(|e| e.prettify(prg))?
-        .type_check();
-    assert!(matches!(e, Err(TypeError(TypeErrorEnum::DuplicateFnParam(_), _))));
+    let e = scan(prg)?.parse()?.type_check();
+    assert!(matches!(
+        e,
+        Err(TypeError(TypeErrorEnum::DuplicateFnParam(_), _))
+    ));
     Ok(())
 }
 
 #[test]
-fn reject_duplicate_fn_params_in_main() -> Result<(), String> {
+fn reject_duplicate_fn_params_in_main() -> Result<(), Error> {
     let prg = "
-(fn main u16 (param x A u16) (param x A u16)
-  (+ x x))
+fn main(x: A::u16, x: A::u16) -> u16 {
+  x + x
+}
 ";
-    let e = parse(prg)
-        .map_err(|e| e.prettify(prg))?
-        .type_check();
-    assert!(matches!(e, Err(TypeError(TypeErrorEnum::DuplicateFnParam(_), _))));
+    let e = scan(prg).unwrap().parse().unwrap().type_check();
+    assert!(matches!(
+        e,
+        Err(TypeError(TypeErrorEnum::DuplicateFnParam(_), _))
+    ));
     Ok(())
 }

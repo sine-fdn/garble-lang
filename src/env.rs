@@ -10,7 +10,7 @@ impl<T: Clone> Env<T> {
     pub(crate) fn get(&self, identifier: &str) -> Option<T> {
         for bindings in self.0.iter().rev() {
             if let Some(v) = bindings.get(identifier) {
-                return Some(v.clone())
+                return Some(v.clone());
             }
         }
         None

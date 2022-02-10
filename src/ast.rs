@@ -31,7 +31,7 @@ impl Variant {
     pub fn types(&self) -> Option<Vec<Type>> {
         match self {
             Variant::Unit(_) => None,
-            Variant::Tuple(_, types) => Some(types.clone())
+            Variant::Tuple(_, types) => Some(types.clone()),
         }
     }
 }
@@ -147,7 +147,7 @@ pub struct Closure {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum UnaryOp {
     Not,
-    Neg
+    Neg,
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]

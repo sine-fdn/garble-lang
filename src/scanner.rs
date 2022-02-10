@@ -2,7 +2,6 @@ use std::{iter::Peekable, str::Chars};
 
 use crate::token::{MetaInfo, Token, TokenEnum};
 
-
 #[derive(Debug, Clone)]
 pub struct ScanError(pub ScanErrorEnum, pub MetaInfo);
 
@@ -12,7 +11,6 @@ pub enum ScanErrorEnum {
     InvalidUnsignedNum(String),
     InvalidSignedNum(String),
 }
-
 
 pub struct Tokens(pub Vec<Token>);
 

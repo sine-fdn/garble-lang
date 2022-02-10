@@ -1,10 +1,10 @@
 use compiler::ComputeError;
-use parser::{ParseError, RustishParseError};
+use parser::ParseError;
 use scanner::{scan, ScanError};
 use token::MetaInfo;
 use type_checker::TypeError;
 
-use {circuit::Circuit, parser::parse};
+use circuit::Circuit;
 
 pub mod ast;
 pub mod circuit;
@@ -17,17 +17,13 @@ pub mod type_checker;
 pub mod typed_ast;
 
 pub fn compile(prg: &str) -> Result<Circuit, Error> {
-    Ok(parse(prg)?.type_check()?.compile())
-}
-
-pub fn compile_rustish(prg: &str) -> Result<Circuit, Error> {
     Ok(scan(prg)?.parse()?.type_check()?.compile())
 }
 
 #[derive(Debug, Clone)]
 pub enum Error {
     ScanErrors(Vec<ScanError>),
-    RustishParseError(Vec<RustishParseError>),
+    RustishParseError(Vec<ParseError>),
     ParseError(ParseError),
     TypeError(TypeError),
     ComputeError(ComputeError),
@@ -39,8 +35,8 @@ impl From<Vec<ScanError>> for Error {
     }
 }
 
-impl From<Vec<RustishParseError>> for Error {
-    fn from(e: Vec<RustishParseError>) -> Self {
+impl From<Vec<ParseError>> for Error {
+    fn from(e: Vec<ParseError>) -> Self {
         Self::RustishParseError(e)
     }
 }
@@ -101,7 +97,7 @@ impl Error {
                 msg
             }
             Error::RustishParseError(errs) => {
-                for RustishParseError(e, meta) in errs {
+                for ParseError(e, meta) in errs {
                     msg += &format!(
                         "Parse error on line {}:{}\n",
                         meta.start.0 + 1,
