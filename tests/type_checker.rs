@@ -36,7 +36,6 @@ fn main(x: A::u16) -> u16 {
 }
 ";
     let e = scan(prg)?.parse()?.type_check();
-    println!("{:?}", e);
     assert!(matches!(
         e,
         Err(TypeError(TypeErrorEnum::DuplicateFnParam(_), _))
@@ -62,8 +61,8 @@ fn main(x: A::u16, x: A::u16) -> u16 {
 #[test]
 fn reject_unused_fn() -> Result<(), Error> {
     let prg = "
-  fn main() -> u8 {
-    0
+  fn main(x: A::u8) -> u8 {
+    x
   }
 
   fn unused(x: u8) -> u8 {
@@ -78,8 +77,8 @@ fn reject_unused_fn() -> Result<(), Error> {
 #[test]
 fn reject_recursive_fn() -> Result<(), Error> {
     let prg = "
-  fn main() -> u8 {
-    rec_fn(5)
+  fn main(x: A::u8) -> u8 {
+    rec_fn(x)
   }
 
   fn rec_fn(x: u8) -> u8 {
@@ -91,6 +90,24 @@ fn reject_recursive_fn() -> Result<(), Error> {
   }
   ";
     let e = scan(prg).unwrap().parse().unwrap().type_check();
-    assert!(matches!(e, Err(TypeError(TypeErrorEnum::RecursiveFnDef(_), _))));
+    assert!(matches!(
+        e,
+        Err(TypeError(TypeErrorEnum::RecursiveFnDef(_), _))
+    ));
+    Ok(())
+}
+
+#[test]
+fn reject_main_without_params() -> Result<(), Error> {
+    let prg = "
+fn main() -> u8 {
+  0
+}
+";
+    let e = scan(prg).unwrap().parse().unwrap().type_check();
+    assert!(matches!(
+        e,
+        Err(TypeError(TypeErrorEnum::NoMainFnParams, _))
+    ));
     Ok(())
 }

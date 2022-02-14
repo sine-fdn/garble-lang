@@ -1,8 +1,8 @@
 use std::{cmp::max, collections::HashMap};
 
 use crate::{
-    ast::{Op, ParamDef, Party, Type, UnaryOp},
-    circuit::{Circuit, Gate, GateIndex},
+    ast::{Op, ParamDef, Type, UnaryOp},
+    circuit::{Circuit, CircuitBuilder, GateIndex, Party},
     env::Env,
     typed_ast::{
         Expr, ExprEnum, FnDef, Pattern, PatternEnum, Program, VariantExpr, VariantExprEnum,
@@ -16,16 +16,13 @@ impl Program {
             fns.insert(fn_name.clone(), fn_def);
         }
         let mut env = Env::new();
-        let mut gates = vec![];
+        let mut input_gates = vec![];
         let mut wire = 2;
         for (party, ParamDef(identifier, ty)) in self.main.params.iter() {
             let type_size = ty.size_in_bits();
             let mut wires = Vec::with_capacity(type_size);
             for _i in 0..type_size {
-                match party {
-                    Party::A => gates.push(Gate::InA),
-                    Party::B => gates.push(Gate::InB),
-                };
+                input_gates.push(*party);
                 wires.push(wire);
                 wire += 1;
             }
@@ -40,13 +37,12 @@ impl Program {
             }
             enums.insert(enum_name.clone(), variants);
         }
-        let mut circuit = Circuit {
-            gates,
-            output_gates: vec![],
-        };
-        let output_gates = self.main.body.compile(&enums, &fns, &mut env, &mut circuit);
-        circuit.output_gates.extend(output_gates);
-        circuit
+        let mut circuit = CircuitBuilder { input_gates, gates: vec![] };
+        let output_gates = self
+            .main
+            .body
+            .compile(&enums, &fns, &mut env, &mut circuit);
+        circuit.build(output_gates)
     }
 }
 
@@ -70,7 +66,7 @@ impl Expr {
         enums: &HashMap<String, HashMap<String, Vec<Type>>>,
         fns: &HashMap<String, &FnDef>,
         env: &mut Env<Vec<GateIndex>>,
-        circuit: &mut Circuit,
+        circuit: &mut CircuitBuilder,
     ) -> Vec<GateIndex> {
         let Expr(expr, ty, meta) = self;
         match expr {
@@ -247,23 +243,23 @@ impl Expr {
                     Op::BitAnd => {
                         let mut output_bits = vec![0; bits];
                         for i in 0..bits {
-                            output_bits[i] = circuit.push_gate(Gate::And(x[i], y[i]));
+                            output_bits[i] = circuit.push_and(x[i], y[i]);
                         }
                         output_bits
                     }
                     Op::BitXor => {
                         let mut output_bits = vec![0; bits];
                         for i in 0..bits {
-                            output_bits[i] = circuit.push_gate(Gate::Xor(x[i], y[i]));
+                            output_bits[i] = circuit.push_xor(x[i], y[i]);
                         }
                         output_bits
                     }
                     Op::BitOr => {
                         let mut output_bits = vec![0; bits];
                         for i in 0..bits {
-                            let xor = circuit.push_gate(Gate::Xor(x[i], y[i]));
-                            let and = circuit.push_gate(Gate::And(x[i], y[i]));
-                            let or = circuit.push_gate(Gate::Xor(xor, and));
+                            let xor = circuit.push_xor(x[i], y[i]);
+                            let and = circuit.push_and(x[i], y[i]);
+                            let or = circuit.push_xor(xor, and);
                             output_bits[i] = or;
                         }
                         output_bits
@@ -325,11 +321,11 @@ impl Expr {
                         let mut acc = 1;
                         for i in 0..bits {
                             let eq = circuit.push_eq(x[i], y[i]);
-                            acc = circuit.push_gate(Gate::And(acc, eq));
+                            acc = circuit.push_and(acc, eq);
                         }
                         match op {
                             Op::Eq => vec![acc],
-                            Op::NotEq => vec![circuit.push_gate(Gate::Xor(acc, 1))],
+                            Op::NotEq => vec![circuit.push_not(acc)],
                             _ => unreachable!(),
                         }
                     }
@@ -369,14 +365,14 @@ impl Expr {
                 assert_eq!(condition.len(), 1);
                 assert_eq!(case_true.len(), case_false.len());
                 let condition = condition[0];
-                let not_condition = circuit.push_gate(Gate::Xor(condition, 1));
+                let not_condition = circuit.push_not(condition);
                 let mut gate_indexes = Vec::with_capacity(case_true.len());
                 for i in 0..case_true.len() {
                     let case_true = case_true[i];
                     let case_false = case_false[i];
-                    let gate_if_true = circuit.push_gate(Gate::And(case_true, condition));
-                    let gate_if_false = circuit.push_gate(Gate::And(case_false, not_condition));
-                    gate_indexes.push(circuit.push_gate(Gate::Xor(gate_if_true, gate_if_false)));
+                    let gate_if_true = circuit.push_and(case_true, condition);
+                    let gate_if_false = circuit.push_and(case_false, not_condition);
+                    gate_indexes.push(circuit.push_xor(gate_if_true, gate_if_false));
                 }
                 gate_indexes
             }
@@ -483,7 +479,7 @@ impl Expr {
                     let ret_expr = ret_expr.compile(enums, fns, env, circuit);
 
                     let no_prev_match = circuit.push_not(has_prev_match);
-                    let s = circuit.push_gate(Gate::And(no_prev_match, is_match));
+                    let s = circuit.push_and(no_prev_match, is_match);
                     for i in 0..bits {
                         let x0 = ret_expr[i];
                         let x1 = muxed_ret_expr[i];
@@ -505,7 +501,7 @@ impl Pattern {
         enums: &HashMap<String, HashMap<String, Vec<Type>>>,
         fns: &HashMap<String, &FnDef>,
         env: &mut Env<Vec<GateIndex>>,
-        circuit: &mut Circuit,
+        circuit: &mut CircuitBuilder,
     ) -> GateIndex {
         let Pattern(pattern, ty, _) = self;
         match pattern {
@@ -527,7 +523,7 @@ impl Pattern {
                 let mut acc = 1;
                 for i in 0..bits {
                     let eq = circuit.push_eq(n[i], match_expr[i]);
-                    acc = circuit.push_gate(Gate::And(acc, eq));
+                    acc = circuit.push_and(acc, eq);
                 }
                 acc
             }
@@ -537,7 +533,7 @@ impl Pattern {
                 let mut acc = 1;
                 for i in 0..bits {
                     let eq = circuit.push_eq(n[i], match_expr[i]);
-                    acc = circuit.push_gate(Gate::And(acc, eq));
+                    acc = circuit.push_and(acc, eq);
                 }
                 acc
             }
@@ -552,7 +548,7 @@ impl Pattern {
                     circuit.push_comparator_circuit(bits, match_expr, signed, &max, signed);
                 let not_lt_min = circuit.push_not(lt_min);
                 let not_gt_max = circuit.push_not(gt_max);
-                circuit.push_gate(Gate::And(not_lt_min, not_gt_max))
+                circuit.push_and(not_lt_min, not_gt_max)
             }
             PatternEnum::SignedInclusiveRange(min, max) => {
                 let bits = ty.size_in_bits();
@@ -565,7 +561,7 @@ impl Pattern {
                     circuit.push_comparator_circuit(bits, match_expr, signed, &max, signed);
                 let not_lt_min = circuit.push_not(lt_min);
                 let not_gt_max = circuit.push_not(gt_max);
-                circuit.push_gate(Gate::And(not_lt_min, not_gt_max))
+                circuit.push_and(not_lt_min, not_gt_max)
             }
             PatternEnum::Tuple(fields) => {
                 let mut is_match = 1;
@@ -578,7 +574,7 @@ impl Pattern {
                     };
                     let match_expr = &match_expr[w..w + field_bits];
                     let is_field_match = field.compile(match_expr, enums, fns, env, circuit);
-                    is_match = circuit.push_gate(Gate::And(is_match, is_field_match));
+                    is_match = circuit.push_and(is_match, is_field_match);
                     w += field_bits;
                 }
                 is_match
@@ -595,7 +591,7 @@ impl Pattern {
                 let mut is_match = 1;
                 for i in 0..tag_size {
                     let eq = circuit.push_eq(tag_expected[i], tag_actual[i]);
-                    is_match = circuit.push_gate(Gate::And(is_match, eq));
+                    is_match = circuit.push_and(is_match, eq);
                 }
 
                 match pattern {
@@ -613,7 +609,7 @@ impl Pattern {
                             let match_expr = &match_expr[w..w + field_bits];
                             let is_field_match =
                                 field.compile(match_expr, enums, fns, env, circuit);
-                            is_match = circuit.push_gate(Gate::And(is_match, is_field_match));
+                            is_match = circuit.push_and(is_match, is_field_match);
                             w += field_bits;
                         }
                     }
@@ -717,11 +713,10 @@ impl Computation {
     pub fn run(&mut self) -> Result<(), ComputeError> {
         let mut expected_in_a_len = 0;
         let mut expected_in_b_len = 0;
-        for gate in self.circuit.gates.iter() {
-            match gate {
-                Gate::InA => expected_in_a_len += 1,
-                Gate::InB => expected_in_b_len += 1,
-                _ => {}
+        for party in self.circuit.input_gates.iter() {
+            match party {
+                Party::A => expected_in_a_len += 1,
+                Party::B => expected_in_b_len += 1,
             }
         }
         if self.in_a.len() != expected_in_a_len {

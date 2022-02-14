@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::token::MetaInfo;
+use crate::{token::MetaInfo, circuit::Party};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Program {
@@ -77,12 +77,6 @@ pub enum Type {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ParamDef(pub String, pub Type);
-
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub enum Party {
-    A,
-    B,
-}
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Expr(pub ExprEnum, pub MetaInfo);

@@ -1,4 +1,4 @@
-use garble_script::{ast::Party, compile, compiler::Computation};
+use garble_script::{compile, compiler::Computation, circuit::Party};
 
 #[test]
 fn compile_xor() -> Result<(), String> {
@@ -824,7 +824,7 @@ fn compile_signed_casts() -> Result<(), String> {
 #[test]
 fn compile_range() -> Result<(), String> {
     let prg = "
-fn main() -> i16 {
+fn main(_x: A::u8) -> i16 {
     let arr = 1..101;
     arr.fold(0, |acc: i16, x: usize| -> i16 {
         acc + (x as i16)
@@ -833,6 +833,7 @@ fn main() -> i16 {
 ";
     let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut computation: Computation = circuit.into();
+    computation.set_u8(Party::A, 0);
     computation.run().map_err(|e| e.prettify(prg))?;
     assert_eq!(
         computation.get_i16().map_err(|e| e.prettify(prg))?,
@@ -846,7 +847,7 @@ fn compile_tuple() -> Result<(), String> {
     for (t, i) in [("i8", 0), ("i8", 1), ("i8", 2), ("bool", 3), ("bool", 4)] {
         let prg = &format!(
             "
-fn main() -> {} {{
+fn main(x: A::bool) -> {} {{
     let t = (-3, -2, -1, true, false);
     t.{}
 }}
@@ -855,6 +856,7 @@ fn main() -> {} {{
         );
         let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
+        computation.set_bool(Party::A, false);
         computation.run().map_err(|e| e.prettify(prg))?;
         if i <= 2 {
             assert_eq!(computation.get_i8().map_err(|e| e.prettify(prg))?, i - 3);
@@ -997,7 +999,6 @@ fn main(x: A::u8) -> u8 {
 }
 ";
     for x in 0..255 {
-        println!("Checking {}", x);
         let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.set_u8(Party::A, x);
@@ -1027,7 +1028,6 @@ fn main(x: A::u8) -> u8 {
 }
 ";
     for x in 0..10 {
-        println!("Checking {}", x);
         let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.set_u8(Party::A, x);
@@ -1052,7 +1052,6 @@ fn main(x: A::u8) -> u8 {
 }
 ";
     for x in 0..10 {
-        println!("Checking {}", x);
         let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
         let mut computation: Computation = circuit.into();
         computation.set_u8(Party::A, x);

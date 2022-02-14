@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{EnumDef, Op, ParamDef, Party, Type, UnaryOp},
-    token::MetaInfo,
+    ast::{EnumDef, Op, ParamDef, Type, UnaryOp},
+    token::MetaInfo, circuit::Party,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

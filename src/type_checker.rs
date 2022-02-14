@@ -15,6 +15,7 @@ pub struct TypeError(pub TypeErrorEnum, pub MetaInfo);
 
 #[derive(Debug, Clone)]
 pub enum TypeErrorEnum {
+    NoMainFnParams,
     UnusedFn(String),
     RecursiveFnDef(String),
     UnknownEnum(String),
@@ -82,6 +83,10 @@ impl Program {
         let mut env = Env::new();
         for (fn_name, fn_def) in self.fn_defs.iter() {
             defs.fns.insert(fn_name, fn_def);
+        }
+        if self.main.params.is_empty() {
+            let e = TypeErrorEnum::NoMainFnParams;
+            return Err(TypeError(e, self.main.meta));
         }
         let mut params = Vec::with_capacity(self.main.params.len());
         let mut param_identifiers = HashSet::new();

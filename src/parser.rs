@@ -2,11 +2,11 @@ use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        Closure, EnumDef, Expr, ExprEnum, FnDef, MainDef, Op, ParamDef, Party, Pattern,
+        Closure, EnumDef, Expr, ExprEnum, FnDef, MainDef, Op, ParamDef, Pattern,
         PatternEnum, Program, Type, UnaryOp, Variant, VariantExpr, VariantExprEnum,
     },
     scanner::Tokens,
-    token::{MetaInfo, Token, TokenEnum},
+    token::{MetaInfo, Token, TokenEnum}, circuit::Party,
 };
 
 #[derive(Debug, Clone)]
