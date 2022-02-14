@@ -40,223 +40,14 @@ impl Program {
             }
             enums.insert(enum_name.clone(), variants);
         }
-        let output_gates = self.main.body.compile(&enums, &fns, &mut env, &mut gates);
-        Circuit {
+        let mut circuit = Circuit {
             gates,
-            output_gates,
-        }
-    }
-}
-
-fn push_gate(gates: &mut Vec<Gate>, gate: Gate) -> GateIndex {
-    gates.push(gate);
-    gates.len() + 1 // because index 0 and 1 are reserved for const true/false
-}
-
-fn push_not(gates: &mut Vec<Gate>, x: GateIndex) -> GateIndex {
-    push_gate(gates, Gate::Xor(x, 1))
-}
-
-fn push_or(gates: &mut Vec<Gate>, x: GateIndex, y: GateIndex) -> GateIndex {
-    let xor = push_gate(gates, Gate::Xor(x, y));
-    let and = push_gate(gates, Gate::And(x, y));
-    push_gate(gates, Gate::Xor(xor, and))
-}
-
-fn push_eq(gates: &mut Vec<Gate>, x: GateIndex, y: GateIndex) -> GateIndex {
-    let xor = push_gate(gates, Gate::Xor(x, y));
-    push_gate(gates, Gate::Xor(xor, 1))
-}
-
-fn push_mux(gates: &mut Vec<Gate>, s: GateIndex, x0: GateIndex, x1: GateIndex) -> GateIndex {
-    if x0 == x1 {
-        return x0;
-    }
-    let not_s = push_not(gates, s);
-    let x0_selected = push_gate(gates, Gate::And(x0, s));
-    let x1_selected = push_gate(gates, Gate::And(x1, not_s));
-    push_gate(gates, Gate::Xor(x0_selected, x1_selected))
-}
-
-fn push_adder(
-    gates: &mut Vec<Gate>,
-    x: GateIndex,
-    y: GateIndex,
-    carry: GateIndex,
-) -> (GateIndex, GateIndex) {
-    // first half-adder:
-    let wire_u = push_gate(gates, Gate::Xor(x, y));
-    let wire_v = push_gate(gates, Gate::And(x, y));
-    // second half-adder:
-    let wire_s = push_gate(gates, Gate::Xor(wire_u, carry));
-    let wire_w = push_gate(gates, Gate::And(wire_u, carry));
-
-    let carry = push_or(gates, wire_v, wire_w);
-    (wire_s, carry)
-}
-
-fn push_multiplier(
-    gates: &mut Vec<Gate>,
-    x: GateIndex,
-    y: GateIndex,
-    z: GateIndex,
-    carry: GateIndex,
-) -> (GateIndex, GateIndex) {
-    let x_and_y = push_gate(gates, Gate::And(x, y));
-    push_adder(gates, x_and_y, z, carry)
-}
-
-fn push_addition_circuit(
-    gates: &mut Vec<Gate>,
-    x: &[GateIndex],
-    y: &[GateIndex],
-) -> (Vec<GateIndex>, GateIndex) {
-    assert_eq!(x.len(), y.len());
-    let bits = x.len();
-
-    let mut carry = 0;
-    let mut sum = vec![0; bits];
-    // sequence of full adders:
-    for i in (0..bits).rev() {
-        let (s, c) = push_adder(gates, x[i], y[i], carry);
-        sum[i] = s;
-        carry = c;
-    }
-    (sum, carry)
-}
-
-fn push_negation_circuit(gates: &mut Vec<Gate>, x: &[GateIndex]) -> Vec<GateIndex> {
-    // flip bits and increment to get negate:
-    let mut carry = 1;
-    let mut neg = vec![0; x.len()];
-    for i in (0..x.len()).rev() {
-        let x = push_not(gates, x[i]);
-        // half-adder:
-        neg[i] = push_gate(gates, Gate::Xor(carry, x));
-        carry = push_gate(gates, Gate::And(carry, x));
-    }
-    neg
-}
-
-fn push_subtraction_circuit(
-    gates: &mut Vec<Gate>,
-    x: &[GateIndex],
-    y: &[GateIndex],
-) -> (Vec<GateIndex>, GateIndex) {
-    assert_eq!(x.len(), y.len());
-    let bits = x.len();
-
-    // flip bits of y and increment y to get negative y:
-    let mut carry = 1;
-    let mut x_extended = vec![0; bits + 1];
-    x_extended[1..].copy_from_slice(x);
-    let mut z = vec![0; bits + 1];
-    for i in (0..bits + 1).rev() {
-        let y = if i == 0 { 1 } else { push_not(gates, y[i - 1]) };
-        // half-adder:
-        z[i] = push_gate(gates, Gate::Xor(carry, y));
-        carry = push_gate(gates, Gate::And(carry, y));
-    }
-
-    let (mut sum_extended, _carry) = push_addition_circuit(gates, &x_extended, &z);
-    let sum = sum_extended.split_off(1);
-    (sum, sum_extended[0])
-}
-
-fn push_unsigned_division_circuit(
-    gates: &mut Vec<Gate>,
-    x: &[GateIndex],
-    y: &[GateIndex],
-) -> (Vec<GateIndex>, Vec<GateIndex>) {
-    assert_eq!(x.len(), y.len());
-    let bits = x.len();
-
-    let mut quotient = vec![0; bits];
-    let mut remainder = x.to_vec();
-    for shift_amount in (0..bits).rev() {
-        let mut overflow = 0;
-        let mut y_shifted = vec![0; bits];
-        for y in y.iter().copied().take(shift_amount) {
-            overflow = push_or(gates, overflow, y);
-        }
-        y_shifted[..(bits - shift_amount)]
-            .clone_from_slice(&y[shift_amount..((bits - shift_amount) + shift_amount)]);
-
-        let (x_sub, carry) = push_subtraction_circuit(gates, &remainder, &y_shifted);
-        let carry_or_overflow = push_or(gates, carry, overflow);
-        for i in 0..bits {
-            remainder[i] = push_mux(gates, carry_or_overflow, remainder[i], x_sub[i]);
-        }
-        let quotient_bit = push_not(gates, carry);
-        quotient[bits - shift_amount - 1] = push_mux(gates, overflow, 0, quotient_bit);
-    }
-    (quotient, remainder)
-}
-
-fn push_signed_division_circuit(
-    gates: &mut Vec<Gate>,
-    x: &mut Vec<GateIndex>,
-    y: &mut Vec<GateIndex>,
-) -> (Vec<GateIndex>, Vec<GateIndex>) {
-    assert_eq!(x.len(), y.len());
-    let bits = x.len();
-
-    let is_result_neg = push_gate(gates, Gate::Xor(x[0], y[0]));
-    let x_negated = push_negation_circuit(gates, x);
-    let x_sign_bit = x[0];
-    for i in 0..bits {
-        x[i] = push_mux(gates, x_sign_bit, x_negated[i], x[i]);
-    }
-    let y_negated = push_negation_circuit(gates, y);
-    let y_sign_bit = y[0];
-    for i in 0..bits {
-        y[i] = push_mux(gates, y_sign_bit, y_negated[i], y[i]);
-    }
-    let (mut quotient, mut remainder) = push_unsigned_division_circuit(gates, x, y);
-    let quot_neg = push_negation_circuit(gates, &quotient);
-    for i in 0..bits {
-        quotient[i] = push_mux(gates, is_result_neg, quot_neg[i], quotient[i]);
-    }
-    let rem_neg = push_negation_circuit(gates, &remainder);
-    for i in 0..bits {
-        remainder[i] = push_mux(gates, x_sign_bit, rem_neg[i], remainder[i]);
-    }
-    (quotient, remainder)
-}
-
-fn push_comparator_circuit(
-    gates: &mut Vec<Gate>,
-    bits: usize,
-    x: &[GateIndex],
-    ty_x: &Type,
-    y: &[GateIndex],
-    ty_y: &Type,
-) -> (GateIndex, GateIndex) {
-    let mut acc_gt = 0;
-    let mut acc_lt = 0;
-    let is_x_signed = is_signed(ty_x);
-    let is_y_signed = is_signed(ty_y);
-    for i in 0..bits {
-        let xor = push_gate(gates, Gate::Xor(x[i], y[i]));
-
-        let xor_and_x = push_gate(gates, Gate::And(xor, x[i]));
-        let xor_and_y = push_gate(gates, Gate::And(xor, y[i]));
-        let (gt, lt) = if i == 0 && (is_x_signed || is_y_signed) {
-            (xor_and_y, xor_and_x)
-        } else {
-            (xor_and_x, xor_and_y)
+            output_gates: vec![],
         };
-
-        let gt = push_or(gates, gt, acc_gt);
-        let lt = push_or(gates, lt, acc_lt);
-
-        let not_acc_gt = push_not(gates, acc_gt);
-        let not_acc_lt = push_not(gates, acc_lt);
-
-        acc_gt = push_gate(gates, Gate::And(gt, not_acc_lt));
-        acc_lt = push_gate(gates, Gate::And(lt, not_acc_gt))
+        let output_gates = self.main.body.compile(&enums, &fns, &mut env, &mut circuit);
+        circuit.output_gates.extend(output_gates);
+        circuit
     }
-    (acc_lt, acc_gt)
 }
 
 fn extend_to_bits(v: &mut Vec<usize>, ty: &Type, bits: usize) {
@@ -279,7 +70,7 @@ impl Expr {
         enums: &HashMap<String, HashMap<String, Vec<Type>>>,
         fns: &HashMap<String, &FnDef>,
         env: &mut Env<Vec<GateIndex>>,
-        gates: &mut Vec<Gate>,
+        circuit: &mut Circuit,
     ) -> Vec<GateIndex> {
         let Expr(expr, ty, meta) = self;
         match expr {
@@ -302,7 +93,7 @@ impl Expr {
             ExprEnum::Identifier(s) => env.get(s).unwrap(),
             ExprEnum::ArrayLiteral(elem, size) => {
                 let elem_ty = elem.1.clone();
-                let mut elem = elem.compile(enums, fns, env, gates);
+                let mut elem = elem.compile(enums, fns, env, circuit);
                 extend_to_bits(&mut elem, &elem_ty, elem_ty.size_in_bits());
                 let bits = ty.size_in_bits();
                 let mut array = Vec::with_capacity(bits);
@@ -313,8 +104,8 @@ impl Expr {
             }
             ExprEnum::ArrayAccess(array, index) => {
                 let elem_bits = ty.size_in_bits();
-                let mut array = array.compile(enums, fns, env, gates);
-                let mut index = index.compile(enums, fns, env, gates);
+                let mut array = array.compile(enums, fns, env, circuit);
+                let mut index = index.compile(enums, fns, env, circuit);
                 extend_to_bits(&mut index, &Type::Usize, Type::Usize.size_in_bits());
                 let out_of_bounds_elem = 1;
                 for mux_layer in (0..index.len()).rev() {
@@ -326,10 +117,10 @@ impl Expr {
                             if i + elem_bits < array.len() {
                                 let a0 = array[i];
                                 let a1 = array[i + elem_bits];
-                                muxed_array.push(push_mux(gates, s, a1, a0));
+                                muxed_array.push(circuit.push_mux(s, a1, a0));
                             } else if i < array.len() {
                                 let a0 = array[i];
-                                muxed_array.push(push_mux(gates, s, out_of_bounds_elem, a0));
+                                muxed_array.push(circuit.push_mux(s, out_of_bounds_elem, a0));
                             }
                             i += 1;
                         }
@@ -347,15 +138,15 @@ impl Expr {
                         ty
                     ),
                 };
-                let mut array = array.compile(enums, fns, env, gates);
-                let mut index = index.compile(enums, fns, env, gates);
-                let value = value.compile(enums, fns, env, gates);
+                let mut array = array.compile(enums, fns, env, circuit);
+                let mut index = index.compile(enums, fns, env, circuit);
+                let value = value.compile(enums, fns, env, circuit);
                 extend_to_bits(&mut index, &Type::Usize, Type::Usize.size_in_bits());
                 let elem_bits = elem_ty.size_in_bits();
 
                 let mut index_negated = vec![0; index.len()];
                 for (i, index) in index.iter().copied().enumerate() {
-                    index_negated[i] = push_not(gates, index);
+                    index_negated[i] = circuit.push_not(index);
                 }
                 // for each array element...
                 for i in 0..*size {
@@ -373,7 +164,7 @@ impl Expr {
                             // x0 is selected by the mux-chain whenever a single bit of index != i
                             let x0 = array[i * elem_bits + b];
                             // x1 is value[b] only if index == i in all bits
-                            x1 = push_mux(gates, s, x0, x1);
+                            x1 = circuit.push_mux(s, x0, x1);
                         }
                         array[i * elem_bits + b] = x1;
                     }
@@ -383,7 +174,7 @@ impl Expr {
             ExprEnum::TupleLiteral(tuple) => {
                 let mut wires = Vec::with_capacity(ty.size_in_bits());
                 for value in tuple {
-                    wires.extend(value.compile(enums, fns, env, gates));
+                    wires.extend(value.compile(enums, fns, env, circuit));
                 }
                 wires
             }
@@ -398,24 +189,24 @@ impl Expr {
                     }
                     _ => panic!("Expected a tuple type, but found {:?}", tuple.1),
                 };
-                let tuple = tuple.compile(enums, fns, env, gates);
+                let tuple = tuple.compile(enums, fns, env, circuit);
                 tuple[wires_before..wires_before + wires_at_index].to_vec()
             }
             ExprEnum::UnaryOp(UnaryOp::Neg, x) => {
-                let x = x.compile(enums, fns, env, gates);
-                push_negation_circuit(gates, &x)
+                let x = x.compile(enums, fns, env, circuit);
+                circuit.push_negation_circuit(&x)
             }
             ExprEnum::UnaryOp(UnaryOp::Not, x) => {
-                let x = x.compile(enums, fns, env, gates);
+                let x = x.compile(enums, fns, env, circuit);
                 let mut flipped = vec![0; x.len()];
                 for (i, x) in x.iter().enumerate() {
-                    flipped[i] = push_not(gates, *x);
+                    flipped[i] = circuit.push_not(*x);
                 }
                 flipped
             }
             ExprEnum::Op(op @ (Op::ShiftLeft | Op::ShiftRight), x, y) => {
-                let x = x.compile(enums, fns, env, gates);
-                let y = y.compile(enums, fns, env, gates);
+                let x = x.compile(enums, fns, env, circuit);
+                let y = y.compile(enums, fns, env, circuit);
                 assert_eq!(y.len(), 8);
                 let bits = x.len();
                 let bit_to_shift_in = x[0];
@@ -437,7 +228,7 @@ impl Expr {
                         } else {
                             bits_unshifted[i - shift]
                         };
-                        bits_shifted[i] = push_mux(gates, s, shifted, unshifted);
+                        bits_shifted[i] = circuit.push_mux(s, shifted, unshifted);
                     }
                     shift *= 2;
                     bits_unshifted = bits_shifted;
@@ -447,8 +238,8 @@ impl Expr {
             ExprEnum::Op(op, x, y) => {
                 let ty_x = &x.1;
                 let ty_y = &y.1;
-                let mut x = x.compile(enums, fns, env, gates);
-                let mut y = y.compile(enums, fns, env, gates);
+                let mut x = x.compile(enums, fns, env, circuit);
+                let mut y = y.compile(enums, fns, env, circuit);
                 let bits = max(x.len(), y.len());
                 extend_to_bits(&mut x, ty_x, bits);
                 extend_to_bits(&mut y, ty_y, bits);
@@ -456,29 +247,29 @@ impl Expr {
                     Op::BitAnd => {
                         let mut output_bits = vec![0; bits];
                         for i in 0..bits {
-                            output_bits[i] = push_gate(gates, Gate::And(x[i], y[i]));
+                            output_bits[i] = circuit.push_gate(Gate::And(x[i], y[i]));
                         }
                         output_bits
                     }
                     Op::BitXor => {
                         let mut output_bits = vec![0; bits];
                         for i in 0..bits {
-                            output_bits[i] = push_gate(gates, Gate::Xor(x[i], y[i]));
+                            output_bits[i] = circuit.push_gate(Gate::Xor(x[i], y[i]));
                         }
                         output_bits
                     }
                     Op::BitOr => {
                         let mut output_bits = vec![0; bits];
                         for i in 0..bits {
-                            let xor = push_gate(gates, Gate::Xor(x[i], y[i]));
-                            let and = push_gate(gates, Gate::And(x[i], y[i]));
-                            let or = push_gate(gates, Gate::Xor(xor, and));
+                            let xor = circuit.push_gate(Gate::Xor(x[i], y[i]));
+                            let and = circuit.push_gate(Gate::And(x[i], y[i]));
+                            let or = circuit.push_gate(Gate::Xor(xor, and));
                             output_bits[i] = or;
                         }
                         output_bits
                     }
-                    Op::Sub => push_subtraction_circuit(gates, &x, &y).0,
-                    Op::Add => push_addition_circuit(gates, &x, &y).0,
+                    Op::Sub => circuit.push_subtraction_circuit(&x, &y).0,
+                    Op::Add => circuit.push_addition_circuit(&x, &y).0,
                     Op::Mul => {
                         let mut sums: Vec<Vec<GateIndex>> = vec![vec![0; bits]; bits];
                         let mut carries: Vec<Vec<GateIndex>> = vec![vec![0; bits]; bits];
@@ -493,7 +284,7 @@ impl Expr {
                                 } else {
                                     sums[i + 1][j - 1]
                                 };
-                                let (sum, carry) = push_multiplier(gates, x[i], y[j], z, carry);
+                                let (sum, carry) = circuit.push_multiplier(x[i], y[j], z, carry);
                                 sums[i][j] = sum;
                                 carries[i][j] = carry;
                             }
@@ -506,21 +297,23 @@ impl Expr {
                     }
                     Op::Div => {
                         if is_signed(ty) {
-                            push_signed_division_circuit(gates, &mut x, &mut y).0
+                            circuit.push_signed_division_circuit(&mut x, &mut y).0
                         } else {
-                            push_unsigned_division_circuit(gates, &x, &y).0
+                            circuit.push_unsigned_division_circuit(&x, &y).0
                         }
                     }
                     Op::Mod => {
                         if is_signed(ty) {
-                            push_signed_division_circuit(gates, &mut x, &mut y).1
+                            circuit.push_signed_division_circuit(&mut x, &mut y).1
                         } else {
-                            push_unsigned_division_circuit(gates, &x, &y).1
+                            circuit.push_unsigned_division_circuit(&x, &y).1
                         }
                     }
                     Op::GreaterThan | Op::LessThan => {
+                        let is_signed_x = is_signed(ty_x);
+                        let is_signed_y = is_signed(ty_y);
                         let (acc_lt, acc_gt) =
-                            push_comparator_circuit(gates, bits, &x, ty_x, &y, ty_y);
+                            circuit.push_comparator_circuit(bits, &x, is_signed_x, &y, is_signed_y);
 
                         match op {
                             Op::GreaterThan => vec![acc_gt],
@@ -531,12 +324,12 @@ impl Expr {
                     Op::Eq | Op::NotEq => {
                         let mut acc = 1;
                         for i in 0..bits {
-                            let eq = push_eq(gates, x[i], y[i]);
-                            acc = push_gate(gates, Gate::And(acc, eq));
+                            let eq = circuit.push_eq(x[i], y[i]);
+                            acc = circuit.push_gate(Gate::And(acc, eq));
                         }
                         match op {
                             Op::Eq => vec![acc],
-                            Op::NotEq => vec![push_gate(gates, Gate::Xor(acc, 1))],
+                            Op::NotEq => vec![circuit.push_gate(Gate::Xor(acc, 1))],
                             _ => unreachable!(),
                         }
                     }
@@ -549,10 +342,10 @@ impl Expr {
                 }
             }
             ExprEnum::Let(var, binding, body) => {
-                let binding = binding.compile(enums, fns, env, gates);
+                let binding = binding.compile(enums, fns, env, circuit);
                 env.push();
                 env.set(var.clone(), binding);
-                let body = body.compile(enums, fns, env, gates);
+                let body = body.compile(enums, fns, env, circuit);
                 env.pop();
                 body
             }
@@ -565,31 +358,31 @@ impl Expr {
                     body = Expr(let_expr, ty.clone(), *meta)
                 }
                 env.push();
-                let body = body.compile(enums, fns, env, gates);
+                let body = body.compile(enums, fns, env, circuit);
                 env.pop();
                 body
             }
             ExprEnum::If(condition, case_true, case_false) => {
-                let condition = condition.compile(enums, fns, env, gates);
-                let case_true = case_true.compile(enums, fns, env, gates);
-                let case_false = case_false.compile(enums, fns, env, gates);
+                let condition = condition.compile(enums, fns, env, circuit);
+                let case_true = case_true.compile(enums, fns, env, circuit);
+                let case_false = case_false.compile(enums, fns, env, circuit);
                 assert_eq!(condition.len(), 1);
                 assert_eq!(case_true.len(), case_false.len());
                 let condition = condition[0];
-                let not_condition = push_gate(gates, Gate::Xor(condition, 1));
+                let not_condition = circuit.push_gate(Gate::Xor(condition, 1));
                 let mut gate_indexes = Vec::with_capacity(case_true.len());
                 for i in 0..case_true.len() {
                     let case_true = case_true[i];
                     let case_false = case_false[i];
-                    let gate_if_true = push_gate(gates, Gate::And(case_true, condition));
-                    let gate_if_false = push_gate(gates, Gate::And(case_false, not_condition));
-                    gate_indexes.push(push_gate(gates, Gate::Xor(gate_if_true, gate_if_false)));
+                    let gate_if_true = circuit.push_gate(Gate::And(case_true, condition));
+                    let gate_if_false = circuit.push_gate(Gate::And(case_false, not_condition));
+                    gate_indexes.push(circuit.push_gate(Gate::Xor(gate_if_true, gate_if_false)));
                 }
                 gate_indexes
             }
             ExprEnum::Cast(ty, expr) => {
                 let ty_expr = &expr.1;
-                let mut expr = expr.compile(enums, fns, env, gates);
+                let mut expr = expr.compile(enums, fns, env, circuit);
                 let size_after_cast = ty.size_in_bits();
 
                 match size_after_cast.cmp(&expr.len()) {
@@ -602,8 +395,8 @@ impl Expr {
                 }
             }
             ExprEnum::Fold(array, init, closure) => {
-                let array = array.compile(enums, fns, env, gates);
-                let mut init = init.compile(enums, fns, env, gates);
+                let array = array.compile(enums, fns, env, circuit);
+                let mut init = init.compile(enums, fns, env, circuit);
 
                 let ParamDef(init_identifier, init_ty) = &closure.params[0];
                 let ParamDef(elem_identifier, elem_ty) = &closure.params[1];
@@ -617,14 +410,14 @@ impl Expr {
                     env.push();
                     env.set(init_identifier.clone(), acc);
                     env.set(elem_identifier.clone(), elem.to_vec());
-                    acc = closure.body.compile(enums, fns, env, gates);
+                    acc = closure.body.compile(enums, fns, env, circuit);
                     env.pop();
                     i += elem_bits;
                 }
                 acc
             }
             ExprEnum::Map(array, closure) => {
-                let array = array.compile(enums, fns, env, gates);
+                let array = array.compile(enums, fns, env, circuit);
 
                 let ParamDef(elem_identifier, elem_ty) = &closure.params[0];
                 let elem_in_bits = elem_ty.size_in_bits();
@@ -637,7 +430,7 @@ impl Expr {
                     let elem_in = &array[i..i + elem_in_bits];
                     env.push();
                     env.set(elem_identifier.clone(), elem_in.to_vec());
-                    let elem_out = closure.body.compile(enums, fns, env, gates);
+                    let elem_out = closure.body.compile(enums, fns, env, circuit);
                     result.extend(elem_out);
                     env.pop();
                     i += elem_in_bits;
@@ -670,7 +463,7 @@ impl Expr {
                     VariantExprEnum::Unit => {}
                     VariantExprEnum::Tuple(fields) => {
                         for f in fields {
-                            let f = f.compile(enums, fns, env, gates);
+                            let f = f.compile(enums, fns, env, circuit);
                             wires[w..w + f.len()].copy_from_slice(&f);
                             w += f.len();
                         }
@@ -680,23 +473,23 @@ impl Expr {
             }
             ExprEnum::Match(expr, clauses) => {
                 let bits = ty.size_in_bits();
-                let expr = expr.compile(enums, fns, env, gates);
+                let expr = expr.compile(enums, fns, env, circuit);
                 let mut has_prev_match = 0;
                 let mut muxed_ret_expr = vec![0; bits];
 
                 for (pattern, ret_expr) in clauses {
                     env.push();
-                    let is_match = pattern.compile(&expr, enums, fns, env, gates);
-                    let ret_expr = ret_expr.compile(enums, fns, env, gates);
+                    let is_match = pattern.compile(&expr, enums, fns, env, circuit);
+                    let ret_expr = ret_expr.compile(enums, fns, env, circuit);
 
-                    let no_prev_match = push_not(gates, has_prev_match);
-                    let s = push_gate(gates, Gate::And(no_prev_match, is_match));
+                    let no_prev_match = circuit.push_not(has_prev_match);
+                    let s = circuit.push_gate(Gate::And(no_prev_match, is_match));
                     for i in 0..bits {
                         let x0 = ret_expr[i];
                         let x1 = muxed_ret_expr[i];
-                        muxed_ret_expr[i] = push_mux(gates, s, x0, x1);
+                        muxed_ret_expr[i] = circuit.push_mux(s, x0, x1);
                     }
-                    has_prev_match = push_or(gates, has_prev_match, is_match);
+                    has_prev_match = circuit.push_or(has_prev_match, is_match);
                     env.pop();
                 }
                 muxed_ret_expr
@@ -712,7 +505,7 @@ impl Pattern {
         enums: &HashMap<String, HashMap<String, Vec<Type>>>,
         fns: &HashMap<String, &FnDef>,
         env: &mut Env<Vec<GateIndex>>,
-        gates: &mut Vec<Gate>,
+        circuit: &mut Circuit,
     ) -> GateIndex {
         let Pattern(pattern, ty, _) = self;
         match pattern {
@@ -726,15 +519,15 @@ impl Pattern {
             }
             PatternEnum::False => {
                 assert_eq!(match_expr.len(), 1);
-                push_not(gates, match_expr[0])
+                circuit.push_not(match_expr[0])
             }
             PatternEnum::NumUnsigned(n) => {
                 let bits = ty.size_in_bits();
                 let n = unsigned_as_wires(*n, bits);
                 let mut acc = 1;
                 for i in 0..bits {
-                    let eq = push_eq(gates, n[i], match_expr[i]);
-                    acc = push_gate(gates, Gate::And(acc, eq));
+                    let eq = circuit.push_eq(n[i], match_expr[i]);
+                    acc = circuit.push_gate(Gate::And(acc, eq));
                 }
                 acc
             }
@@ -743,8 +536,8 @@ impl Pattern {
                 let n = signed_as_wires(*n, bits);
                 let mut acc = 1;
                 for i in 0..bits {
-                    let eq = push_eq(gates, n[i], match_expr[i]);
-                    acc = push_gate(gates, Gate::And(acc, eq));
+                    let eq = circuit.push_eq(n[i], match_expr[i]);
+                    acc = circuit.push_gate(Gate::And(acc, eq));
                 }
                 acc
             }
@@ -752,21 +545,27 @@ impl Pattern {
                 let bits = ty.size_in_bits();
                 let min = unsigned_as_wires(*min, bits);
                 let max = unsigned_as_wires(*max, bits);
-                let (lt_min, _) = push_comparator_circuit(gates, bits, match_expr, ty, &min, ty);
-                let (_, gt_max) = push_comparator_circuit(gates, bits, match_expr, ty, &max, ty);
-                let not_lt_min = push_not(gates, lt_min);
-                let not_gt_max = push_not(gates, gt_max);
-                push_gate(gates, Gate::And(not_lt_min, not_gt_max))
+                let signed = is_signed(ty);
+                let (lt_min, _) =
+                    circuit.push_comparator_circuit(bits, match_expr, signed, &min, signed);
+                let (_, gt_max) =
+                    circuit.push_comparator_circuit(bits, match_expr, signed, &max, signed);
+                let not_lt_min = circuit.push_not(lt_min);
+                let not_gt_max = circuit.push_not(gt_max);
+                circuit.push_gate(Gate::And(not_lt_min, not_gt_max))
             }
             PatternEnum::SignedInclusiveRange(min, max) => {
                 let bits = ty.size_in_bits();
                 let min = signed_as_wires(*min, bits);
                 let max = signed_as_wires(*max, bits);
-                let (lt_min, _) = push_comparator_circuit(gates, bits, match_expr, ty, &min, ty);
-                let (_, gt_max) = push_comparator_circuit(gates, bits, match_expr, ty, &max, ty);
-                let not_lt_min = push_not(gates, lt_min);
-                let not_gt_max = push_not(gates, gt_max);
-                push_gate(gates, Gate::And(not_lt_min, not_gt_max))
+                let signed = is_signed(ty);
+                let (lt_min, _) =
+                    circuit.push_comparator_circuit(bits, match_expr, signed, &min, signed);
+                let (_, gt_max) =
+                    circuit.push_comparator_circuit(bits, match_expr, signed, &max, signed);
+                let not_lt_min = circuit.push_not(lt_min);
+                let not_gt_max = circuit.push_not(gt_max);
+                circuit.push_gate(Gate::And(not_lt_min, not_gt_max))
             }
             PatternEnum::Tuple(fields) => {
                 let mut is_match = 1;
@@ -778,13 +577,14 @@ impl Pattern {
                         _ => field_type.size_in_bits(),
                     };
                     let match_expr = &match_expr[w..w + field_bits];
-                    let is_field_match = field.compile(match_expr, enums, fns, env, gates);
-                    is_match = push_gate(gates, Gate::And(is_match, is_field_match));
+                    let is_field_match = field.compile(match_expr, enums, fns, env, circuit);
+                    is_match = circuit.push_gate(Gate::And(is_match, is_field_match));
                     w += field_bits;
                 }
                 is_match
             }
-            PatternEnum::EnumUnit(enum_name, variant_name) | PatternEnum::EnumTuple(enum_name, variant_name, _) => {
+            PatternEnum::EnumUnit(enum_name, variant_name)
+            | PatternEnum::EnumTuple(enum_name, variant_name, _) => {
                 let enum_def = enums.get(enum_name).unwrap();
                 let tag_size = enum_tag_size(enum_def);
                 let tag_actual = &match_expr[0..tag_size];
@@ -794,8 +594,8 @@ impl Pattern {
 
                 let mut is_match = 1;
                 for i in 0..tag_size {
-                    let eq = push_eq(gates, tag_expected[i], tag_actual[i]);
-                    is_match = push_gate(gates, Gate::And(is_match, eq));
+                    let eq = circuit.push_eq(tag_expected[i], tag_actual[i]);
+                    is_match = circuit.push_gate(Gate::And(is_match, eq));
                 }
 
                 match pattern {
@@ -811,8 +611,9 @@ impl Pattern {
                                 _ => field_type.size_in_bits(),
                             };
                             let match_expr = &match_expr[w..w + field_bits];
-                            let is_field_match = field.compile(match_expr, enums, fns, env, gates);
-                            is_match = push_gate(gates, Gate::And(is_match, is_field_match));
+                            let is_field_match =
+                                field.compile(match_expr, enums, fns, env, circuit);
+                            is_match = circuit.push_gate(Gate::And(is_match, is_field_match));
                             w += field_bits;
                         }
                     }
