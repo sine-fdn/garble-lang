@@ -682,7 +682,7 @@ fn compile_array_assignment() -> Result<(), String> {
         "
 fn main(x: A::i8, i: A::usize, j: A::usize) -> i8 {{
     let arr = [x; {}];
-    let arr = arr[i -> x * 2];
+    let arr = arr.update(i, x * 2);
     arr[j]
 }}
 ",

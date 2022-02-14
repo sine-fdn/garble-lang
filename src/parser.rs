@@ -1,4 +1,4 @@
-use std::{iter::Peekable, vec::IntoIter, collections::HashMap};
+use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
@@ -373,10 +373,16 @@ impl Parser {
                             }
                             let meta_end = self.expect(&TokenEnum::RightParen)?;
                             let meta = join_meta(meta_start, meta_end);
-                            Ok(Pattern(PatternEnum::EnumTuple(identifier, variant_name, fields), meta))
+                            Ok(Pattern(
+                                PatternEnum::EnumTuple(identifier, variant_name, fields),
+                                meta,
+                            ))
                         } else {
                             let meta = join_meta(meta, variant_meta);
-                            Ok(Pattern(PatternEnum::EnumUnit(identifier, variant_name), meta))
+                            Ok(Pattern(
+                                PatternEnum::EnumUnit(identifier, variant_name),
+                                meta,
+                            ))
                         }
                     } else {
                         // TODO: need to distinguish between identifier and unit enums
@@ -635,8 +641,7 @@ impl Parser {
                     _ => {
                         if self.next_matches(&TokenEnum::DoubleColon).is_some() {
                             let (variant_name, variant_meta) = self.expect_identifier()?;
-                            let variant = if self.next_matches(&TokenEnum::LeftParen).is_some()
-                            {
+                            let variant = if self.next_matches(&TokenEnum::LeftParen).is_some() {
                                 let mut fields = vec![];
                                 if !self.peek(&TokenEnum::RightParen) {
                                     fields.push(self.parse_expr()?);
@@ -748,23 +753,9 @@ impl Parser {
         };
         while self.next_matches(&TokenEnum::LeftBracket).is_some() {
             let index = self.parse_expr()?;
-            if self.next_matches(&TokenEnum::Arrow).is_some() {
-                let replacement = self.parse_expr()?;
-                let end = self.expect(&TokenEnum::RightBracket)?;
-                let meta = join_meta(expr.1, end);
-                expr = Expr(
-                    ExprEnum::ArrayAssignment(
-                        Box::new(expr),
-                        Box::new(index),
-                        Box::new(replacement),
-                    ),
-                    meta,
-                );
-            } else {
-                let end = self.expect(&TokenEnum::RightBracket)?;
-                let meta = join_meta(expr.1, end);
-                expr = Expr(ExprEnum::ArrayAccess(Box::new(expr), Box::new(index)), meta);
-            }
+            let end = self.expect(&TokenEnum::RightBracket)?;
+            let meta = join_meta(expr.1, end);
+            expr = Expr(ExprEnum::ArrayAccess(Box::new(expr), Box::new(index)), meta);
         }
         while self.next_matches(&TokenEnum::Dot).is_some() {
             let peeked = self.tokens.peek();
@@ -859,6 +850,26 @@ impl Parser {
                 let meta = join_meta(call_start, call_end);
                 Ok(Expr(
                     ExprEnum::Fold(Box::new(recv), Box::new(init), Box::new(closure)),
+                    meta,
+                ))
+            }
+            "update" => {
+                // .update(<index>, <expr>)
+                self.expect(&TokenEnum::LeftParen)?;
+
+                let index = self.parse_expr()?;
+                self.expect(&TokenEnum::Comma)?;
+
+                let replacement = self.parse_expr()?;
+
+                let end = self.expect(&TokenEnum::RightParen)?;
+                let meta = join_meta(call_start, end);
+                Ok(Expr(
+                    ExprEnum::ArrayAssignment(
+                        Box::new(recv),
+                        Box::new(index),
+                        Box::new(replacement),
+                    ),
                     meta,
                 ))
             }
