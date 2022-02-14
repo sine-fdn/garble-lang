@@ -5,7 +5,7 @@ use crate::{
         Closure, EnumDef, Expr, ExprEnum, FnDef, MainDef, Op, ParamDef, Pattern,
         PatternEnum, Program, Type, UnaryOp, Variant, VariantExpr, VariantExprEnum,
     },
-    scanner::Tokens,
+    scan::Tokens,
     token::{MetaInfo, Token, TokenEnum}, circuit::Party,
 };
 

@@ -1,4 +1,4 @@
-use garble_script::{compile, compiler::Computation, circuit::Party};
+use garble_script::{compile, compile::Computation, circuit::Party};
 
 #[test]
 fn compile_xor() -> Result<(), String> {

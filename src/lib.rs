@@ -1,19 +1,19 @@
-use compiler::ComputeError;
-use parser::ParseError;
-use scanner::{scan, ScanError};
+use compile::ComputeError;
+use parse::ParseError;
+use scan::{scan, ScanError};
 use token::MetaInfo;
-use type_checker::TypeError;
+use check::TypeError;
 
 use circuit::Circuit;
 
 pub mod ast;
 pub mod circuit;
-pub mod compiler;
+pub mod compile;
 pub mod env;
-pub mod parser;
-pub mod scanner;
+pub mod parse;
+pub mod scan;
 pub mod token;
-pub mod type_checker;
+pub mod check;
 pub mod typed_ast;
 
 pub fn compile(prg: &str) -> Result<Circuit, Error> {
