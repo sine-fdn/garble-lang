@@ -12,8 +12,8 @@ use crate::{
 impl Program {
     pub fn compile(&self) -> Circuit {
         let mut fns = HashMap::new();
-        for fn_def in self.fn_defs.iter() {
-            fns.insert(fn_def.identifier.clone(), fn_def);
+        for (fn_name, fn_def) in self.fn_defs.iter() {
+            fns.insert(fn_name.clone(), fn_def);
         }
         let mut env = Env::new();
         let mut gates = vec![];
@@ -32,13 +32,13 @@ impl Program {
             env.set(identifier.clone(), wires);
         }
         let mut enums = HashMap::new();
-        for enum_def in &self.enum_defs {
+        for (enum_name, enum_def) in &self.enum_defs {
             let mut variants = HashMap::new();
             for variant in &enum_def.variants {
                 let types = variant.types().unwrap_or_default();
                 variants.insert(variant.variant_name().to_string(), types);
             }
-            enums.insert(enum_def.identifier.clone(), variants);
+            enums.insert(enum_name.clone(), variants);
         }
         let output_gates = self.main.body.compile(&enums, &fns, &mut env, &mut gates);
         Circuit {

@@ -85,16 +85,16 @@ fn main(x: A::u16) -> u16 {
 #[test]
 fn compile_static_fn_defs() -> Result<(), String> {
     let prg = "
-fn add(x: u16, y: u16) -> u16 {
-    x + y
+fn main(x: A::u16) -> u16 {
+    inc(x)
 }
 
 fn inc(x: u16) -> u16 {
     add(x, 1)
 }
 
-fn main(x: A::u16) -> u16 {
-    inc(x)
+fn add(x: u16, y: u16) -> u16 {
+    x + y
 }
 ";
     let circuit = compile(prg).map_err(|e| e.prettify(prg))?;

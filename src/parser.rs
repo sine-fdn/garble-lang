@@ -1,4 +1,4 @@
-use std::{iter::Peekable, vec::IntoIter};
+use std::{iter::Peekable, vec::IntoIter, collections::HashMap};
 
 use crate::{
     ast::{
@@ -52,15 +52,15 @@ impl Parser {
 
     fn parse(mut self) -> Result<Program, Vec<ParseError>> {
         let top_level_keywords = [TokenEnum::KeywordFn];
-        let mut enum_defs = vec![];
-        let mut fn_defs = vec![];
+        let mut enum_defs = HashMap::new();
+        let mut fn_defs = HashMap::new();
         let mut main_fn_def = None;
         let mut has_main = false;
         while let Some(Token(token_enum, meta)) = self.tokens.next() {
             match token_enum {
                 TokenEnum::KeywordEnum => {
                     if let Ok(enum_def) = self.parse_enum_def(meta) {
-                        enum_defs.push(enum_def);
+                        enum_defs.insert(enum_def.identifier.clone(), enum_def);
                     } else {
                         self.consume_until_one_of(&top_level_keywords);
                     }
@@ -75,7 +75,7 @@ impl Parser {
                                 self.consume_until_one_of(&top_level_keywords);
                             }
                         } else if let Ok(fn_def) = self.parse_fn_def(meta) {
-                            fn_defs.push(fn_def);
+                            fn_defs.insert(fn_def.identifier.clone(), fn_def);
                         } else {
                             self.consume_until_one_of(&top_level_keywords);
                         }

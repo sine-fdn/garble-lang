@@ -19,7 +19,7 @@ fn main(x: A::u16) -> u16 {
     let e = scan(prg)?.parse()?.type_check();
     assert!(matches!(
         e,
-        Err(TypeError(TypeErrorEnum::FnCannotBeUsedAsValue(_), _))
+        Err(TypeError(TypeErrorEnum::UnknownIdentifier(_), _))
     ));
     Ok(())
 }
@@ -36,6 +36,7 @@ fn main(x: A::u16) -> u16 {
 }
 ";
     let e = scan(prg)?.parse()?.type_check();
+    println!("{:?}", e);
     assert!(matches!(
         e,
         Err(TypeError(TypeErrorEnum::DuplicateFnParam(_), _))
@@ -55,5 +56,41 @@ fn main(x: A::u16, x: A::u16) -> u16 {
         e,
         Err(TypeError(TypeErrorEnum::DuplicateFnParam(_), _))
     ));
+    Ok(())
+}
+
+#[test]
+fn reject_unused_fn() -> Result<(), Error> {
+    let prg = "
+  fn main() -> u8 {
+    0
+  }
+
+  fn unused(x: u8) -> u8 {
+    x + 1
+  }
+  ";
+    let e = scan(prg).unwrap().parse().unwrap().type_check();
+    assert!(matches!(e, Err(TypeError(TypeErrorEnum::UnusedFn(_), _))));
+    Ok(())
+}
+
+#[test]
+fn reject_recursive_fn() -> Result<(), Error> {
+    let prg = "
+  fn main() -> u8 {
+    rec_fn(5)
+  }
+
+  fn rec_fn(x: u8) -> u8 {
+    if x == 0 {
+      0
+    } else {
+      rec_fn(x - 1)
+    }
+  }
+  ";
+    let e = scan(prg).unwrap().parse().unwrap().type_check();
+    assert!(matches!(e, Err(TypeError(TypeErrorEnum::RecursiveFnDef(_), _))));
     Ok(())
 }

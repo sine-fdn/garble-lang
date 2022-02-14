@@ -1,12 +1,14 @@
+use std::collections::HashMap;
+
 use crate::{
     ast::{EnumDef, Op, ParamDef, Party, Type, UnaryOp},
     token::MetaInfo,
 };
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Program {
-    pub enum_defs: Vec<EnumDef>,
-    pub fn_defs: Vec<FnDef>,
+    pub enum_defs: HashMap<String, EnumDef>,
+    pub fn_defs: HashMap<String, FnDef>,
     pub main: MainDef,
 }
 
