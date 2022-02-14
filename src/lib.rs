@@ -1,4 +1,4 @@
-use compile::ComputeError;
+use eval::ComputeError;
 use parse::ParseError;
 use scan::{scan, ScanError};
 use token::MetaInfo;
@@ -10,6 +10,7 @@ pub mod ast;
 pub mod circuit;
 pub mod compile;
 pub mod env;
+pub mod eval;
 pub mod parse;
 pub mod scan;
 pub mod token;
