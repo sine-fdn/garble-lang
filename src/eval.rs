@@ -23,7 +23,7 @@ impl From<Circuit> for Computation {
 }
 
 #[derive(Debug, Clone)]
-pub enum ComputeError {
+pub enum EvalError {
     UnexpectedNumberOfInputsFromPartyA(usize),
     UnexpectedNumberOfInputsFromPartyB(usize),
     OutputHasNotBeenComputed,
@@ -31,7 +31,7 @@ pub enum ComputeError {
 }
 
 impl Computation {
-    pub fn run(&mut self) -> Result<(), ComputeError> {
+    pub fn run(&mut self) -> Result<(), EvalError> {
         let mut expected_in_a_len = 0;
         let mut expected_in_b_len = 0;
         for party in self.circuit.input_gates.iter() {
@@ -41,12 +41,12 @@ impl Computation {
             }
         }
         if self.in_a.len() != expected_in_a_len {
-            return Err(ComputeError::UnexpectedNumberOfInputsFromPartyA(
+            return Err(EvalError::UnexpectedNumberOfInputsFromPartyA(
                 self.in_a.len(),
             ));
         }
         if self.in_b.len() != expected_in_b_len {
-            return Err(ComputeError::UnexpectedNumberOfInputsFromPartyB(
+            return Err(EvalError::UnexpectedNumberOfInputsFromPartyB(
                 self.in_b.len(),
             ));
         }
@@ -63,7 +63,7 @@ impl Computation {
         }
     }
 
-    fn get_output(&self) -> Result<Vec<bool>, ComputeError> {
+    fn get_output(&self) -> Result<Vec<bool>, EvalError> {
         if let Some(output) = &self.output {
             let mut output_bits = Vec::with_capacity(self.circuit.output_gates.len());
             for output_gate in &self.circuit.output_gates {
@@ -71,7 +71,7 @@ impl Computation {
             }
             Ok(output_bits)
         } else {
-            Err(ComputeError::OutputHasNotBeenComputed)
+            Err(EvalError::OutputHasNotBeenComputed)
         }
     }
 
@@ -80,12 +80,12 @@ impl Computation {
         inputs.push(b);
     }
 
-    pub fn get_bool(&self) -> Result<bool, ComputeError> {
+    pub fn get_bool(&self) -> Result<bool, EvalError> {
         let output = self.get_output()?;
         if output.len() == 1 {
             Ok(output[0])
         } else {
-            Err(ComputeError::OutputTypeMismatch {
+            Err(EvalError::OutputTypeMismatch {
                 expected: Type::Bool,
                 actual_bits: output.len(),
             })
@@ -147,7 +147,7 @@ impl Computation {
         signed_to_bits(n, 128, inputs);
     }
 
-    fn get_unsigned(&self, ty: Type) -> Result<u128, ComputeError> {
+    fn get_unsigned(&self, ty: Type) -> Result<u128, EvalError> {
         let output = self.get_output()?;
         let size = ty.size_in_bits();
         if output.len() == size {
@@ -157,14 +157,14 @@ impl Computation {
             }
             Ok(n)
         } else {
-            Err(ComputeError::OutputTypeMismatch {
+            Err(EvalError::OutputTypeMismatch {
                 expected: ty,
                 actual_bits: output.len(),
             })
         }
     }
 
-    fn get_signed(&self, ty: Type) -> Result<i128, ComputeError> {
+    fn get_signed(&self, ty: Type) -> Result<i128, EvalError> {
         let output = self.get_output()?;
         let size = ty.size_in_bits();
         if output.len() == size {
@@ -174,54 +174,54 @@ impl Computation {
             }
             Ok(n)
         } else {
-            Err(ComputeError::OutputTypeMismatch {
+            Err(EvalError::OutputTypeMismatch {
                 expected: ty,
                 actual_bits: output.len(),
             })
         }
     }
 
-    pub fn get_usize(&self) -> Result<usize, ComputeError> {
+    pub fn get_usize(&self) -> Result<usize, EvalError> {
         self.get_unsigned(Type::Usize).map(|n| n as usize)
     }
 
-    pub fn get_u8(&self) -> Result<u8, ComputeError> {
+    pub fn get_u8(&self) -> Result<u8, EvalError> {
         self.get_unsigned(Type::U8).map(|n| n as u8)
     }
 
-    pub fn get_u16(&self) -> Result<u16, ComputeError> {
+    pub fn get_u16(&self) -> Result<u16, EvalError> {
         self.get_unsigned(Type::U16).map(|n| n as u16)
     }
 
-    pub fn get_u32(&self) -> Result<u32, ComputeError> {
+    pub fn get_u32(&self) -> Result<u32, EvalError> {
         self.get_unsigned(Type::U32).map(|n| n as u32)
     }
 
-    pub fn get_u64(&self) -> Result<u64, ComputeError> {
+    pub fn get_u64(&self) -> Result<u64, EvalError> {
         self.get_unsigned(Type::U64).map(|n| n as u64)
     }
 
-    pub fn get_u128(&self) -> Result<u128, ComputeError> {
+    pub fn get_u128(&self) -> Result<u128, EvalError> {
         self.get_unsigned(Type::U128)
     }
 
-    pub fn get_i8(&self) -> Result<i8, ComputeError> {
+    pub fn get_i8(&self) -> Result<i8, EvalError> {
         self.get_signed(Type::I8).map(|n| n as i8)
     }
 
-    pub fn get_i16(&self) -> Result<i16, ComputeError> {
+    pub fn get_i16(&self) -> Result<i16, EvalError> {
         self.get_signed(Type::I16).map(|n| n as i16)
     }
 
-    pub fn get_i32(&self) -> Result<i32, ComputeError> {
+    pub fn get_i32(&self) -> Result<i32, EvalError> {
         self.get_signed(Type::I32).map(|n| n as i32)
     }
 
-    pub fn get_i64(&self) -> Result<i64, ComputeError> {
+    pub fn get_i64(&self) -> Result<i64, EvalError> {
         self.get_signed(Type::I64).map(|n| n as i64)
     }
 
-    pub fn get_i128(&self) -> Result<i128, ComputeError> {
+    pub fn get_i128(&self) -> Result<i128, EvalError> {
         self.get_signed(Type::I128)
     }
 }

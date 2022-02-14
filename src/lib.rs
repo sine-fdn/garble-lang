@@ -1,12 +1,13 @@
-use eval::ComputeError;
+use check::TypeError;
+use eval::EvalError;
 use parse::ParseError;
 use scan::{scan, ScanError};
 use token::MetaInfo;
-use check::TypeError;
 
 use circuit::Circuit;
 
 pub mod ast;
+pub mod check;
 pub mod circuit;
 pub mod compile;
 pub mod env;
@@ -14,7 +15,6 @@ pub mod eval;
 pub mod parse;
 pub mod scan;
 pub mod token;
-pub mod check;
 pub mod typed_ast;
 
 pub fn compile(prg: &str) -> Result<Circuit, Error> {
@@ -22,91 +22,100 @@ pub fn compile(prg: &str) -> Result<Circuit, Error> {
 }
 
 #[derive(Debug, Clone)]
-pub enum Error {
+pub enum CompileTimeError {
     ScanErrors(Vec<ScanError>),
     ParseError(Vec<ParseError>),
     TypeError(TypeError),
-    ComputeError(ComputeError),
 }
 
-impl From<Vec<ScanError>> for Error {
+#[derive(Debug, Clone)]
+pub enum Error {
+    CompileTimeError(CompileTimeError),
+    EvalError(EvalError),
+}
+
+impl From<Vec<ScanError>> for CompileTimeError {
     fn from(e: Vec<ScanError>) -> Self {
         Self::ScanErrors(e)
     }
 }
 
-impl From<Vec<ParseError>> for Error {
+impl From<Vec<ParseError>> for CompileTimeError {
     fn from(e: Vec<ParseError>) -> Self {
         Self::ParseError(e)
     }
 }
 
-impl From<TypeError> for Error {
+impl From<TypeError> for CompileTimeError {
     fn from(e: TypeError) -> Self {
         Self::TypeError(e)
     }
 }
 
-impl From<ComputeError> for Error {
-    fn from(e: ComputeError) -> Self {
-        Self::ComputeError(e)
+impl<E: Into<CompileTimeError>> From<E> for Error {
+    fn from(e: E) -> Self {
+        Error::CompileTimeError(e.into())
+    }
+}
+
+impl From<EvalError> for Error {
+    fn from(e: EvalError) -> Self {
+        Self::EvalError(e)
     }
 }
 
 impl TypeError {
     pub fn prettify(&self, prg: &str) -> String {
-        let e = Error::TypeError(self.clone());
+        let e = CompileTimeError::TypeError(self.clone());
         e.prettify(prg)
     }
 }
 
-impl ComputeError {
+impl EvalError {
     pub fn prettify(&self, prg: &str) -> String {
-        let e = Error::ComputeError(self.clone());
+        let e = Error::EvalError(self.clone());
         e.prettify(prg)
     }
 }
 
 impl Error {
     pub fn prettify(&self, prg: &str) -> String {
-        let mut msg = "".to_string();
-        let msg = match self {
-            Error::ScanErrors(errs) => {
+        match self {
+            Error::CompileTimeError(e) => e.prettify(prg),
+            Error::EvalError(e) => format!("{:?}", e),
+        }
+    }
+}
+
+impl CompileTimeError {
+    pub fn prettify(&self, prg: &str) -> String {
+        let mut errs_for_display = vec![];
+        match self {
+            CompileTimeError::ScanErrors(errs) => {
                 for ScanError(e, meta) in errs {
-                    msg += &format!(
-                        "Scan error on line {}:{}\n",
-                        meta.start.0 + 1,
-                        meta.start.1 + 1
-                    );
-                    msg += &format!("--> {:?}:\n", e);
-                    msg += &prettify_meta(prg, *meta);
+                    errs_for_display.push(("Scan error", format!("{:?}", e), meta));
                 }
-                msg
             }
-            Error::ParseError(errs) => {
+            CompileTimeError::ParseError(errs) => {
                 for ParseError(e, meta) in errs {
-                    msg += &format!(
-                        "Parse error on line {}:{}\n",
-                        meta.start.0 + 1,
-                        meta.start.1 + 1
-                    );
-                    msg += &format!("--> {:?}:\n", e);
-                    msg += &prettify_meta(prg, *meta);
+                    errs_for_display.push(("Parse error", format!("{:?}", e), meta));
                 }
-                msg
             }
-            Error::TypeError(TypeError(e, meta)) => {
-                msg += &format!(
-                    "Type error on line {}:{}\n",
-                    meta.start.0 + 1,
-                    meta.start.1 + 1
-                );
-                msg += &format!("--> {:?}:\n", e);
-                msg += &prettify_meta(prg, *meta);
-                msg
+            CompileTimeError::TypeError(TypeError(e, meta)) => {
+                errs_for_display.push(("Type error", format!("{:?}", e), meta));
             }
-            Error::ComputeError(e) => format!("{:?}", e),
-        };
+        }
+        let mut msg = "".to_string();
+        for (err_type, err, meta) in errs_for_display {
+            msg += &format!(
+                "{} on line {}:{}\n",
+                err_type,
+                meta.start.0 + 1,
+                meta.start.1 + 1
+            );
+            msg += &format!("--> {}:\n", err);
+            msg += &prettify_meta(prg, *meta);
+        }
         println!("{}", msg);
         msg
     }
