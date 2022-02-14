@@ -23,8 +23,7 @@ pub fn compile(prg: &str) -> Result<Circuit, Error> {
 #[derive(Debug, Clone)]
 pub enum Error {
     ScanErrors(Vec<ScanError>),
-    RustishParseError(Vec<ParseError>),
-    ParseError(ParseError),
+    ParseError(Vec<ParseError>),
     TypeError(TypeError),
     ComputeError(ComputeError),
 }
@@ -37,12 +36,6 @@ impl From<Vec<ScanError>> for Error {
 
 impl From<Vec<ParseError>> for Error {
     fn from(e: Vec<ParseError>) -> Self {
-        Self::RustishParseError(e)
-    }
-}
-
-impl From<ParseError> for Error {
-    fn from(e: ParseError) -> Self {
         Self::ParseError(e)
     }
 }
@@ -56,13 +49,6 @@ impl From<TypeError> for Error {
 impl From<ComputeError> for Error {
     fn from(e: ComputeError) -> Self {
         Self::ComputeError(e)
-    }
-}
-
-impl ParseError {
-    pub fn prettify(&self, prg: &str) -> String {
-        let e = Error::ParseError(self.clone());
-        e.prettify(prg)
     }
 }
 
@@ -96,7 +82,7 @@ impl Error {
                 }
                 msg
             }
-            Error::RustishParseError(errs) => {
+            Error::ParseError(errs) => {
                 for ParseError(e, meta) in errs {
                     msg += &format!(
                         "Parse error on line {}:{}\n",
@@ -106,16 +92,6 @@ impl Error {
                     msg += &format!("--> {:?}:\n", e);
                     msg += &prettify_meta(prg, *meta);
                 }
-                msg
-            }
-            Error::ParseError(ParseError(e, meta)) => {
-                msg += &format!(
-                    "Parse error on line {}:{}\n",
-                    meta.start.0 + 1,
-                    meta.start.1 + 1
-                );
-                msg += &format!("--> {:?}:\n", e);
-                msg += &prettify_meta(prg, *meta);
                 msg
             }
             Error::TypeError(TypeError(e, meta)) => {
