@@ -12,10 +12,15 @@ pub mod circuit;
 pub mod compile;
 pub mod env;
 pub mod eval;
+pub mod io;
 pub mod parse;
 pub mod scan;
 pub mod token;
 pub mod typed_ast;
+
+pub fn check(prg: &str) -> Result<typed_ast::Program, Error> {
+    Ok(scan(prg)?.parse()?.type_check()?)
+}
 
 pub fn compile(prg: &str) -> Result<Circuit, Error> {
     Ok(scan(prg)?.parse()?.type_check()?.compile())
@@ -123,6 +128,9 @@ impl CompileTimeError {
 
 fn prettify_meta(prg: &str, meta: MetaInfo) -> String {
     let mut msg = "".to_string();
+    if prg.is_empty() {
+        return msg;
+    }
     let lines: Vec<&str> = prg.lines().collect();
     for l in (meta.start.0 as i64 - 2)..(meta.end.0 as i64 + 2) {
         let line_start = meta.start.0 as i64;

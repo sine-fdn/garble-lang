@@ -2,6 +2,9 @@ use crate::{
     ast::Type,
     circuit::{Circuit, Party},
     compile::{signed_to_bits, unsigned_to_bits},
+    io::Literal,
+    parse::ParseError,
+    scan::ScanError, typed_ast::Program,
 };
 
 pub struct Computation {
@@ -24,6 +27,8 @@ impl From<Circuit> for Computation {
 
 #[derive(Debug, Clone)]
 pub enum EvalError {
+    LiteralScanError(Vec<ScanError>),
+    LiteralParseError(Vec<ParseError>),
     UnexpectedNumberOfInputsFromPartyA(usize),
     UnexpectedNumberOfInputsFromPartyB(usize),
     OutputHasNotBeenComputed,
@@ -149,7 +154,7 @@ impl Computation {
 
     fn get_unsigned(&self, ty: Type) -> Result<u128, EvalError> {
         let output = self.get_output()?;
-        let size = ty.size_in_bits();
+        let size = ty.size_in_bits_for_defs(None);
         if output.len() == size {
             let mut n = 0;
             for (i, output) in output.iter().copied().take(size).enumerate() {
@@ -166,7 +171,7 @@ impl Computation {
 
     fn get_signed(&self, ty: Type) -> Result<i128, EvalError> {
         let output = self.get_output()?;
-        let size = ty.size_in_bits();
+        let size = ty.size_in_bits_for_defs(None);
         if output.len() == size {
             let mut n = 0;
             for (i, output) in output.iter().copied().enumerate().take(size) {
@@ -223,5 +228,24 @@ impl Computation {
 
     pub fn get_i128(&self) -> Result<i128, EvalError> {
         self.get_signed(Type::I128)
+    }
+
+    pub fn set_literal(&mut self, checked: &Program, p: Party, literal: Literal) {
+        let inputs = self.get_input(p);
+        inputs.extend(literal.as_bits(checked));
+    }
+
+    pub fn get_literal(&self, checked: &Program, ty: &Type) -> Result<Literal, EvalError> {
+        let output = self.get_output()?;
+        let size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
+        if output.len() == size {
+            let bits: Vec<bool> = output.iter().copied().take(size).collect();
+            Ok(Literal::from_bits(checked, ty, &bits)?)
+        } else {
+            Err(EvalError::OutputTypeMismatch {
+                expected: ty.clone(),
+                actual_bits: output.len(),
+            })
+        }
     }
 }

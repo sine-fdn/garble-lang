@@ -1,7 +1,7 @@
 use std::{cmp::max, collections::HashMap};
 
 use crate::{
-    ast::{Op, ParamDef, Type, UnaryOp},
+    ast::{EnumDef, Op, ParamDef, Type, UnaryOp},
     circuit::{Circuit, CircuitBuilder, GateIndex},
     env::Env,
     typed_ast::{
@@ -19,7 +19,7 @@ impl Program {
         let mut input_gates = vec![];
         let mut wire = 2;
         for (party, ParamDef(identifier, ty)) in self.main.params.iter() {
-            let type_size = ty.size_in_bits();
+            let type_size = ty.size_in_bits_for_defs(Some(&self.enum_defs));
             let mut wires = Vec::with_capacity(type_size);
             for _i in 0..type_size {
                 input_gates.push(*party);
@@ -41,7 +41,10 @@ impl Program {
             input_gates,
             gates: vec![],
         };
-        let output_gates = self.main.body.compile(&enums, &fns, &mut env, &mut circuit);
+        let output_gates = self
+            .main
+            .body
+            .compile(&self.enum_defs, &fns, &mut env, &mut circuit);
         circuit.build(output_gates)
     }
 }
@@ -63,7 +66,7 @@ fn extend_to_bits(v: &mut Vec<usize>, ty: &Type, bits: usize) {
 impl Expr {
     fn compile(
         &self,
-        enums: &HashMap<String, HashMap<String, Vec<Type>>>,
+        enums: &HashMap<String, EnumDef>,
         fns: &HashMap<String, &FnDef>,
         env: &mut Env<Vec<GateIndex>>,
         circuit: &mut CircuitBuilder,
@@ -77,21 +80,25 @@ impl Expr {
                 vec![0]
             }
             ExprEnum::NumUnsigned(n) => {
-                let mut bits = Vec::with_capacity(ty.size_in_bits());
-                unsigned_to_bits(*n, ty.size_in_bits(), &mut bits);
+                let mut bits = Vec::with_capacity(ty.size_in_bits_for_defs(Some(&enums)));
+                unsigned_to_bits(*n, ty.size_in_bits_for_defs(Some(&enums)), &mut bits);
                 bits.into_iter().map(|b| b as usize).collect()
             }
             ExprEnum::NumSigned(n) => {
-                let mut bits = Vec::with_capacity(ty.size_in_bits());
-                signed_to_bits(*n, ty.size_in_bits(), &mut bits);
+                let mut bits = Vec::with_capacity(ty.size_in_bits_for_defs(Some(&enums)));
+                signed_to_bits(*n, ty.size_in_bits_for_defs(Some(&enums)), &mut bits);
                 bits.into_iter().map(|b| b as usize).collect()
             }
             ExprEnum::Identifier(s) => env.get(s).unwrap(),
             ExprEnum::ArrayLiteral(elem, size) => {
                 let elem_ty = elem.1.clone();
                 let mut elem = elem.compile(enums, fns, env, circuit);
-                extend_to_bits(&mut elem, &elem_ty, elem_ty.size_in_bits());
-                let bits = ty.size_in_bits();
+                extend_to_bits(
+                    &mut elem,
+                    &elem_ty,
+                    elem_ty.size_in_bits_for_defs(Some(&enums)),
+                );
+                let bits = ty.size_in_bits_for_defs(Some(&enums));
                 let mut array = Vec::with_capacity(bits);
                 for _ in 0..*size {
                     array.extend_from_slice(&elem);
@@ -99,10 +106,14 @@ impl Expr {
                 array
             }
             ExprEnum::ArrayAccess(array, index) => {
-                let elem_bits = ty.size_in_bits();
+                let elem_bits = ty.size_in_bits_for_defs(Some(&enums));
                 let mut array = array.compile(enums, fns, env, circuit);
                 let mut index = index.compile(enums, fns, env, circuit);
-                extend_to_bits(&mut index, &Type::Usize, Type::Usize.size_in_bits());
+                extend_to_bits(
+                    &mut index,
+                    &Type::Usize,
+                    Type::Usize.size_in_bits_for_defs(Some(&enums)),
+                );
                 let out_of_bounds_elem = 1;
                 for mux_layer in (0..index.len()).rev() {
                     let mut muxed_array = Vec::new();
@@ -137,8 +148,12 @@ impl Expr {
                 let mut array = array.compile(enums, fns, env, circuit);
                 let mut index = index.compile(enums, fns, env, circuit);
                 let value = value.compile(enums, fns, env, circuit);
-                extend_to_bits(&mut index, &Type::Usize, Type::Usize.size_in_bits());
-                let elem_bits = elem_ty.size_in_bits();
+                extend_to_bits(
+                    &mut index,
+                    &Type::Usize,
+                    Type::Usize.size_in_bits_for_defs(Some(&enums)),
+                );
+                let elem_bits = elem_ty.size_in_bits_for_defs(Some(&enums));
 
                 let mut index_negated = vec![0; index.len()];
                 for (i, index) in index.iter().copied().enumerate() {
@@ -168,7 +183,7 @@ impl Expr {
                 array
             }
             ExprEnum::TupleLiteral(tuple) => {
-                let mut wires = Vec::with_capacity(ty.size_in_bits());
+                let mut wires = Vec::with_capacity(ty.size_in_bits_for_defs(Some(&enums)));
                 for value in tuple {
                     wires.extend(value.compile(enums, fns, env, circuit));
                 }
@@ -179,9 +194,12 @@ impl Expr {
                     Type::Tuple(values) => {
                         let mut wires_before = 0;
                         for v in values[0..*index].iter() {
-                            wires_before += v.size_in_bits();
+                            wires_before += v.size_in_bits_for_defs(Some(&enums));
                         }
-                        (wires_before, values[*index].size_in_bits())
+                        (
+                            wires_before,
+                            values[*index].size_in_bits_for_defs(Some(&enums)),
+                        )
                     }
                     _ => panic!("Expected a tuple type, but found {:?}", tuple.1),
                 };
@@ -379,7 +397,7 @@ impl Expr {
             ExprEnum::Cast(ty, expr) => {
                 let ty_expr = &expr.1;
                 let mut expr = expr.compile(enums, fns, env, circuit);
-                let size_after_cast = ty.size_in_bits();
+                let size_after_cast = ty.size_in_bits_for_defs(Some(&enums));
 
                 match size_after_cast.cmp(&expr.len()) {
                     std::cmp::Ordering::Equal => expr,
@@ -396,8 +414,12 @@ impl Expr {
 
                 let ParamDef(init_identifier, init_ty) = &closure.params[0];
                 let ParamDef(elem_identifier, elem_ty) = &closure.params[1];
-                let elem_bits = elem_ty.size_in_bits();
-                extend_to_bits(&mut init, init_ty, init_ty.size_in_bits());
+                let elem_bits = elem_ty.size_in_bits_for_defs(Some(&enums));
+                extend_to_bits(
+                    &mut init,
+                    init_ty,
+                    init_ty.size_in_bits_for_defs(Some(&enums)),
+                );
 
                 let mut acc = init;
                 let mut i = 0;
@@ -416,8 +438,8 @@ impl Expr {
                 let array = array.compile(enums, fns, env, circuit);
 
                 let ParamDef(elem_identifier, elem_ty) = &closure.params[0];
-                let elem_in_bits = elem_ty.size_in_bits();
-                let elem_out_bits = closure.ty.size_in_bits();
+                let elem_in_bits = elem_ty.size_in_bits_for_defs(Some(&enums));
+                let elem_out_bits = closure.ty.size_in_bits_for_defs(Some(&enums));
                 let size = array.len() / elem_in_bits;
 
                 let mut i = 0;
@@ -435,7 +457,7 @@ impl Expr {
             }
             ExprEnum::Range(from, to) => {
                 let size = to - from;
-                let elem_bits = Type::Usize.size_in_bits();
+                let elem_bits = Type::Usize.size_in_bits_for_defs(Some(&enums));
                 let mut array = Vec::with_capacity(elem_bits * size);
                 for i in *from..*to {
                     for b in (0..elem_bits).rev() {
@@ -447,7 +469,7 @@ impl Expr {
             ExprEnum::EnumLiteral(identifier, variant) => {
                 let enum_def = enums.get(identifier).unwrap();
                 let tag_size = enum_tag_size(enum_def);
-                let max_size = enum_max_size(enum_def);
+                let max_size = enum_max_size(enum_def, &enums);
                 let mut wires = vec![0; max_size];
                 let VariantExpr(variant_name, variant, _) = variant.as_ref();
                 let tag_number = enum_tag_number(enum_def, variant_name);
@@ -468,7 +490,7 @@ impl Expr {
                 wires
             }
             ExprEnum::Match(expr, clauses) => {
-                let bits = ty.size_in_bits();
+                let bits = ty.size_in_bits_for_defs(Some(&enums));
                 let expr = expr.compile(enums, fns, env, circuit);
                 let mut has_prev_match = 0;
                 let mut muxed_ret_expr = vec![0; bits];
@@ -498,7 +520,7 @@ impl Pattern {
     fn compile(
         &self,
         match_expr: &[GateIndex],
-        enums: &HashMap<String, HashMap<String, Vec<Type>>>,
+        enums: &HashMap<String, EnumDef>,
         fns: &HashMap<String, &FnDef>,
         env: &mut Env<Vec<GateIndex>>,
         circuit: &mut CircuitBuilder,
@@ -518,7 +540,7 @@ impl Pattern {
                 circuit.push_not(match_expr[0])
             }
             PatternEnum::NumUnsigned(n) => {
-                let bits = ty.size_in_bits();
+                let bits = ty.size_in_bits_for_defs(Some(&enums));
                 let n = unsigned_as_wires(*n, bits);
                 let mut acc = 1;
                 for i in 0..bits {
@@ -528,7 +550,7 @@ impl Pattern {
                 acc
             }
             PatternEnum::NumSigned(n) => {
-                let bits = ty.size_in_bits();
+                let bits = ty.size_in_bits_for_defs(Some(&enums));
                 let n = signed_as_wires(*n, bits);
                 let mut acc = 1;
                 for i in 0..bits {
@@ -538,7 +560,7 @@ impl Pattern {
                 acc
             }
             PatternEnum::UnsignedInclusiveRange(min, max) => {
-                let bits = ty.size_in_bits();
+                let bits = ty.size_in_bits_for_defs(Some(&enums));
                 let min = unsigned_as_wires(*min, bits);
                 let max = unsigned_as_wires(*max, bits);
                 let signed = is_signed(ty);
@@ -551,7 +573,7 @@ impl Pattern {
                 circuit.push_and(not_lt_min, not_gt_max)
             }
             PatternEnum::SignedInclusiveRange(min, max) => {
-                let bits = ty.size_in_bits();
+                let bits = ty.size_in_bits_for_defs(Some(&enums));
                 let min = signed_as_wires(*min, bits);
                 let max = signed_as_wires(*max, bits);
                 let signed = is_signed(ty);
@@ -568,10 +590,7 @@ impl Pattern {
                 let mut w = 0;
                 for field in fields {
                     let Pattern(_, field_type, _) = field;
-                    let field_bits = match field_type {
-                        Type::Enum(enum_name) => enum_max_size(enums.get(enum_name).unwrap()),
-                        _ => field_type.size_in_bits(),
-                    };
+                    let field_bits = field_type.size_in_bits_for_defs(Some(enums));
                     let match_expr = &match_expr[w..w + field_bits];
                     let is_field_match = field.compile(match_expr, enums, fns, env, circuit);
                     is_match = circuit.push_and(is_match, is_field_match);
@@ -598,14 +617,13 @@ impl Pattern {
                     PatternEnum::EnumUnit(_, _) => {}
                     PatternEnum::EnumTuple(_, _, fields) => {
                         let mut w = tag_size;
-                        let field_types = enum_def.get(variant_name).unwrap();
+                        let field_types = enum_def
+                            .get_variant(variant_name)
+                            .unwrap()
+                            .types()
+                            .unwrap_or_default();
                         for (field, field_type) in fields.iter().zip(field_types) {
-                            let field_bits = match field_type {
-                                Type::Enum(enum_name) => {
-                                    enum_max_size(enums.get(enum_name).unwrap())
-                                }
-                                _ => field_type.size_in_bits(),
-                            };
+                            let field_bits = field_type.size_in_bits_for_defs(Some(enums));
                             let match_expr = &match_expr[w..w + field_bits];
                             let is_field_match =
                                 field.compile(match_expr, enums, fns, env, circuit);
@@ -628,59 +646,62 @@ fn is_signed(ty: &Type) -> bool {
     )
 }
 
-fn enum_tag_number(enum_def: &HashMap<String, Vec<Type>>, variant: &str) -> usize {
-    for (i, (name_in_def, _)) in enum_def.iter().enumerate() {
-        if name_in_def.as_str() == variant {
+impl Type {
+    pub(crate) fn size_in_bits_for_defs(&self, enums: Option<&HashMap<String, EnumDef>>) -> usize {
+        match (self, enums) {
+            (Type::Enum(name), Some(enums)) => enum_max_size(enums.get(name).unwrap(), &enums),
+            (ty, _) => match ty {
+                Type::Bool => 1,
+                Type::Usize => usize::BITS as usize,
+                Type::U8 | Type::I8 => 8,
+                Type::U16 | Type::I16 => 16,
+                Type::U32 | Type::I32 => 32,
+                Type::U64 | Type::I64 => 64,
+                Type::U128 | Type::I128 => 128,
+                Type::Array(elem, size) => elem.size_in_bits_for_defs(enums) * size,
+                Type::Tuple(values) => {
+                    let mut size = 0;
+                    for v in values {
+                        size += v.size_in_bits_for_defs(enums)
+                    }
+                    size
+                }
+                Type::Fn(_, _) => panic!("Fn types cannot be directly mapped to bits"),
+                Type::Enum(_) => panic!("Enum types need to be looked up in the enum hashmap"),
+            },
+        }
+    }
+}
+
+pub(crate) fn enum_tag_number(enum_def: &EnumDef, variant: &str) -> usize {
+    for (i, def) in enum_def.variants.iter().enumerate() {
+        if def.variant_name() == variant {
             return i;
         }
     }
     panic!("Variant {} not found in enum def", variant)
 }
 
-fn enum_tag_size(enum_def: &HashMap<String, Vec<Type>>) -> usize {
+pub(crate) fn enum_tag_size(enum_def: &EnumDef) -> usize {
     let mut bits = 0;
-    while (1 << bits) < enum_def.values().len() {
+    while (1 << bits) < enum_def.variants.len() {
         bits += 1;
     }
     bits
 }
 
-fn enum_max_size(enum_def: &HashMap<String, Vec<Type>>) -> usize {
+pub(crate) fn enum_max_size(enum_def: &EnumDef, enums: &HashMap<String, EnumDef>) -> usize {
     let mut max = 0;
-    for variant in enum_def.values() {
+    for variant in enum_def.variants.iter() {
         let mut sum = 0;
-        for field in variant {
-            sum += field.size_in_bits();
+        for field in variant.types().unwrap_or_default() {
+            sum += field.size_in_bits_for_defs(Some(&enums));
         }
         if sum > max {
             max = sum;
         }
     }
     max + enum_tag_size(enum_def)
-}
-
-impl Type {
-    pub(crate) fn size_in_bits(&self) -> usize {
-        match self {
-            Type::Bool => 1,
-            Type::Usize => usize::BITS as usize,
-            Type::U8 | Type::I8 => 8,
-            Type::U16 | Type::I16 => 16,
-            Type::U32 | Type::I32 => 32,
-            Type::U64 | Type::I64 => 64,
-            Type::U128 | Type::I128 => 128,
-            Type::Array(elem, size) => elem.size_in_bits() * size,
-            Type::Tuple(values) => {
-                let mut size = 0;
-                for v in values {
-                    size += v.size_in_bits()
-                }
-                size
-            }
-            Type::Fn(_, _) => panic!("Fn types cannot be directly mapped to bits"),
-            Type::Enum(_) => panic!("Enum types need to be looked up in the enum hashmap"),
-        }
-    }
 }
 
 pub(crate) fn unsigned_to_bits(n: u128, size: usize, bits: &mut Vec<bool>) {

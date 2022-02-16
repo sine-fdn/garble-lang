@@ -1,4 +1,4 @@
-use garble_script::{compile, eval::Computation, circuit::Party};
+use garble_script::{circuit::Party, compile, eval::Computation, io::Literal, check, ast::Type};
 
 #[test]
 fn compile_xor() -> Result<(), String> {
@@ -1059,5 +1059,62 @@ fn main(x: A::u8) -> u8 {
         let expected = if x == 0 { 1 } else { x * 2 };
         assert_eq!(computation.get_u8().map_err(|e| e.prettify(prg))?, expected);
     }
+    Ok(())
+}
+
+#[test]
+fn compile_main_with_tuple_io() -> Result<(), String> {
+    let prg = "
+fn main(values: A::(u8, u8)) -> (u8, u8) {
+    (values.0 + 1, values.1 + 1)
+}
+";
+    let checked = check(prg).map_err(|e| e.prettify(prg))?;
+    let circuit = checked.compile();
+
+    let mut computation: Computation = circuit.into();
+    let tuple_ty = Type::Tuple(vec![Type::U8, Type::U8]);
+    let input = Literal::parse(&checked, &tuple_ty, "(2, 3)").map_err(|e| e.prettify(""))?;
+    computation.set_literal(&checked, Party::A, input);
+    computation.run().map_err(|e| e.prettify(prg))?;
+    let r = computation.get_literal(&checked, &tuple_ty).map_err(|e| e.prettify(prg))?;
+    let expected = Literal::parse(&checked, &tuple_ty, "(3, 4)").map_err(|e| e.prettify(""))?;
+    assert_eq!(r, expected);
+    Ok(())
+}
+
+#[test]
+fn compile_main_with_enum_io() -> Result<(), String> {
+    let prg = "
+enum Op {
+    Zero,
+    Div(u8, u8),
+}
+
+enum OpResult {
+    DivByZero,
+    Ok(u8),
+}
+
+fn main(op: A::Op) -> OpResult {
+    match op {
+        Op::Zero => OpResult::Ok(0),
+        Op::Div(x, 0) => OpResult::DivByZero,
+        Op::Div(x, y) => OpResult::Ok(x / y),
+    }
+}
+";
+    let checked = check(prg).map_err(|e| e.prettify(prg))?;
+    let circuit = checked.compile();
+
+    let mut computation: Computation = circuit.into();
+    let ty_in = Type::Enum("Op".to_string());
+    let ty_out = Type::Enum("OpResult".to_string());
+    let input = Literal::parse(&checked, &ty_in, "Op::Div(10, 2)").map_err(|e| e.prettify(""))?;
+    computation.set_literal(&checked, Party::A, input);
+    computation.run().map_err(|e| e.prettify(prg))?;
+    let r = computation.get_literal(&checked, &ty_out).map_err(|e| e.prettify(prg))?;
+    let expected = Literal::parse(&checked, &ty_out, "OpResult::Ok(5)").map_err(|e| e.prettify(""))?;
+    assert_eq!(r, expected);
     Ok(())
 }

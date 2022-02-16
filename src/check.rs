@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     ast::{
         Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, Program, Type, UnaryOp,
-        VariantExpr, VariantExprEnum,
+        VariantExpr, VariantExprEnum, EnumDef,
     },
     env::Env,
     token::MetaInfo,
@@ -55,29 +55,45 @@ pub enum TypeErrorEnum {
     TypeDoesNotSupportPatternMatching(Type),
 }
 
-struct Defs<'a> {
+pub struct Defs<'a> {
     enums: HashMap<&'a str, HashMap<&'a str, Option<Vec<Type>>>>,
     fns: HashMap<&'a str, &'a FnDef>,
 }
 
-struct TypedFns {
-    currently_being_checked: HashSet<String>,
-    typed: HashMap<String, typed_ast::FnDef>,
-}
-
-impl Program {
-    pub fn type_check(&self) -> Result<typed_ast::Program, TypeError> {
-        let mut defs = Defs {
+impl<'a> Defs<'a> {
+    pub(crate) fn new(enum_defs: &'a HashMap<String, EnumDef>) -> Self {
+        let mut defs = Self {
             enums: HashMap::new(),
             fns: HashMap::new(),
         };
-        for (enum_name, enum_def) in self.enum_defs.iter() {
+        for (enum_name, enum_def) in enum_defs.iter() {
             let mut enum_variants = HashMap::new();
             for variant in &enum_def.variants {
                 enum_variants.insert(variant.variant_name(), variant.types());
             }
             defs.enums.insert(enum_name, enum_variants);
         }
+        defs
+    }
+}
+
+pub(crate) struct TypedFns {
+    currently_being_checked: HashSet<String>,
+    typed: HashMap<String, typed_ast::FnDef>,
+}
+
+impl TypedFns {
+    pub(crate) fn new() -> Self {
+        Self {
+            currently_being_checked: HashSet::new(),
+            typed: HashMap::new(),
+        }
+    }
+}
+
+impl Program {
+    pub fn type_check(&self) -> Result<typed_ast::Program, TypeError> {
+        let mut defs = Defs::new(&self.enum_defs);
         let enum_defs = self.enum_defs.clone();
 
         let mut env = Env::new();
@@ -101,10 +117,7 @@ impl Program {
             env.set(identifier.clone(), ty.clone());
             params.push((*party, param.clone()));
         }
-        let mut fn_defs = TypedFns {
-            currently_being_checked: HashSet::new(),
-            typed: HashMap::new(),
-        };
+        let mut fn_defs = TypedFns::new();
         let body = self
             .main
             .body
@@ -130,7 +143,7 @@ impl Program {
     }
 }
 
-fn expect_type(expr: &typed_ast::Expr, expected: &Type) -> Result<(), TypeError> {
+pub(crate) fn expect_type(expr: &typed_ast::Expr, expected: &Type) -> Result<(), TypeError> {
     let typed_ast::Expr(expr, actual, meta) = expr;
     let actual = actual.clone();
     if let typed_ast::ExprEnum::NumUnsigned(n) = expr {
@@ -392,7 +405,7 @@ impl FnDef {
 }
 
 impl Expr {
-    fn type_check(
+    pub(crate) fn type_check(
         &self,
         env: &mut Env<Type>,
         fns: &mut TypedFns,

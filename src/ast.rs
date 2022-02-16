@@ -16,6 +16,17 @@ pub struct EnumDef {
     pub meta: MetaInfo,
 }
 
+impl EnumDef {
+    pub fn get_variant(&self, variant_name: &str) -> Option<&Variant> {
+        for variant in self.variants.iter() {
+            if variant.variant_name() == variant_name {
+                return Some(variant);
+            }
+        }
+        None
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Variant {
     Unit(String),
