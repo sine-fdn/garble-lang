@@ -1,9 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, array};
 
 use crate::{
     ast::{
-        Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, Program, Type, UnaryOp,
-        VariantExpr, VariantExprEnum, EnumDef,
+        EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, Program, Type, UnaryOp,
+        VariantExpr, VariantExprEnum,
     },
     env::Env,
     token::MetaInfo,
@@ -427,11 +427,30 @@ impl Expr {
                     return Err(TypeError(TypeErrorEnum::UnknownIdentifier(s.clone()), meta));
                 }
             }
-            ExprEnum::ArrayLiteral(value, size) => {
+            ExprEnum::ArrayLiteral(fields) => {
+                let array_size = fields.len();
+                let mut fields = fields.iter();
+                let first_field = fields.next().unwrap().type_check(env, fns, defs)?;
+                let first_ty = first_field.1.clone();
+                let first_meta = first_field.2;
+                let mut typed_fields = vec![first_field];
+                while let Some(field) = fields.next() {
+                    let field = field.type_check(env, fns, defs)?;
+                    if field.1 != first_ty {
+                        let e =
+                            TypeErrorEnum::TypeMismatch((first_ty, first_meta), (field.1, field.2));
+                        return Err(TypeError(e, field.2));
+                    }
+                    typed_fields.push(field);
+                }
+                let ty = Type::Array(Box::new(first_ty), array_size);
+                (typed_ast::ExprEnum::ArrayLiteral(typed_fields), ty)
+            }
+            ExprEnum::ArrayRepeatLiteral(value, size) => {
                 let value = value.type_check(env, fns, defs)?;
                 let ty = Type::Array(Box::new(value.1.clone()), *size);
                 (
-                    typed_ast::ExprEnum::ArrayLiteral(Box::new(value), *size),
+                    typed_ast::ExprEnum::ArrayRepeatLiteral(Box::new(value), *size),
                     ty,
                 )
             }

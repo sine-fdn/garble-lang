@@ -17,7 +17,8 @@ pub enum Literal {
     False,
     NumUnsigned(u128, Type),
     NumSigned(i128, Type),
-    Array(Box<Literal>, usize),
+    ArrayRepeat(Box<Literal>, usize),
+    Array(Vec<Literal>),
     Tuple(Vec<Literal>),
     Enum(String, String, VariantLiteral),
     Range(usize, usize),
@@ -87,16 +88,25 @@ impl Literal {
                     })
                 }
             }
-            Type::Array(_, _) => {
-                todo!()
+            Type::Array(ty, size) => {
+                let mut elems = vec![];
+                let mut ty_size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
+                let mut i = 0;
+                for _ in 0..*size {
+                    let bits = &bits[i..i + ty_size];
+                    elems.push(Literal::from_bits(checked, &ty, bits)?);
+                    i += ty_size;
+                }
+                Ok(Literal::Array(elems))
             }
             Type::Tuple(field_types) => {
                 let mut fields = vec![];
                 let mut i = 0;
                 for ty in field_types {
-                    let bits = &bits[i..i + ty.size_in_bits_for_defs(Some(&checked.enum_defs))];
+                    let ty_size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
+                    let bits = &bits[i..i + ty_size];
                     fields.push(Literal::from_bits(checked, &ty, bits)?);
-                    i += ty.size_in_bits_for_defs(Some(&checked.enum_defs));
+                    i += ty_size;
                 }
                 Ok(Literal::Tuple(fields))
             }
@@ -155,12 +165,19 @@ impl Literal {
                 signed_to_bits(*n, size, &mut bits);
                 bits
             }
-            Literal::Array(elem, size) => {
+            Literal::ArrayRepeat(elem, size) => {
                 let elem = elem.as_bits(checked);
                 let elem_size = elem.len();
                 let mut bits = vec![false; elem_size * size];
                 for i in 0..*size {
                     bits[(i * elem_size)..(i * elem_size) + elem_size].copy_from_slice(&elem);
+                }
+                bits
+            }
+            Literal::Array(elems) => {
+                let mut bits = vec![];
+                for elem in elems {
+                    bits.extend(elem.as_bits(checked))
                 }
                 bits
             }
@@ -193,7 +210,15 @@ impl Literal {
                 }
                 wires
             }
-            Literal::Range(_, _) => todo!(),
+            Literal::Range(min, max) => {
+                let elems: Vec<usize> = (*min..*max).into_iter().collect();
+                let elem_size = Type::Usize.size_in_bits_for_defs(Some(&checked.enum_defs));
+                let mut bits = Vec::with_capacity(elems.len() * elem_size);
+                for elem in elems {
+                    unsigned_to_bits(elem as u128, elem_size, &mut bits);
+                }
+                bits
+            }
         }
     }
 }
@@ -205,7 +230,18 @@ impl Display for Literal {
             Literal::False => write!(f, "false"),
             Literal::NumUnsigned(n, _) => write!(f, "{}", n),
             Literal::NumSigned(n, _) => write!(f, "{}", n),
-            Literal::Array(elem, size) => write!(f, "[{}; {}]", elem, size),
+            Literal::ArrayRepeat(elem, size) => write!(f, "[{}; {}]", elem, size),
+            Literal::Array(elems) => {
+                write!(f, "[")?;
+                let mut elems = elems.iter();
+                if let Some(first_elem) = elems.next() {
+                    write!(f, "{}", first_elem)?;
+                }
+                while let Some(elem) = elems.next() {
+                    write!(f, ", {}", elem)?;
+                }
+                write!(f, "]")
+            }
             Literal::Tuple(fields) => {
                 write!(f, "(")?;
                 let mut fields = fields.iter();
@@ -245,7 +281,12 @@ impl Expr {
             ExprEnum::False => Literal::False,
             ExprEnum::NumUnsigned(n) => Literal::NumUnsigned(n, ty),
             ExprEnum::NumSigned(n) => Literal::NumSigned(n, ty),
-            ExprEnum::ArrayLiteral(elem, size) => Literal::Array(Box::new(elem.as_literal()), size),
+            ExprEnum::ArrayRepeatLiteral(elem, size) => {
+                Literal::ArrayRepeat(Box::new(elem.as_literal()), size)
+            }
+            ExprEnum::ArrayLiteral(elems) => {
+                Literal::Array(elems.into_iter().map(|e| e.as_literal()).collect())
+            }
             ExprEnum::TupleLiteral(fields) => {
                 Literal::Tuple(fields.into_iter().map(|f| f.as_literal()).collect())
             }

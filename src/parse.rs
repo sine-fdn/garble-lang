@@ -819,24 +819,40 @@ impl Parser {
                 } else {
                     self.parse_expr()?
                 };
-                self.expect(&TokenEnum::Semicolon)?;
-                let size = if let Some(Token(TokenEnum::UnsignedNum(n), meta)) = self.tokens.peek()
-                {
-                    let n = *n;
-                    let meta = *meta;
-                    self.tokens.next();
-                    if n <= usize::MAX as u128 {
-                        n as usize
-                    } else {
-                        self.push_error(ParseErrorEnum::InvalidArraySize, meta);
-                        return Err(());
-                    }
+                if self.peek(&TokenEnum::Semicolon) {
+                    self.expect(&TokenEnum::Semicolon)?;
+                    let size =
+                        if let Some(Token(TokenEnum::UnsignedNum(n), meta)) = self.tokens.peek() {
+                            let n = *n;
+                            let meta = *meta;
+                            self.tokens.next();
+                            if n <= usize::MAX as u128 {
+                                n as usize
+                            } else {
+                                self.push_error(ParseErrorEnum::InvalidArraySize, meta);
+                                return Err(());
+                            }
+                        } else {
+                            self.push_error_for_next(ParseErrorEnum::ExpectedConstantArraySize);
+                            return Err(());
+                        };
+                    let meta_end = self.expect(&TokenEnum::RightBracket)?;
+                    let meta = join_meta(meta, meta_end);
+                    Expr(ExprEnum::ArrayRepeatLiteral(Box::new(elem), size), meta)
                 } else {
-                    self.push_error_for_next(ParseErrorEnum::ExpectedConstantArraySize);
-                    return Err(());
-                };
-                self.expect(&TokenEnum::RightBracket)?;
-                Expr(ExprEnum::ArrayLiteral(Box::new(elem), size), meta)
+                    let mut elems = vec![elem];
+                    while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+                        let elem = if only_literal_children {
+                            self.parse_literal_recusively()?
+                        } else {
+                            self.parse_expr()?
+                        };
+                        elems.push(elem);
+                    }
+                    let meta_end = self.expect(&TokenEnum::RightBracket)?;
+                    let meta = join_meta(meta, meta_end);
+                    Expr(ExprEnum::ArrayLiteral(elems), meta)
+                }
             }
             _ => {
                 self.push_error(ParseErrorEnum::ExpectedExpr, meta);

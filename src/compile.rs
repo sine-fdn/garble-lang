@@ -90,7 +90,14 @@ impl Expr {
                 bits.into_iter().map(|b| b as usize).collect()
             }
             ExprEnum::Identifier(s) => env.get(s).unwrap(),
-            ExprEnum::ArrayLiteral(elem, size) => {
+            ExprEnum::ArrayLiteral(elems) => {
+                let mut wires = Vec::with_capacity(ty.size_in_bits_for_defs(Some(&enums)));
+                for elem in elems {
+                    wires.extend(elem.compile(enums, fns, env, circuit));
+                }
+                wires
+            }
+            ExprEnum::ArrayRepeatLiteral(elem, size) => {
                 let elem_ty = elem.1.clone();
                 let mut elem = elem.compile(enums, fns, env, circuit);
                 extend_to_bits(

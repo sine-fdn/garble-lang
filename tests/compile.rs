@@ -1,6 +1,6 @@
-use garble_script::{circuit::Party, compile, eval::Computation, io::Literal, check, ast::Type};
+use garble_script::{ast::Type, check, circuit::Party, compile, eval::Computation, io::Literal};
 
-#[test]
+/*#[test]
 fn compile_xor() -> Result<(), String> {
     for y in [true, false] {
         let prg = format!(
@@ -652,7 +652,7 @@ fn main(x: A::i8, y: A::i8) -> i8 {
 }
 
 #[test]
-fn compile_array_access() -> Result<(), String> {
+fn compile_array_repeat_literal_access() -> Result<(), String> {
     let array_size = 256;
     let prg = &format!(
         "
@@ -1060,7 +1060,7 @@ fn main(x: A::u8) -> u8 {
         assert_eq!(computation.get_u8().map_err(|e| e.prettify(prg))?, expected);
     }
     Ok(())
-}
+}*/
 
 #[test]
 fn compile_main_with_tuple_io() -> Result<(), String> {
@@ -1077,7 +1077,9 @@ fn main(values: A::(u8, u8)) -> (u8, u8) {
     let input = Literal::parse(&checked, &tuple_ty, "(2, 3)").map_err(|e| e.prettify(""))?;
     computation.set_literal(&checked, Party::A, input);
     computation.run().map_err(|e| e.prettify(prg))?;
-    let r = computation.get_literal(&checked, &tuple_ty).map_err(|e| e.prettify(prg))?;
+    let r = computation
+        .get_literal(&checked, &tuple_ty)
+        .map_err(|e| e.prettify(prg))?;
     let expected = Literal::parse(&checked, &tuple_ty, "(3, 4)").map_err(|e| e.prettify(""))?;
     assert_eq!(r, expected);
     Ok(())
@@ -1113,8 +1115,54 @@ fn main(op: A::Op) -> OpResult {
     let input = Literal::parse(&checked, &ty_in, "Op::Div(10, 2)").map_err(|e| e.prettify(""))?;
     computation.set_literal(&checked, Party::A, input);
     computation.run().map_err(|e| e.prettify(prg))?;
-    let r = computation.get_literal(&checked, &ty_out).map_err(|e| e.prettify(prg))?;
-    let expected = Literal::parse(&checked, &ty_out, "OpResult::Ok(5)").map_err(|e| e.prettify(""))?;
+    let r = computation
+        .get_literal(&checked, &ty_out)
+        .map_err(|e| e.prettify(prg))?;
+    let expected =
+        Literal::parse(&checked, &ty_out, "OpResult::Ok(5)").map_err(|e| e.prettify(""))?;
+    assert_eq!(r, expected);
+    Ok(())
+}
+
+#[test]
+fn compile_array_literal_access() -> Result<(), String> {
+    let prg = "
+fn main(i: A::usize) -> i8 {
+    [-2, -1, 0 as i8, 1 as i8, 2 as i8][i]
+}";
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
+    let mut computation: Computation = circuit.into();
+    for i in 0..5 {
+        computation.set_usize(Party::A, i);
+        computation.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(computation.get_i8().map_err(|e| e.prettify(prg))?, i as i8 - 2);
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_main_with_array_io() -> Result<(), String> {
+    let prg = "
+fn main(nums: A::[u8; 5]) -> [u8; 5] {
+    let sum = nums.fold(0, |acc: u16, n: u8| -> u16 {
+        acc + (n as u16)
+    });
+    nums.map(|n: u8| -> u8 {
+        sum as u8
+    })
+}
+";
+    let checked = check(prg).map_err(|e| e.prettify(prg))?;
+    let circuit = checked.compile();
+
+    let mut computation: Computation = circuit.into();
+    let array_ty = Type::Array(Box::new(Type::U8), 5);
+    let input =
+        Literal::parse(&checked, &array_ty, "[1, 2, 3, 4, 5]").map_err(|e| e.prettify(""))?;
+    computation.set_literal(&checked, Party::A, input);
+    computation.run().map_err(|e| e.prettify(prg))?;
+    let r = computation.get_literal(&checked, &array_ty).map_err(|e| e.prettify(prg))?;
+    let expected = Literal::parse(&checked, &array_ty, "[15, 15, 15, 15, 15]").map_err(|e| e.prettify(""))?;
     assert_eq!(r, expected);
     Ok(())
 }
