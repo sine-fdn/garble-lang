@@ -291,18 +291,52 @@ impl Parser {
                 Err(())
             }
         } else if let Some(meta) = self.next_matches(&TokenEnum::KeywordIf) {
-            // if <cond> { <then> } else { <else> }
+            // if <cond> { <then> } else [if { <else-if> } else]* { <else> }
             let cond_expr = self.parse_expr()?;
             self.expect(&TokenEnum::LeftBrace)?;
 
             if let Ok(then_expr) = self.parse_expr() {
                 self.expect(&TokenEnum::RightBrace)?;
                 self.expect(&TokenEnum::KeywordElse)?;
+
+                let mut elseif_exprs = vec![];
+                let mut has_error = false;
+                while let Some(meta) = self.next_matches(&TokenEnum::KeywordIf) {
+                    let cond_expr = self.parse_expr()?;
+                    self.expect(&TokenEnum::LeftBrace)?;
+
+                    if let Ok(elseif_expr) = self.parse_expr() {
+                        elseif_exprs.push((meta, cond_expr, elseif_expr));
+                    } else {
+                        has_error = true;
+                        self.consume_until_one_of(&[TokenEnum::RightBrace]);
+                    }
+
+                    self.expect(&TokenEnum::RightBrace)?;
+                    self.expect(&TokenEnum::KeywordElse)?;
+                }
                 self.expect(&TokenEnum::LeftBrace)?;
 
-                let else_expr = self.parse_expr()?;
+                let mut else_expr = self.parse_expr()?;
                 let meta_end = self.expect(&TokenEnum::RightBrace)?;
+
+                while let Some((meta, cond_expr, then_expr)) = elseif_exprs.pop() {
+                    let meta = join_meta(meta, meta_end);
+                    else_expr = Expr(
+                        ExprEnum::If(
+                            Box::new(cond_expr),
+                            Box::new(then_expr),
+                            Box::new(else_expr),
+                        ),
+                        meta,
+                    );
+                }
+
                 let meta = join_meta(meta, meta_end);
+
+                if has_error {
+                    return Err(());
+                }
                 Ok(Expr(
                     ExprEnum::If(
                         Box::new(cond_expr),
