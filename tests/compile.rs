@@ -1,4 +1,4 @@
-use garble_script::{ast::Type, check, compile, eval::Evaluator, io::Literal};
+use garble::{ast::Type, check, compile, eval::Evaluator, io::Literal};
 
 #[test]
 fn compile_xor() -> Result<(), String> {

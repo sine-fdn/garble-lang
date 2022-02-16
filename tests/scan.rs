@@ -1,4 +1,4 @@
-use garble_script::scan::{scan, ScanError};
+use garble::scan::{scan, ScanError};
 
 #[test]
 fn scan_exhaustive_enum_pattern_with_literals() -> Result<(), Vec<ScanError>> {

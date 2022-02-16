@@ -1,4 +1,4 @@
-use garble_script::{
+use garble::{
     check::{TypeError, TypeErrorEnum},
     scan::scan,
     Error,

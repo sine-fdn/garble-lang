@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "garble-script"
+name = "garble"
 version = "0.1.0"
