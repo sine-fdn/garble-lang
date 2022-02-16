@@ -1,6 +1,6 @@
 use garble_script::{
-    scan::scan,
     check::{TypeError, TypeErrorEnum},
+    scan::scan,
     Error,
 };
 

@@ -8,13 +8,13 @@ use crate::{
     typed_ast::Program,
 };
 
-pub struct Computation {
+pub struct Evaluator {
     circuit: Circuit,
     inputs: Vec<Vec<bool>>,
     output: Option<Vec<Option<bool>>>,
 }
 
-impl From<Circuit> for Computation {
+impl From<Circuit> for Evaluator {
     fn from(circuit: Circuit) -> Self {
         Self {
             circuit,
@@ -34,7 +34,7 @@ pub enum EvalError {
     OutputTypeMismatch { expected: Type, actual_bits: usize },
 }
 
-impl Computation {
+impl Evaluator {
     pub fn run(&mut self) -> Result<(), EvalError> {
         if self.inputs.len() != self.circuit.input_gates.len() {
             return Err(EvalError::UnexpectedNumberOfParties);

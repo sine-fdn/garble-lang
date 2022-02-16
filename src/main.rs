@@ -1,6 +1,6 @@
 use std::{env::args, fs::File, io::Read, process::exit};
 
-use garble_script::{ast::ParamDef, check, eval::Computation, io::Literal};
+use garble_script::{ast::ParamDef, check, eval::Evaluator, io::Literal};
 
 fn main() -> Result<(), std::io::Error> {
     let args: Vec<String> = args().collect();
@@ -36,7 +36,7 @@ fn main() -> Result<(), std::io::Error> {
                 }
             }
             let circuit = checked.compile();
-            let mut computation = Computation::from(circuit);
+            let mut computation = Evaluator::from(circuit);
             for param in params {
                 computation.set_literal(&checked, param);
             }
