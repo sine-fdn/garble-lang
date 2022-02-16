@@ -5,7 +5,7 @@ use garble_script::{ast::ParamDef, check, eval::Computation, io::Literal};
 fn main() -> Result<(), std::io::Error> {
     let args: Vec<String> = args().collect();
     if args.len() < 2 {
-        println!("usage: {} file [input1] [input2] ...", args[0]);
+        println!("Usage: {} file [input1] [input2] ...", args[0]);
         exit(64);
     }
     let mut f = File::open(&args[1])?;
@@ -25,10 +25,10 @@ fn main() -> Result<(), std::io::Error> {
                 );
             }
             let mut params = Vec::with_capacity(main_params.len());
-            for ((party, ParamDef(_, ty)), arg) in main_params.iter().zip(&args[2..]) {
+            for (ParamDef(_, ty), arg) in main_params.iter().zip(&args[2..]) {
                 let param = Literal::parse(&checked, ty, arg);
                 match param {
-                    Ok(param) => params.push((*party, param)),
+                    Ok(param) => params.push(param),
                     Err(e) => {
                         println!("{}", e.prettify(&arg));
                         exit(65);
@@ -37,8 +37,8 @@ fn main() -> Result<(), std::io::Error> {
             }
             let circuit = checked.compile();
             let mut computation = Computation::from(circuit);
-            for (party, param) in params {
-                computation.set_literal(&checked, party, param);
+            for param in params {
+                computation.set_literal(&checked, param);
             }
             if let Err(e) = computation.run() {
                 println!("{}", e.prettify(""));

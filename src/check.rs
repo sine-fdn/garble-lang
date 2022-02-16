@@ -106,7 +106,7 @@ impl Program {
         }
         let mut params = Vec::with_capacity(self.main.params.len());
         let mut param_identifiers = HashSet::new();
-        for (party, param) in self.main.params.iter() {
+        for param in self.main.params.iter() {
             let ParamDef(identifier, ty) = param;
             if param_identifiers.contains(identifier) {
                 let e = TypeErrorEnum::DuplicateFnParam(identifier.clone());
@@ -115,7 +115,7 @@ impl Program {
                 param_identifiers.insert(identifier);
             }
             env.set(identifier.clone(), ty.clone());
-            params.push((*party, param.clone()));
+            params.push(param.clone());
         }
         let mut fn_defs = TypedFns::new();
         let body = self
@@ -123,7 +123,8 @@ impl Program {
             .body
             .type_check(&mut env, &mut fn_defs, &mut defs)?;
         expect_type(&body, &self.main.ty)?;
-        let main = typed_ast::MainDef {
+        let main = typed_ast::FnDef {
+            identifier: "main".to_string(),
             params,
             body,
             meta: self.main.meta,

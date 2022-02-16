@@ -2,10 +2,9 @@ use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        Closure, EnumDef, Expr, ExprEnum, FnDef, MainDef, Op, ParamDef, Pattern, PatternEnum,
-        Program, Type, UnaryOp, Variant, VariantExpr, VariantExprEnum,
+        Closure, EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, Program, Type,
+        UnaryOp, Variant, VariantExpr, VariantExprEnum,
     },
-    circuit::Party,
     scan::Tokens,
     token::{MetaInfo, Token, TokenEnum},
 };
@@ -85,7 +84,7 @@ impl Parser {
                     if let Some(Token(TokenEnum::Identifier(fn_name), _)) = self.tokens.peek() {
                         if fn_name.as_str() == "main" {
                             has_main = true;
-                            if let Ok(main_def) = self.parse_main_fn_def(meta) {
+                            if let Ok(main_def) = self.parse_fn_def(meta) {
                                 main_fn_def = Some(main_def);
                             } else {
                                 self.consume_until_one_of(&top_level_keywords);
@@ -196,39 +195,6 @@ impl Parser {
         })
     }
 
-    fn parse_main_fn_def(&mut self, start: MetaInfo) -> Result<MainDef, ()> {
-        // fn keyword was already consumed by the top-level parser
-        let (fn_name, _) = self.expect_identifier()?;
-        if fn_name.as_str() != "main" {
-            panic!("this function should not have been called on a non-main fn def");
-        }
-
-        // ( ... )
-        self.expect(&TokenEnum::LeftParen)?;
-        let mut params = vec![];
-        if !self.peek(&TokenEnum::RightParen) {
-            params.extend(self.parse_party_params()?);
-        }
-        self.expect(&TokenEnum::RightParen)?;
-
-        // -> <ty>
-        self.expect(&TokenEnum::Arrow)?;
-        let (ty, _) = self.parse_type()?;
-
-        // { ... }
-        self.expect(&TokenEnum::LeftBrace)?;
-        let body = self.parse_expr()?;
-        let end = self.expect(&TokenEnum::RightBrace)?;
-
-        let meta = join_meta(start, end);
-        Ok(MainDef {
-            ty,
-            params,
-            body,
-            meta,
-        })
-    }
-
     fn parse_params(&mut self) -> Result<Vec<ParamDef>, ()> {
         let mut params = vec![self.parse_param()?];
         while self.next_matches(&TokenEnum::Comma).is_some() {
@@ -243,32 +209,6 @@ impl Parser {
         self.expect(&TokenEnum::Colon)?;
         let (ty, _) = self.parse_type()?;
         Ok(ParamDef(param_name, ty))
-    }
-
-    fn parse_party_params(&mut self) -> Result<Vec<(Party, ParamDef)>, ()> {
-        let mut params = vec![self.parse_party_param()?];
-        while self.next_matches(&TokenEnum::Comma).is_some() {
-            params.push(self.parse_party_param()?);
-        }
-        Ok(params)
-    }
-
-    fn parse_party_param(&mut self) -> Result<(Party, ParamDef), ()> {
-        // <param>: <party>::<type>
-        let (param_name, _) = self.expect_identifier()?;
-        self.expect(&TokenEnum::Colon)?;
-        let (party, party_meta) = self.expect_identifier()?;
-        let party = match party.as_str() {
-            "A" => Party::A,
-            "B" => Party::B,
-            _ => {
-                self.push_error(ParseErrorEnum::InvalidParty, party_meta);
-                return Err(());
-            }
-        };
-        self.expect(&TokenEnum::DoubleColon)?;
-        let (ty, _) = self.parse_type()?;
-        Ok((party, ParamDef(param_name, ty)))
     }
 
     fn parse_expr(&mut self) -> Result<Expr, ()> {

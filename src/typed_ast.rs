@@ -2,27 +2,20 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{EnumDef, Op, ParamDef, Type, UnaryOp},
-    token::MetaInfo, circuit::Party,
+    token::MetaInfo,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Program {
     pub enum_defs: HashMap<String, EnumDef>,
     pub fn_defs: HashMap<String, FnDef>,
-    pub main: MainDef,
+    pub main: FnDef,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct FnDef {
     pub identifier: String,
     pub params: Vec<ParamDef>,
-    pub body: Expr,
-    pub meta: MetaInfo,
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct MainDef {
-    pub params: Vec<(Party, ParamDef)>,
     pub body: Expr,
     pub meta: MetaInfo,
 }

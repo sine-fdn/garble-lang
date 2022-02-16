@@ -11,7 +11,7 @@ fn inc(x: u16) -> u16 {
   x + 1
 }
 
-fn main(x: A::u16) -> u16 {
+fn main(x: u16) -> u16 {
   let f = inc;
   f(x)
 }
@@ -31,7 +31,7 @@ fn add(x: u16, x: u16) -> u16 {
   x + x
 }
 
-fn main(x: A::u16) -> u16 {
+fn main(x: u16) -> u16 {
   add(x, 1)
 }
 ";
@@ -46,7 +46,7 @@ fn main(x: A::u16) -> u16 {
 #[test]
 fn reject_duplicate_fn_params_in_main() -> Result<(), Error> {
     let prg = "
-fn main(x: A::u16, x: A::u16) -> u16 {
+fn main(x: u16, x: u16) -> u16 {
   x + x
 }
 ";
@@ -61,7 +61,7 @@ fn main(x: A::u16, x: A::u16) -> u16 {
 #[test]
 fn reject_unused_fn() -> Result<(), Error> {
     let prg = "
-  fn main(x: A::u8) -> u8 {
+  fn main(x: u8) -> u8 {
     x
   }
 
@@ -77,7 +77,7 @@ fn reject_unused_fn() -> Result<(), Error> {
 #[test]
 fn reject_recursive_fn() -> Result<(), Error> {
     let prg = "
-  fn main(x: A::u8) -> u8 {
+  fn main(x: u8) -> u8 {
     rec_fn(x)
   }
 

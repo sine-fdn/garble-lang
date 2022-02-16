@@ -18,14 +18,14 @@ impl Program {
         let mut env = Env::new();
         let mut input_gates = vec![];
         let mut wire = 2;
-        for (party, ParamDef(identifier, ty)) in self.main.params.iter() {
+        for ParamDef(identifier, ty) in self.main.params.iter() {
             let type_size = ty.size_in_bits_for_defs(Some(&self.enum_defs));
             let mut wires = Vec::with_capacity(type_size);
-            for _i in 0..type_size {
-                input_gates.push(*party);
+            for _ in 0..type_size {
                 wires.push(wire);
                 wire += 1;
             }
+            input_gates.push(type_size);
             env.set(identifier.clone(), wires);
         }
         let mut enums = HashMap::new();
@@ -37,10 +37,7 @@ impl Program {
             }
             enums.insert(enum_name.clone(), variants);
         }
-        let mut circuit = CircuitBuilder {
-            input_gates,
-            gates: vec![],
-        };
+        let mut circuit = CircuitBuilder::new(input_gates);
         let output_gates = self
             .main
             .body

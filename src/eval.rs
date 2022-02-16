@@ -1,16 +1,16 @@
 use crate::{
     ast::Type,
-    circuit::{Circuit, Party},
+    circuit::Circuit,
     compile::{signed_to_bits, unsigned_to_bits},
     io::Literal,
     parse::ParseError,
-    scan::ScanError, typed_ast::Program,
+    scan::ScanError,
+    typed_ast::Program,
 };
 
 pub struct Computation {
     circuit: Circuit,
-    in_a: Vec<bool>,
-    in_b: Vec<bool>,
+    inputs: Vec<Vec<bool>>,
     output: Option<Vec<Option<bool>>>,
 }
 
@@ -18,8 +18,7 @@ impl From<Circuit> for Computation {
     fn from(circuit: Circuit) -> Self {
         Self {
             circuit,
-            in_a: vec![],
-            in_b: vec![],
+            inputs: vec![],
             output: None,
         }
     }
@@ -27,45 +26,32 @@ impl From<Circuit> for Computation {
 
 #[derive(Debug, Clone)]
 pub enum EvalError {
+    UnexpectedNumberOfParties,
+    UnexpectedNumberOfInputsFromParty(usize),
     LiteralScanError(Vec<ScanError>),
     LiteralParseError(Vec<ParseError>),
-    UnexpectedNumberOfInputsFromPartyA(usize),
-    UnexpectedNumberOfInputsFromPartyB(usize),
     OutputHasNotBeenComputed,
     OutputTypeMismatch { expected: Type, actual_bits: usize },
 }
 
 impl Computation {
     pub fn run(&mut self) -> Result<(), EvalError> {
-        let mut expected_in_a_len = 0;
-        let mut expected_in_b_len = 0;
-        for party in self.circuit.input_gates.iter() {
-            match party {
-                Party::A => expected_in_a_len += 1,
-                Party::B => expected_in_b_len += 1,
+        if self.inputs.len() != self.circuit.input_gates.len() {
+            return Err(EvalError::UnexpectedNumberOfParties);
+        }
+        for p in 0..self.circuit.input_gates.len() {
+            if self.inputs[p].len() != self.circuit.input_gates[p] {
+                return Err(EvalError::UnexpectedNumberOfInputsFromParty(p));
             }
         }
-        if self.in_a.len() != expected_in_a_len {
-            return Err(EvalError::UnexpectedNumberOfInputsFromPartyA(
-                self.in_a.len(),
-            ));
-        }
-        if self.in_b.len() != expected_in_b_len {
-            return Err(EvalError::UnexpectedNumberOfInputsFromPartyB(
-                self.in_b.len(),
-            ));
-        }
-        self.output = Some(self.circuit.eval(&self.in_a, &self.in_b));
-        self.in_a.clear();
-        self.in_b.clear();
+        self.output = Some(self.circuit.eval(&self.inputs));
+        self.inputs.clear();
         Ok(())
     }
 
-    fn get_input(&mut self, p: Party) -> &mut Vec<bool> {
-        match p {
-            Party::A => &mut self.in_a,
-            Party::B => &mut self.in_b,
-        }
+    fn push_input(&mut self) -> &mut Vec<bool> {
+        self.inputs.push(vec![]);
+        self.inputs.last_mut().unwrap()
     }
 
     fn get_output(&self) -> Result<Vec<bool>, EvalError> {
@@ -80,8 +66,8 @@ impl Computation {
         }
     }
 
-    pub fn set_bool(&mut self, p: Party, b: bool) {
-        let inputs = self.get_input(p);
+    pub fn set_bool(&mut self, b: bool) {
+        let inputs = self.push_input();
         inputs.push(b);
     }
 
@@ -97,58 +83,58 @@ impl Computation {
         }
     }
 
-    pub fn set_usize(&mut self, p: Party, n: usize) {
-        let inputs = self.get_input(p);
+    pub fn set_usize(&mut self, n: usize) {
+        let inputs = self.push_input();
         unsigned_to_bits(n as u128, usize::BITS as usize, inputs);
     }
 
-    pub fn set_u8(&mut self, p: Party, n: u8) {
-        let inputs = self.get_input(p);
+    pub fn set_u8(&mut self, n: u8) {
+        let inputs = self.push_input();
         unsigned_to_bits(n as u128, 8, inputs);
     }
 
-    pub fn set_u16(&mut self, p: Party, n: u16) {
-        let inputs = self.get_input(p);
+    pub fn set_u16(&mut self, n: u16) {
+        let inputs = self.push_input();
         unsigned_to_bits(n as u128, 16, inputs);
     }
 
-    pub fn set_u32(&mut self, p: Party, n: u32) {
-        let inputs = self.get_input(p);
+    pub fn set_u32(&mut self, n: u32) {
+        let inputs = self.push_input();
         unsigned_to_bits(n as u128, 32, inputs);
     }
 
-    pub fn set_u64(&mut self, p: Party, n: u64) {
-        let inputs = self.get_input(p);
+    pub fn set_u64(&mut self, n: u64) {
+        let inputs = self.push_input();
         unsigned_to_bits(n as u128, 64, inputs);
     }
 
-    pub fn set_u128(&mut self, p: Party, n: u128) {
-        let inputs = self.get_input(p);
+    pub fn set_u128(&mut self, n: u128) {
+        let inputs = self.push_input();
         unsigned_to_bits(n, 128, inputs);
     }
 
-    pub fn set_i8(&mut self, p: Party, n: i8) {
-        let inputs = self.get_input(p);
+    pub fn set_i8(&mut self, n: i8) {
+        let inputs = self.push_input();
         signed_to_bits(n as i128, 8, inputs);
     }
 
-    pub fn set_i16(&mut self, p: Party, n: i16) {
-        let inputs = self.get_input(p);
+    pub fn set_i16(&mut self, n: i16) {
+        let inputs = self.push_input();
         signed_to_bits(n as i128, 16, inputs);
     }
 
-    pub fn set_i32(&mut self, p: Party, n: i32) {
-        let inputs = self.get_input(p);
+    pub fn set_i32(&mut self, n: i32) {
+        let inputs = self.push_input();
         signed_to_bits(n as i128, 32, inputs);
     }
 
-    pub fn set_i64(&mut self, p: Party, n: i64) {
-        let inputs = self.get_input(p);
+    pub fn set_i64(&mut self, n: i64) {
+        let inputs = self.push_input();
         signed_to_bits(n as i128, 64, inputs);
     }
 
-    pub fn set_i128(&mut self, p: Party, n: i128) {
-        let inputs = self.get_input(p);
+    pub fn set_i128(&mut self, n: i128) {
+        let inputs = self.push_input();
         signed_to_bits(n, 128, inputs);
     }
 
@@ -230,9 +216,12 @@ impl Computation {
         self.get_signed(Type::I128)
     }
 
-    pub fn set_literal(&mut self, checked: &Program, p: Party, literal: Literal) {
-        let inputs = self.get_input(p);
-        inputs.extend(literal.as_bits(checked));
+    pub fn set_literal(&mut self, checked: &Program, literal: Literal) {
+        self.inputs.push(vec![]);
+        self.inputs
+            .last_mut()
+            .unwrap()
+            .extend(literal.as_bits(checked));
     }
 
     pub fn get_literal(&self, checked: &Program, ty: &Type) -> Result<Literal, EvalError> {

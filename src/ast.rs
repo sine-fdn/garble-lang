@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-use crate::{token::MetaInfo, circuit::Party};
+use crate::token::MetaInfo;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Program {
     pub enum_defs: HashMap<String, EnumDef>,
     pub fn_defs: HashMap<String, FnDef>,
-    pub main: MainDef,
+    pub main: FnDef,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -54,14 +54,6 @@ pub struct FnDef {
     pub identifier: String,
     pub ty: Type,
     pub params: Vec<ParamDef>,
-    pub body: Expr,
-    pub meta: MetaInfo,
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct MainDef {
-    pub ty: Type,
-    pub params: Vec<(Party, ParamDef)>,
     pub body: Expr,
     pub meta: MetaInfo,
 }

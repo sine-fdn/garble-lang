@@ -1,10 +1,3 @@
-/// The parties participating in the Multi-Party Computation.
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub enum Party {
-    A,
-    B,
-}
-
 /// Data type to uniquely identify gates.
 pub type GateIndex = usize;
 
@@ -19,25 +12,43 @@ pub enum Gate {
 /// Representation of a circuit evaluated by an S-MPC engine.
 #[derive(Clone, Debug)]
 pub struct Circuit {
-    pub input_gates: Vec<Party>,
+    pub input_gates: Vec<usize>,
     pub gates: Vec<Gate>,
     pub output_gates: Vec<GateIndex>,
 }
 
 impl Circuit {
-    pub fn eval(&self, in_a: &[bool], in_b: &[bool]) -> Vec<Option<bool>> {
-        let mut output = vec![None; self.input_gates.len() + self.gates.len()];
-        let mut in_a_iter = in_a.iter();
-        let mut in_b_iter = in_b.iter();
-        for (w, party) in self.input_gates.iter().enumerate() {
-            let bit = match party {
-                Party::A => *in_a_iter.next().unwrap(),
-                Party::B => *in_b_iter.next().unwrap(),
-            };
-            output[w] = Some(bit);
+    pub fn eval(&self, inputs: &[Vec<bool>]) -> Vec<Option<bool>> {
+        let mut input_len = 0;
+        for p in self.input_gates.iter() {
+            input_len += p;
+        }
+        let mut output = vec![None; input_len + self.gates.len()];
+        let inputs: Vec<_> = inputs.iter().map(|inputs| inputs.iter()).collect();
+        let mut i = 0;
+        if self.input_gates.len() != inputs.len() {
+            panic!(
+                "Circuit was built for {} parties, but found {} inputs",
+                self.input_gates.len(),
+                inputs.len()
+            );
+        }
+        for p in 0..self.input_gates.len() {
+            if self.input_gates[p] != inputs[p].len() {
+                panic!(
+                    "Expected {} input bits for party {}, but found {}",
+                    self.input_gates[p],
+                    p,
+                    inputs[p].len()
+                );
+            }
+            for bit in inputs[p].as_slice() {
+                output[i] = Some(*bit);
+                i += 1;
+            }
         }
         for (w, gate) in self.gates.iter().enumerate() {
-            let w = w + self.input_gates.len();
+            let w = w + i;
             let output_bit = match gate {
                 Gate::Xor(x, y) => output[*x].unwrap() ^ output[*y].unwrap(),
                 Gate::And(x, y) => output[*x].unwrap() & output[*y].unwrap(),
@@ -62,16 +73,33 @@ pub enum BuilderGate {
 
 #[derive(Clone, Debug)]
 pub struct CircuitBuilder {
-    pub input_gates: Vec<Party>,
-    pub gates: Vec<BuilderGate>,
+    input_gates: Vec<usize>,
+    gates: Vec<BuilderGate>,
+    gate_counter: usize,
 }
 
 impl CircuitBuilder {
+    pub fn new(input_gates: Vec<usize>) -> Self {
+        let mut gate_counter = 2; // for const true and false
+        for input_gates_of_party in input_gates.iter() {
+            gate_counter += input_gates_of_party;
+        }
+        Self {
+            input_gates,
+            gates: vec![],
+            gate_counter,
+        }
+    }
+
     pub fn build(self, output_gates: Vec<GateIndex>) -> Circuit {
+        let mut input_shift = 0;
+        for p in self.input_gates.iter() {
+            input_shift += p;
+        }
         let shift_gate_index_if_necessary = |i: GateIndex| {
             if i <= 1 {
-                i + self.input_gates.len()
-            } else if i < self.input_gates.len() + 2 {
+                i + input_shift
+            } else if i < input_shift + 2 {
                 i - 2
             } else {
                 i
@@ -103,7 +131,7 @@ impl CircuitBuilder {
             .map(shift_gate_if_necessary)
             .collect();
         gates.insert(0, Gate::Xor(0, 0)); // constant false
-        gates.insert(1, Gate::Not(self.input_gates.len())); // constant true
+        gates.insert(1, Gate::Not(input_shift)); // constant true
         let output_gates = output_gates
             .into_iter()
             .map(shift_gate_index_if_necessary)
@@ -116,13 +144,15 @@ impl CircuitBuilder {
     }
 
     pub fn push_xor(&mut self, x: GateIndex, y: GateIndex) -> GateIndex {
+        self.gate_counter += 1;
         self.gates.push(BuilderGate::Xor(x, y));
-        self.input_gates.len() + self.gates.len() + 1 // because index 0 and 1 are reserved for const true/false
+        self.gate_counter - 1
     }
 
     pub fn push_and(&mut self, x: GateIndex, y: GateIndex) -> GateIndex {
+        self.gate_counter += 1;
         self.gates.push(BuilderGate::And(x, y));
-        self.input_gates.len() + self.gates.len() + 1 // because index 0 and 1 are reserved for const true/false
+        self.gate_counter - 1
     }
 
     pub fn push_not(&mut self, x: GateIndex) -> GateIndex {
