@@ -35,10 +35,11 @@ impl Literal {
         let mut env = Env::new();
         let mut fns = TypedFns::new();
         let defs = Defs::new(&checked.enum_defs);
-        let expr = scan(literal)?
+        let mut expr = scan(literal)?
             .parse_literal()?
             .type_check(&mut env, &mut fns, &defs)?;
         expect_type(&expr, ty)?;
+        expr.1 = ty.clone();
         Ok(expr.as_literal())
     }
 
@@ -89,8 +90,8 @@ impl Literal {
                 }
             }
             Type::Array(ty, size) => {
+                let ty_size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
                 let mut elems = vec![];
-                let mut ty_size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
                 let mut i = 0;
                 for _ in 0..*size {
                     let bits = &bits[i..i + ty_size];
