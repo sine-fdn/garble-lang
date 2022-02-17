@@ -2,7 +2,7 @@ use crate::{
     ast::Type,
     circuit::Circuit,
     compile::{signed_to_bits, unsigned_to_bits},
-    io::Literal,
+    literal::Literal,
     parse::ParseError,
     scan::ScanError,
     typed_ast::Program,

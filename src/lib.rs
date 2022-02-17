@@ -12,7 +12,7 @@ pub mod circuit;
 pub mod compile;
 pub mod env;
 pub mod eval;
-pub mod io;
+pub mod literal;
 pub mod parse;
 pub mod scan;
 pub mod token;

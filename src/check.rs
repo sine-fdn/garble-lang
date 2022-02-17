@@ -118,10 +118,7 @@ impl Program {
             params.push(param.clone());
         }
         let mut fn_defs = TypedFns::new();
-        let body = self
-            .main
-            .body
-            .type_check(&mut env, &mut fn_defs, &defs)?;
+        let body = self.main.body.type_check(&mut env, &mut fn_defs, &defs)?;
         expect_type(&body, &self.main.ty)?;
         let main = typed_ast::FnDef {
             identifier: "main".to_string(),
