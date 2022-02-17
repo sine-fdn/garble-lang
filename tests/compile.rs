@@ -1130,3 +1130,33 @@ fn main(nums: [u8; 5]) -> [u8; 5] {
     assert_eq!(r, expected);
     Ok(())
 }
+
+#[test]
+fn compile_if_elseif_else() -> Result<(), String> {
+    let prg = "
+fn main(x: i8) -> i8 {
+    if x < 0 {
+        -1
+    } else if x == 0 {
+        0 as i8
+    } else {
+        1 as i8
+    }
+}
+    ";
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
+    let mut eval: Evaluator = circuit.into();
+    for x in [-2, -1, 0, 1, 2] {
+        let expected = if x < 0 {
+            -1
+        } else if x == 0 {
+            0
+        } else {
+            1
+        };
+        eval.set_i8(x);
+        eval.run().map_err(|e| e.prettify(prg))?;
+        assert_eq!(eval.get_i8().map_err(|e| e.prettify(prg))?, expected);
+    }
+    Ok(())
+}
