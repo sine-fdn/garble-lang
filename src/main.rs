@@ -18,11 +18,12 @@ fn main() -> Result<(), std::io::Error> {
             let main_params = &checked.main.params;
             if main_params.len() != args.len() - 2 {
                 println!(
-                    "Expected {} inputs, but found only {}: {:?}",
+                    "Expected {} inputs, but found {}: {:?}",
                     main_params.len(),
                     args.len() - 2,
                     &args[2..]
                 );
+                exit(65);
             }
             let mut params = Vec::with_capacity(main_params.len());
             for (ParamDef(_, ty), arg) in main_params.iter().zip(&args[2..]) {
