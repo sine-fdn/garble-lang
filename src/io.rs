@@ -40,14 +40,14 @@ impl Literal {
             .type_check(&mut env, &mut fns, &defs)?;
         expect_type(&expr, ty)?;
         expr.1 = ty.clone();
-        Ok(expr.as_literal())
+        Ok(expr.into_literal())
     }
 
     pub fn from_bits(checked: &Program, ty: &Type, bits: &[bool]) -> Result<Self, EvalError> {
         match ty {
             Type::Bool => {
                 if bits.len() == 1 {
-                    if bits[0] == true {
+                    if bits[0] {
                         Ok(Literal::True)
                     } else {
                         Ok(Literal::False)
@@ -95,7 +95,7 @@ impl Literal {
                 let mut i = 0;
                 for _ in 0..*size {
                     let bits = &bits[i..i + ty_size];
-                    elems.push(Literal::from_bits(checked, &ty, bits)?);
+                    elems.push(Literal::from_bits(checked, ty, bits)?);
                     i += ty_size;
                 }
                 Ok(Literal::Array(elems))
@@ -106,7 +106,7 @@ impl Literal {
                 for ty in field_types {
                     let ty_size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
                     let bits = &bits[i..i + ty_size];
-                    fields.push(Literal::from_bits(checked, &ty, bits)?);
+                    fields.push(Literal::from_bits(checked, ty, bits)?);
                     i += ty_size;
                 }
                 Ok(Literal::Tuple(fields))
@@ -238,7 +238,7 @@ impl Display for Literal {
                 if let Some(first_elem) = elems.next() {
                     write!(f, "{}", first_elem)?;
                 }
-                while let Some(elem) = elems.next() {
+                for elem in elems {
                     write!(f, ", {}", elem)?;
                 }
                 write!(f, "]")
@@ -249,7 +249,7 @@ impl Display for Literal {
                 if let Some(first_field) = fields.next() {
                     write!(f, "{}", first_field)?;
                 }
-                while let Some(field) = fields.next() {
+                for field in fields {
                     write!(f, ", {}", field)?;
                 }
                 write!(f, ")")
@@ -263,7 +263,7 @@ impl Display for Literal {
                     if let Some(first_field) = fields.next() {
                         write!(f, "{}", first_field)?;
                     }
-                    while let Some(field) = fields.next() {
+                    for field in fields {
                         write!(f, ", {}", field)?;
                     }
                     write!(f, ")")
@@ -275,7 +275,7 @@ impl Display for Literal {
 }
 
 impl Expr {
-    fn as_literal(self) -> Literal {
+    fn into_literal(self) -> Literal {
         let Expr(expr_enum, ty, _) = self;
         match expr_enum {
             ExprEnum::True => Literal::True,
@@ -283,17 +283,17 @@ impl Expr {
             ExprEnum::NumUnsigned(n) => Literal::NumUnsigned(n, ty),
             ExprEnum::NumSigned(n) => Literal::NumSigned(n, ty),
             ExprEnum::ArrayRepeatLiteral(elem, size) => {
-                Literal::ArrayRepeat(Box::new(elem.as_literal()), size)
+                Literal::ArrayRepeat(Box::new(elem.into_literal()), size)
             }
             ExprEnum::ArrayLiteral(elems) => {
-                Literal::Array(elems.into_iter().map(|e| e.as_literal()).collect())
+                Literal::Array(elems.into_iter().map(|e| e.into_literal()).collect())
             }
             ExprEnum::TupleLiteral(fields) => {
-                Literal::Tuple(fields.into_iter().map(|f| f.as_literal()).collect())
+                Literal::Tuple(fields.into_iter().map(|f| f.into_literal()).collect())
             }
             ExprEnum::EnumLiteral(name, variant) => {
                 let VariantExpr(variant_name, _, _) = &variant.as_ref();
-                Literal::Enum(name.clone(), variant_name.clone(), variant.as_literal())
+                Literal::Enum(name, variant_name.clone(), variant.into_literal())
             }
             ExprEnum::Range(min, max) => Literal::Range(min, max),
             _ => unreachable!("This should result in a literal parse error instead"),
@@ -302,12 +302,12 @@ impl Expr {
 }
 
 impl VariantExpr {
-    fn as_literal(self) -> VariantLiteral {
+    fn into_literal(self) -> VariantLiteral {
         let VariantExpr(_, variant, _) = self;
         match variant {
             VariantExprEnum::Unit => VariantLiteral::Unit,
             VariantExprEnum::Tuple(fields) => {
-                VariantLiteral::Tuple(fields.into_iter().map(|f| f.as_literal()).collect())
+                VariantLiteral::Tuple(fields.into_iter().map(|f| f.into_literal()).collect())
             }
         }
     }

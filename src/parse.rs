@@ -47,7 +47,7 @@ impl Tokens {
                 start: (0, 0),
                 end: (0, 0),
             };
-            return Err(vec![ParseError(e, meta)]);
+            Err(vec![ParseError(e, meta)])
         }
     }
 }
@@ -669,7 +669,7 @@ impl Parser {
                 end: (0, 0),
             };
             self.push_error(ParseErrorEnum::InvalidLiteral, meta);
-            return Err(());
+            Err(())
         }
     }
 
@@ -795,7 +795,7 @@ impl Parser {
                     Expr(ExprEnum::ArrayRepeatLiteral(Box::new(elem), size), meta)
                 } else {
                     let mut elems = vec![elem];
-                    while let Some(_) = self.next_matches(&TokenEnum::Comma) {
+                    while self.next_matches(&TokenEnum::Comma).is_some() {
                         let elem = if only_literal_children {
                             self.parse_literal_recusively()?
                         } else {

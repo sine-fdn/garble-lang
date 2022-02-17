@@ -121,7 +121,7 @@ impl Program {
         let body = self
             .main
             .body
-            .type_check(&mut env, &mut fn_defs, &mut defs)?;
+            .type_check(&mut env, &mut fn_defs, &defs)?;
         expect_type(&body, &self.main.ty)?;
         let main = typed_ast::FnDef {
             identifier: "main".to_string(),
@@ -390,7 +390,7 @@ impl FnDef {
             params.push(param.clone());
             param_types.push(ty.clone());
         }
-        let body = self.body.type_check(&mut env, fns, &defs)?;
+        let body = self.body.type_check(&mut env, fns, defs)?;
         expect_type(&body, &self.ty)?;
         env.pop();
 
@@ -435,7 +435,7 @@ impl Expr {
                 let first_ty = first_field.1.clone();
                 let first_meta = first_field.2;
                 let mut typed_fields = vec![first_field];
-                while let Some(field) = fields.next() {
+                for field in fields {
                     let field = field.type_check(env, fns, defs)?;
                     if field.1 != first_ty {
                         let e =
@@ -1013,7 +1013,7 @@ type PatternStack = Vec<typed_ast::Pattern>;
 
 fn specialize(ctor: &Ctor, pattern: &[typed_ast::Pattern]) -> Vec<PatternStack> {
     let head = pattern.first().unwrap();
-    let tail = pattern.iter().cloned().skip(1);
+    let tail = pattern.iter().skip(1).cloned();
     let typed_ast::Pattern(head_enum, _, meta) = head;
     match ctor {
         Ctor::True => match head_enum {

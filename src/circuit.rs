@@ -33,11 +33,11 @@ impl Circuit {
                 inputs.len()
             );
         }
-        for p in 0..self.input_gates.len() {
-            if self.input_gates[p] != inputs[p].len() {
+        for (p, &input_gates) in self.input_gates.iter().enumerate() {
+            if input_gates != inputs[p].len() {
                 panic!(
                     "Expected {} input bits for party {}, but found {}",
-                    self.input_gates[p],
+                    input_gates,
                     p,
                     inputs[p].len()
                 );

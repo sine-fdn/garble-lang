@@ -31,7 +31,7 @@ fn main() -> Result<(), std::io::Error> {
                 match param {
                     Ok(param) => params.push(param),
                     Err(e) => {
-                        println!("{}", e.prettify(&arg));
+                        println!("{}", e.prettify(arg));
                         exit(65);
                     }
                 }
