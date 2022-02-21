@@ -1,23 +1,35 @@
+//! The circuit representation used by the compiler.
+
 /// Data type to uniquely identify gates.
 pub type GateIndex = usize;
 
 /// Description of a gate executed under S-MPC.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Gate {
+    /// A logical XOR gate attached to the two specified input wires.
     Xor(GateIndex, GateIndex),
+    /// A logical AND gate attached to the two specified input wires.
     And(GateIndex, GateIndex),
+    /// A logical NOT gate attached to the specified input wire.
     Not(GateIndex),
 }
 
 /// Representation of a circuit evaluated by an S-MPC engine.
 #[derive(Clone, Debug)]
 pub struct Circuit {
+    /// The different parties, with `usize` at index `i` as the number of input bits for party `i`.
     pub input_gates: Vec<usize>,
+    /// The non-input intermediary gates.
     pub gates: Vec<Gate>,
+    /// The indexes of the gates in [`Circuit::gates`] that produce output bits.
     pub output_gates: Vec<GateIndex>,
 }
 
 impl Circuit {
+    /// Evaluates the circuit with the specified inputs (with one `Vec<bool>` per party).
+    ///
+    /// Assumes that the inputs have been previously type-checked and **panics** if the number of
+    /// parties or the bits of a particular party do not match the circuit.
     pub fn eval(&self, inputs: &[Vec<bool>]) -> Vec<Option<bool>> {
         let mut input_len = 0;
         for p in self.input_gates.iter() {
@@ -66,13 +78,13 @@ impl Circuit {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum BuilderGate {
+pub(crate) enum BuilderGate {
     Xor(GateIndex, GateIndex),
     And(GateIndex, GateIndex),
 }
 
 #[derive(Clone, Debug)]
-pub struct CircuitBuilder {
+pub(crate) struct CircuitBuilder {
     input_gates: Vec<usize>,
     gates: Vec<BuilderGate>,
     gate_counter: usize,

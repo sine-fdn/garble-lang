@@ -1,3 +1,5 @@
+//! Compiles a [`crate::typed_ast::Program`] to a [`crate::circuit::Circuit`].
+
 use std::{cmp::max, collections::HashMap};
 
 use crate::{
@@ -10,6 +12,10 @@ use crate::{
 };
 
 impl Program {
+    /// Compiles the (type-checked) program, producing a circuit of gates.
+    ///
+    /// Assumes that the input program has been correctly type-checked and **panics** if
+    /// incompatible types are found that should have been caught by the type-checker.
     pub fn compile(&self) -> Circuit {
         let mut fns = HashMap::new();
         for (fn_name, fn_def) in self.fn_defs.iter() {

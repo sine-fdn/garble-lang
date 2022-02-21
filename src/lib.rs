@@ -1,3 +1,10 @@
+//! A purely functional programming language with a Rust-like syntax that compiles to logic gates
+//! for secure multi-party computation.
+
+#![deny(unsafe_code)]
+#![deny(missing_docs)]
+#![deny(rustdoc::broken_intra_doc_links)]
+
 use check::TypeError;
 use eval::EvalError;
 use parse::ParseError;
@@ -18,24 +25,33 @@ pub mod scan;
 pub mod token;
 pub mod typed_ast;
 
+/// Scans, parses and type-checks a program.
 pub fn check(prg: &str) -> Result<typed_ast::Program, Error> {
     Ok(scan(prg)?.parse()?.type_check()?)
 }
 
+/// Scans, parses, type-checks and then compiles a program to a circuit of gates.
 pub fn compile(prg: &str) -> Result<Circuit, Error> {
     Ok(scan(prg)?.parse()?.type_check()?.compile())
 }
 
+/// Errors that can occur during compile time, while a program is scanned, parsed or type-checked.
 #[derive(Debug, Clone)]
 pub enum CompileTimeError {
+    /// Errors originating during the scanning phase.
     ScanErrors(Vec<ScanError>),
+    /// Errors originating during the parsing phase.
     ParseError(Vec<ParseError>),
+    /// Errors originating during the type-checking phase.
     TypeError(TypeError),
 }
 
+/// A generic error that combines compile-time and run-time errors.
 #[derive(Debug, Clone)]
 pub enum Error {
+    /// Errors occurring during compile time.
     CompileTimeError(CompileTimeError),
+    /// Errors occurring during the run-time evaluation of the circuit.
     EvalError(EvalError),
 }
 
@@ -70,6 +86,7 @@ impl From<EvalError> for Error {
 }
 
 impl TypeError {
+    /// Returns a human-readable error description, showing where the error occurred in the source.
     pub fn prettify(&self, prg: &str) -> String {
         let e = CompileTimeError::TypeError(self.clone());
         e.prettify(prg)
@@ -77,6 +94,7 @@ impl TypeError {
 }
 
 impl EvalError {
+    /// Returns a human-readable error description, showing where the error occurred in the source.
     pub fn prettify(&self, prg: &str) -> String {
         let e = Error::EvalError(self.clone());
         e.prettify(prg)
@@ -84,6 +102,7 @@ impl EvalError {
 }
 
 impl Error {
+    /// Returns a human-readable error description, showing where the error occurred in the source.
     pub fn prettify(&self, prg: &str) -> String {
         match self {
             Error::CompileTimeError(e) => e.prettify(prg),
@@ -93,6 +112,7 @@ impl Error {
 }
 
 impl CompileTimeError {
+    /// Returns a human-readable error description, showing where the error occurred in the source.
     pub fn prettify(&self, prg: &str) -> String {
         let mut errs_for_display = vec![];
         match self {

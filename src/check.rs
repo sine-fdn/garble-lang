@@ -1,3 +1,6 @@
+//! Type-checker, transforming an untyped [`crate::ast::Program`] into a typed
+//! [`crate::typed_ast::Program`].
+
 use std::collections::{HashMap, HashSet};
 
 use crate::{
@@ -10,51 +13,88 @@ use crate::{
     typed_ast,
 };
 
+/// An error found during type-checking, with its location in the source code.
 #[derive(Debug, Clone)]
 pub struct TypeError(pub TypeErrorEnum, pub MetaInfo);
 
+/// The different kinds of errors found during type-checking.
 #[derive(Debug, Clone)]
 pub enum TypeErrorEnum {
+    /// The `main` function does not have any input parameters.
     NoMainFnParams,
+    /// A top-level function is declared but never used.
     UnusedFn(String),
+    /// A top-level function calls itself recursively.
     RecursiveFnDef(String),
+    /// No enum declaration with the specified name exists.
     UnknownEnum(String),
+    /// The enum exists, but no variant declaration with the specified name was found.
     UnknownEnumVariant(String, String),
+    /// No variable or function with the specified name exists in the current scope.
     UnknownIdentifier(String),
+    /// The unsigned number is larger than its type allows.
     MaxNumUnsignedSizeExceeded(Type, u128),
-    ExpectedBoolOrNumberType(Type),
-    ExpectedNumberType(Type),
-    ExpectedArrayType(Type),
-    ExpectedTupleType(Type),
+    /// The tuple does not have the specified field.
     TupleAccessOutOfBounds(usize),
+    /// A parameter name is used more than once in a function declaration.
     DuplicateFnParam(String),
+    /// An boolean or number expression was expected.
+    ExpectedBoolOrNumberType(Type),
+    /// A number expression was expected.
+    ExpectedNumberType(Type),
+    /// An array type was expected.
+    ExpectedArrayType(Type),
+    /// A tuple type was expected.
+    ExpectedTupleType(Type),
+    /// An enum type was expected.
     ExpectedEnumType(Type),
+    /// An enum variant was expected.
     ExpectedEnumVariant(Vec<Type>),
+    /// Expected an enum variant without fields, but found a tuple variant.
     ExpectedUnitVariantFoundTupleVariant,
+    /// Expected an enum variant with fields, but found a unit variant.
     ExpectedTupleVariantFoundUnitVariant,
+    /// Expected a different number of variant fields.
     UnexpectedEnumVariantArity {
+        /// The expected number of fields.
         expected: usize,
+        /// The actual number of fields.
         actual: usize,
     },
+    /// Expected a function type.
     ExpectedFnType {
+        /// The expected function parameters.
         expected: Vec<Type>,
+        /// The actual (non-function) type.
         actual: Type,
     },
+    /// The expected parameter types do not match the actual argument types.
     ExpectedFnArgTypes {
+        /// The expected function parameter types.
         expected: Vec<Type>,
+        /// The actual argument types.
         actual: Vec<Type>,
     },
+    /// Expected a different type.
     UnexpectedType {
+        /// The expected type.
         expected: Type,
+        /// The actual type.
         actual: Type,
     },
+    /// The two types are incompatible, (e.g. incompatible number types in a `+` operation).
     TypeMismatch((Type, MetaInfo), (Type, MetaInfo)),
+    /// The specified range has invalid min or max values.
     InvalidRange(usize, usize),
+    /// The specified pattern does not match the type of the matched expression.
     PatternDoesNotMatchType(Type),
+    /// The patterns do not cover all possible cases.
     PatternsAreNotExhaustive,
+    /// The expression cannot be matched upon.
     TypeDoesNotSupportPatternMatching(Type),
 }
 
+/// Static top-level definitions of enums and functions.
 pub struct Defs<'a> {
     enums: HashMap<&'a str, HashMap<&'a str, Option<Vec<Type>>>>,
     fns: HashMap<&'a str, &'a FnDef>,
@@ -92,6 +132,7 @@ impl TypedFns {
 }
 
 impl Program {
+    /// Type-checks the parsed program, returning either a typed AST or type errors.
     pub fn type_check(&self) -> Result<typed_ast::Program, TypeError> {
         let mut defs = Defs::new(&self.enum_defs);
         let enum_defs = self.enum_defs.clone();

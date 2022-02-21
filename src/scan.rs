@@ -1,19 +1,28 @@
+//! Splits a source code into a stream of [`crate::scan::Token`]s.
+
 use std::{iter::Peekable, str::Chars};
 
 use crate::token::{MetaInfo, Token, TokenEnum};
 
+/// An error found during scanning, with its location in the source code.
 #[derive(Debug, Clone)]
 pub struct ScanError(pub ScanErrorEnum, pub MetaInfo);
 
+/// The different kinds of errors found during scanning.
 #[derive(Debug, Clone)]
 pub enum ScanErrorEnum {
+    /// The scanned character is not a valid token.
     UnexpectedCharacter(char),
+    /// The scanned token is not a valid unsigned number.
     InvalidUnsignedNum(String),
+    /// The scanned token is not a valid signed number.
     InvalidSignedNum(String),
 }
 
+/// A stream of tokens.
 pub struct Tokens(pub Vec<Token>);
 
+/// Splits the source code into tokens (or returns scan errors).
 pub fn scan(prg: &str) -> Result<Tokens, Vec<ScanError>> {
     let tokens = Scanner::new(prg).scan()?;
     Ok(Tokens(tokens))

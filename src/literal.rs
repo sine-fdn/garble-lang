@@ -1,3 +1,6 @@
+//! A subset of [`crate::typed_ast::Expr`] that is used as input / output by an
+//! [`crate::eval::Evaluator`].
+
 use std::fmt::Display;
 
 use crate::{
@@ -11,26 +14,41 @@ use crate::{
     CompileTimeError,
 };
 
+/// A subset of [`crate::typed_ast::Expr`] that is used as input / output by an
+/// [`crate::eval::Evaluator`].
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Literal {
+    /// Literal `true`.
     True,
+    /// Literal `false`.
     False,
+    /// Unsigned number literal.
     NumUnsigned(u128, Type),
+    /// Signed number literal.
     NumSigned(i128, Type),
+    /// Array "repeat expression", which specifies 1 element, to be repeated a number of times.
     ArrayRepeat(Box<Literal>, usize),
+    /// Array literal which explicitly specifies all of its elements.
     Array(Vec<Literal>),
+    /// Tuple literal containing the specified fields.
     Tuple(Vec<Literal>),
+    /// Enum literal of the specified variant, possibly with fields.
     Enum(String, String, VariantLiteral),
+    /// Range of numbers from the specified min (inclusive) to the specified max (exclusive).
     Range(usize, usize),
 }
 
+/// A variant literal (either of unit type or containing fields), used by [`Literal::EnumLiteral`].
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum VariantLiteral {
+    /// A unit variant, containing no fields.
     Unit,
+    /// A tuple variant, containing positional fields (but can be empty).
     Tuple(Vec<Literal>),
 }
 
 impl Literal {
+    /// Parses the str as a literal of the specified type, looking up enum defs in the program.
     pub fn parse(checked: &Program, ty: &Type, literal: &str) -> Result<Self, CompileTimeError> {
         let mut env = Env::new();
         let mut fns = TypedFns::new();
@@ -43,6 +61,7 @@ impl Literal {
         Ok(expr.into_literal())
     }
 
+    /// Decodes the bits as a literal of the specified type, looking up enum defs in the program.
     pub fn from_bits(checked: &Program, ty: &Type, bits: &[bool]) -> Result<Self, EvalError> {
         match ty {
             Type::Bool => {
@@ -150,6 +169,7 @@ impl Literal {
         }
     }
 
+    /// Encodes the literal as bits, looking up enum defs in the program.
     pub fn as_bits(&self, checked: &Program) -> Vec<bool> {
         match self {
             Literal::True => vec![true],

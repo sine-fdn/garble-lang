@@ -1,3 +1,5 @@
+//! Parses a stream of [`crate::scan::Tokens`] into an untyped [`crate::ast::Program`].
+
 use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use crate::{
@@ -9,35 +11,51 @@ use crate::{
     token::{MetaInfo, Token, TokenEnum},
 };
 
+/// An error found during parsing, with its location in the source code.
 #[derive(Debug, Clone)]
 pub struct ParseError(pub ParseErrorEnum, pub MetaInfo);
 
 #[derive(Debug, Clone)]
 
+/// The different kinds of errors found during parsing.
 pub enum ParseErrorEnum {
+    /// No `main` function exists in the source code.
     MissingMainFnDef,
+    /// The top level definition is not a valid enum or function declaration.
     InvalidTopLevelDef,
-    InvalidParty,
+    /// Arrays of the specified size are not supported.
     InvalidArraySize,
+    /// Tuples of the specified size are not supported.
     InvalidTupleIndexSize,
+    /// The method name is none of the supported (hardcoded) method names.
     InvalidMethodName,
+    /// The min or max value of the range expression is invalid.
     InvalidRangeExpr,
+    /// The pattern is not valid.
     InvalidPattern,
+    /// The literal is not valid.
     InvalidLiteral,
+    /// Expected a constant number, but found an expression.
     ExpectedConstantArraySize,
+    /// Expected a type, but found a non-type token.
     ExpectedType,
+    /// Expected an expression, but found a non-expr token.
     ExpectedExpr,
+    /// Expected an identifier, but found a non-identifier token.
     ExpectedIdentifier,
+    /// Expected a method call or a field access.
     ExpectedMethodCallOrFieldAccess,
+    /// Found an unexpected token.
     UnexpectedToken,
 }
 
 impl Tokens {
+    /// Parses the token stream as a program, returning either an untyped program or parse errors.
     pub fn parse(self) -> Result<Program, Vec<ParseError>> {
         Parser::new(self.0).parse()
     }
 
-    pub fn parse_literal(self) -> Result<Expr, Vec<ParseError>> {
+    pub(crate) fn parse_literal(self) -> Result<Expr, Vec<ParseError>> {
         let mut parser = Parser::new(self.0);
         if let Some(token) = parser.tokens.next() {
             parser.parse_literal(token, true).map_err(|_| parser.errors)

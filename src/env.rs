@@ -1,3 +1,4 @@
+//! Simple helper for lexical scopes used by [`crate::check`] and [`crate::compile`].
 use std::collections::HashMap;
 
 pub(crate) struct Env<T: Clone>(Vec<HashMap<String, T>>);
