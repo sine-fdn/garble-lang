@@ -51,3 +51,16 @@ The Garble compiler is relatively straightforward and turns a program `&str` int
   3. `check.rs` type-checks an untyped `ast::Program`, returning a `typed_ast::Program`.
   4. `compile.rs` converts a well-typed `typed_ast::Program` into a `circuit::Circuit`.
   5. `eval.rs` executes a `circuit::Circuit` with locally supplied inputs.
+
+## Rough Edges
+
+Garble is still in a very early stage. The core language is usable, but the user experience leaves a lot to be desired. Some of the current pain points are:
+
+  - No panics / errors / handling of overflows, divide-by-zero or out-of-bounds array access. These are all undefined behavior and will simply return garbage data.
+  - Lots of type casts necessary for unsigned and signed integers. Type coercion is currently very basic, it is often necessary to cast or to use typed literals (e.g. `1u32`).
+  - Poor coverage of edge cases in the parser, some valid expressions cannot be parsed.
+  - Pattern exhaustiveness check, but no detailed exhaustiveness reporting.
+  - No first-class functions / lambdas / closures.
+  - Only basic error reporting.
+  - No optimizations.
+  - No structs.
