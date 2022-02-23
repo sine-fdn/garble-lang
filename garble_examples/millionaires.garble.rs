@@ -4,7 +4,7 @@ enum Richest {
     Tie,
 }
 
-fn main(a: u8, b: u8) -> Richest {
+fn main(a: u64, b: u64) -> Richest {
     if a > b {
         Richest::IsA
     } else if b > a {
