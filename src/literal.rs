@@ -5,11 +5,12 @@ use std::fmt::Display;
 
 use crate::{
     ast::{Type, Variant},
-    check::{expect_type, Defs, TypedFns},
+    check::{coerce_type, Defs, TypedFns},
     compile::{enum_max_size, enum_tag_number, enum_tag_size, signed_to_bits, unsigned_to_bits},
     env::Env,
     eval::EvalError,
     scan::scan,
+    token::{SignedNumType, UnsignedNumType},
     typed_ast::{Expr, ExprEnum, Program, VariantExpr, VariantExprEnum},
     CompileTimeError,
 };
@@ -23,9 +24,9 @@ pub enum Literal {
     /// Literal `false`.
     False,
     /// Unsigned number literal.
-    NumUnsigned(u128, Type),
+    NumUnsigned(u128, UnsignedNumType),
     /// Signed number literal.
-    NumSigned(i128, Type),
+    NumSigned(i128, SignedNumType),
     /// Array "repeat expression", which specifies 1 element, to be repeated a number of times.
     ArrayRepeat(Box<Literal>, usize),
     /// Array literal which explicitly specifies all of its elements.
@@ -56,7 +57,7 @@ impl Literal {
         let mut expr = scan(literal)?
             .parse_literal()?
             .type_check(&mut env, &mut fns, &defs)?;
-        expect_type(&expr, ty)?;
+        coerce_type(&mut expr, ty)?;
         expr.1 = ty.clone();
         Ok(expr.into_literal())
     }
@@ -78,14 +79,14 @@ impl Literal {
                     })
                 }
             }
-            Type::Usize | Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 => {
+            Type::Unsigned(unsigned_ty) => {
                 let size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
                 if bits.len() == size {
                     let mut n = 0;
                     for (i, output) in bits.iter().copied().take(size).enumerate() {
                         n += (output as u128) << (size - 1 - i);
                     }
-                    Ok(Literal::NumUnsigned(n, ty.clone()))
+                    Ok(Literal::NumUnsigned(n, *unsigned_ty))
                 } else {
                     Err(EvalError::OutputTypeMismatch {
                         expected: ty.clone(),
@@ -93,14 +94,14 @@ impl Literal {
                     })
                 }
             }
-            Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 => {
+            Type::Signed(signed_ty) => {
                 let size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
                 if bits.len() == size {
                     let mut n = 0;
                     for (i, output) in bits.iter().copied().take(size).enumerate() {
                         n += (output as i128) << (size - 1 - i);
                     }
-                    Ok(Literal::NumSigned(n, ty.clone()))
+                    Ok(Literal::NumSigned(n, *signed_ty))
                 } else {
                     Err(EvalError::OutputTypeMismatch {
                         expected: ty.clone(),
@@ -175,13 +176,13 @@ impl Literal {
             Literal::True => vec![true],
             Literal::False => vec![false],
             Literal::NumUnsigned(n, ty) => {
-                let size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
+                let size = Type::Unsigned(*ty).size_in_bits_for_defs(Some(&checked.enum_defs));
                 let mut bits = vec![];
                 unsigned_to_bits(*n, size, &mut bits);
                 bits
             }
             Literal::NumSigned(n, ty) => {
-                let size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
+                let size = Type::Signed(*ty).size_in_bits_for_defs(Some(&checked.enum_defs));
                 let mut bits = vec![];
                 signed_to_bits(*n, size, &mut bits);
                 bits
@@ -233,7 +234,8 @@ impl Literal {
             }
             Literal::Range(min, max) => {
                 let elems: Vec<usize> = (*min..*max).into_iter().collect();
-                let elem_size = Type::Usize.size_in_bits_for_defs(Some(&checked.enum_defs));
+                let elem_size = Type::Unsigned(UnsignedNumType::Usize)
+                    .size_in_bits_for_defs(Some(&checked.enum_defs));
                 let mut bits = Vec::with_capacity(elems.len() * elem_size);
                 for elem in elems {
                     unsigned_to_bits(elem as u128, elem_size, &mut bits);
@@ -300,8 +302,24 @@ impl Expr {
         match expr_enum {
             ExprEnum::True => Literal::True,
             ExprEnum::False => Literal::False,
-            ExprEnum::NumUnsigned(n) => Literal::NumUnsigned(n, ty),
-            ExprEnum::NumSigned(n) => Literal::NumSigned(n, ty),
+            ExprEnum::NumUnsigned(n, _) => {
+                if let Type::Unsigned(ty) = ty {
+                    Literal::NumUnsigned(n, ty)
+                } else if let Type::Signed(ty) = ty {
+                    Literal::NumSigned(n as i128, ty)
+                } else {
+                    panic!("Literal type is not a number type: {:?}", ty)
+                }
+            }
+            ExprEnum::NumSigned(n, _) => {
+                if let Type::Unsigned(ty) = ty {
+                    Literal::NumUnsigned(n as u128, ty)
+                } else if let Type::Signed(ty) = ty {
+                    Literal::NumSigned(n, ty)
+                } else {
+                    panic!("Literal type is not a number type: {:?}", ty)
+                }
+            }
             ExprEnum::ArrayRepeatLiteral(elem, size) => {
                 Literal::ArrayRepeat(Box::new(elem.into_literal()), size)
             }

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{EnumDef, Op, ParamDef, Type, UnaryOp},
-    token::MetaInfo,
+    token::{MetaInfo, UnsignedNumType, SignedNumType},
 };
 
 /// A program, consisting of top level definitions (enums or functions).
@@ -43,9 +43,9 @@ pub enum ExprEnum {
     /// Literal `false`.
     False,
     /// Unsigned number literal.
-    NumUnsigned(u128),
+    NumUnsigned(u128, Option<UnsignedNumType>),
     /// Signed number literal.
-    NumSigned(i128),
+    NumSigned(i128, Option<SignedNumType>),
     /// Identifier (either a variable or a function).
     Identifier(String),
     /// Array literal which explicitly specifies all of its elements.

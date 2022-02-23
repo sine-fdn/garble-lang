@@ -1,4 +1,6 @@
-use garble::{ast::Type, check, compile, eval::Evaluator, literal::Literal};
+use garble::{
+    ast::Type, check, compile, eval::Evaluator, literal::Literal, token::UnsignedNumType,
+};
 
 #[test]
 fn compile_xor() -> Result<(), String> {
@@ -110,9 +112,9 @@ fn compile_if() -> Result<(), String> {
     let prg = "
 fn main(x: bool) -> u8 {
     if (true & false) ^ x {
-        100
+        100u8
     } else {
-        50
+        50u8
     }
 }
 ";
@@ -808,11 +810,11 @@ fn main(_x: u8) -> i16 {
 
 #[test]
 fn compile_tuple() -> Result<(), String> {
-    for (t, i) in [("i8", 0), ("i8", 1), ("i8", 2), ("bool", 3), ("bool", 4)] {
+    for (t, i) in [("i32", 0), ("i16", 1), ("i8", 2), ("bool", 3), ("bool", 4)] {
         let prg = &format!(
             "
 fn main(x: bool) -> {} {{
-    let t = (-3, -2, -1, true, false);
+    let t = (-3, -2i16, -1i8, true, false);
     t.{}
 }}
 ",
@@ -822,12 +824,13 @@ fn main(x: bool) -> {} {{
         let mut eval: Evaluator = circuit.into();
         eval.set_bool(false);
         eval.run().map_err(|e| e.prettify(prg))?;
-        if i <= 2 {
-            assert_eq!(eval.get_i8().map_err(|e| e.prettify(prg))?, i - 3);
-        } else if i == 3 {
-            assert_eq!(eval.get_bool().map_err(|e| e.prettify(prg))?, true);
-        } else if i == 4 {
-            assert_eq!(eval.get_bool().map_err(|e| e.prettify(prg))?, false);
+        match i {
+            0 => assert_eq!(eval.get_i32().map_err(|e| e.prettify(prg))?, -3),
+            1 => assert_eq!(eval.get_i16().map_err(|e| e.prettify(prg))?, -2),
+            2 => assert_eq!(eval.get_i8().map_err(|e| e.prettify(prg))?, -1),
+            3 => assert_eq!(eval.get_bool().map_err(|e| e.prettify(prg))?, true),
+            4 => assert_eq!(eval.get_bool().map_err(|e| e.prettify(prg))?, false),
+            _ => unreachable!(),
         }
     }
     Ok(())
@@ -841,7 +844,7 @@ enum Foobar {
     Bar(bool, bool),
 }
 
-fn main(b: bool) -> u8 {
+fn main(b: bool) -> i32 {
     let choice = if b {
         Foobar::Bar(true, false)
     } else {
@@ -861,7 +864,7 @@ fn main(b: bool) -> u8 {
         let mut eval: Evaluator = circuit.into();
         eval.set_bool(b);
         eval.run().map_err(|e| e.prettify(prg))?;
-        let result = eval.get_u8().map_err(|e| e.prettify(prg))?;
+        let result = eval.get_i32().map_err(|e| e.prettify(prg))?;
         if b {
             assert_eq!(result, 3);
         } else {
@@ -886,7 +889,7 @@ fn main(b: bool) -> u8 {
         Foobar::Foo
     };
     match choice {
-        Foobar::Foo => 5,
+        Foobar::Foo => 5 as u8,
         Foobar::Bar(x) => x
     }
 }
@@ -917,7 +920,7 @@ fn main(choice: u8, x: u8, y: u8) -> u8 {
     };
 
     match op {
-        Ops::Div(x, 0) => 42,
+        Ops::Div(x, 0) => 42 as u8,
         Ops::Div(x, y) => x / y,
         Ops::Mul(x, y) => x * y,
     }
@@ -956,7 +959,7 @@ fn main(x: u8) -> u8 {
         13 => 2,
         12..100 => 2,
         100..256 => 3,
-    }
+    } as u8
 }
 ";
     for x in 0..255 {
@@ -982,8 +985,8 @@ fn compile_exhaustive_tuple_pattern() -> Result<(), String> {
 fn main(x: u8) -> u8 {
     let x = (false, x, -5);
     match x {
-        (true, x, y) => 1,
-        (false, 0, y) => 2,
+        (true, x, y) => 1u8,
+        (false, 0, y) => 2u8,
         (false, x, y) => x,
     }
 }
@@ -1003,12 +1006,12 @@ fn main(x: u8) -> u8 {
 fn compile_exhaustive_nested_pattern() -> Result<(), String> {
     let prg = "
 fn main(x: u8) -> u8 {
-    let x = (x, (x * 2, 1));
+    let x = (x, (x * 2, 1 as u8));
     match x {
-        (0, _) => 1,
+        (0, _) => 1u8,
         (1..256, (x_twice, 1)) => x_twice,
-        (1..256, (_, 1..256)) => 2,
-        (1..256, (_, 0)) => 3,
+        (1..256, (_, 1..256)) => 2u8,
+        (1..256, (_, 0)) => 3u8,
     }
 }
 ";
@@ -1034,14 +1037,17 @@ fn main(values: (u8, u8)) -> (u8, u8) {
     let circuit = checked.compile();
 
     let mut eval: Evaluator = circuit.into();
-    let tuple_ty = Type::Tuple(vec![Type::U8, Type::U8]);
-    let input = Literal::parse(&checked, &tuple_ty, "(2, 3)").map_err(|e| e.prettify(""))?;
+    let tuple_ty = Type::Tuple(vec![
+        Type::Unsigned(UnsignedNumType::U8),
+        Type::Unsigned(UnsignedNumType::U8),
+    ]);
+    let input = Literal::parse(&checked, &tuple_ty, "(2u8, 3u8)").map_err(|e| e.prettify(""))?;
     eval.set_literal(&checked, input);
     eval.run().map_err(|e| e.prettify(prg))?;
     let r = eval
         .get_literal(&checked, &tuple_ty)
         .map_err(|e| e.prettify(prg))?;
-    let expected = Literal::parse(&checked, &tuple_ty, "(3, 4)").map_err(|e| e.prettify(""))?;
+    let expected = Literal::parse(&checked, &tuple_ty, "(3u8, 4u8)").map_err(|e| e.prettify(""))?;
     assert_eq!(r, expected);
     Ok(())
 }
@@ -1062,7 +1068,7 @@ enum OpResult {
 fn main(op: Op) -> OpResult {
     match op {
         Op::Zero => OpResult::Ok(0),
-        Op::Div(x, 0) => OpResult::DivByZero,
+        Op::Div(x, 0u8) => OpResult::DivByZero,
         Op::Div(x, y) => OpResult::Ok(x / y),
     }
 }
@@ -1073,7 +1079,7 @@ fn main(op: Op) -> OpResult {
     let mut eval: Evaluator = circuit.into();
     let ty_in = Type::Enum("Op".to_string());
     let ty_out = Type::Enum("OpResult".to_string());
-    let input = Literal::parse(&checked, &ty_in, "Op::Div(10, 2)").map_err(|e| e.prettify(""))?;
+    let input = Literal::parse(&checked, &ty_in, "Op::Div(10u8, 2u8)").map_err(|e| e.prettify(""))?;
     eval.set_literal(&checked, input);
     eval.run().map_err(|e| e.prettify(prg))?;
     let r = eval
@@ -1088,15 +1094,15 @@ fn main(op: Op) -> OpResult {
 #[test]
 fn compile_array_literal_access() -> Result<(), String> {
     let prg = "
-fn main(i: usize) -> i8 {
-    [-2, -1, 0 as i8, 1 as i8, 2 as i8][i]
+fn main(i: usize) -> i32 {
+    [-2, -1, 0, 1, 2][i]
 }";
     let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
     let mut eval: Evaluator = circuit.into();
     for i in 0..5 {
         eval.set_usize(i);
         eval.run().map_err(|e| e.prettify(prg))?;
-        assert_eq!(eval.get_i8().map_err(|e| e.prettify(prg))?, i as i8 - 2);
+        assert_eq!(eval.get_i32().map_err(|e| e.prettify(prg))?, i as i32 - 2);
     }
     Ok(())
 }
@@ -1117,16 +1123,16 @@ fn main(nums: [u8; 5]) -> [u8; 5] {
     let circuit = checked.compile();
 
     let mut eval: Evaluator = circuit.into();
-    let array_ty = Type::Array(Box::new(Type::U8), 5);
+    let array_ty = Type::Array(Box::new(Type::Unsigned(UnsignedNumType::U8)), 5);
     let input =
-        Literal::parse(&checked, &array_ty, "[1, 2, 3, 4, 5]").map_err(|e| e.prettify(""))?;
+        Literal::parse(&checked, &array_ty, "[1u8, 2u8, 3u8, 4u8, 5u8]").map_err(|e| e.prettify(""))?;
     eval.set_literal(&checked, input);
     eval.run().map_err(|e| e.prettify(prg))?;
     let r = eval
         .get_literal(&checked, &array_ty)
         .map_err(|e| e.prettify(prg))?;
     let expected =
-        Literal::parse(&checked, &array_ty, "[15, 15, 15, 15, 15]").map_err(|e| e.prettify(""))?;
+        Literal::parse(&checked, &array_ty, "[15u8, 15u8, 15u8, 15u8, 15u8]").map_err(|e| e.prettify(""))?;
     assert_eq!(r, expected);
     Ok(())
 }

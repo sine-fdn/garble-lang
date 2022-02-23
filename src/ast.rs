@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::token::MetaInfo;
+use crate::token::{MetaInfo, UnsignedNumType, SignedNumType};
 
 /// A program, consisting of top level definitions (enums or functions).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,28 +82,10 @@ pub struct FnDef {
 pub enum Type {
     /// Boolean type with the values true and false.
     Bool,
-    /// Unsigned integer type used to index arrays, length depends on the host platform.
-    Usize,
-    /// 8-bit unsigned integer type.
-    U8,
-    /// 16-bit unsigned integer type.
-    U16,
-    /// 32-bit unsigned integer type.
-    U32,
-    /// 64-bit unsigned integer type.
-    U64,
-    /// 128-bit unsigned integer type.
-    U128,
-    /// 8-bit signed integer type.
-    I8,
-    /// 16-bit signed integer type.
-    I16,
-    /// 32-bit signed integer type.
-    I32,
-    /// 64-bit signed integer type.
-    I64,
-    /// 128-bit signed integer type.
-    I128,
+    /// Unsigned number types
+    Unsigned(UnsignedNumType),
+    /// Signed number types
+    Signed(SignedNumType),
     /// Function type with the specified parameters and the specified return type.
     Fn(Vec<Type>, Box<Type>),
     /// Array type of a fixed size, containing elements of the specified type.
@@ -130,9 +112,9 @@ pub enum ExprEnum {
     /// Literal `false`.
     False,
     /// Unsigned number literal.
-    NumUnsigned(u128),
+    NumUnsigned(u128, Option<UnsignedNumType>),
     /// Signed number literal.
-    NumSigned(i128),
+    NumSigned(i128, Option<SignedNumType>),
     /// Identifier (either a variable or a function).
     Identifier(String),
     /// Array literal which explicitly specifies all of its elements.
@@ -198,9 +180,9 @@ pub enum PatternEnum {
     /// Matches `false`.
     False,
     /// Matches the specified unsigned number.
-    NumUnsigned(u128),
+    NumUnsigned(u128, Option<UnsignedNumType>),
     /// Matches the specified signed number.
-    NumSigned(i128),
+    NumSigned(i128, Option<SignedNumType>),
     /// Matches a tuple if all of its fields match their respective patterns.
     Tuple(Vec<Pattern>),
     /// Matches an enum with the specified name and variant.
@@ -208,9 +190,9 @@ pub enum PatternEnum {
     /// Matches an enum with the specified name and variant, if all fields match.
     EnumTuple(String, String, Vec<Pattern>),
     /// Matches any number inside the unsigned range between min (inclusive) and max (inclusive).
-    UnsignedInclusiveRange(u128, u128),
+    UnsignedInclusiveRange(u128, u128, Option<UnsignedNumType>),
     /// Matches any number inside the signed range between min (inclusive) and max (inclusive).
-    SignedInclusiveRange(i128, i128),
+    SignedInclusiveRange(i128, i128, Option<SignedNumType>),
 }
 
 /// A non-first-flass closure, used only by [`ExprEnum::Map`] and [`ExprEnum::Fold`].

@@ -6,6 +6,7 @@ use crate::{
     ast::{EnumDef, Op, ParamDef, Type, UnaryOp},
     circuit::{Circuit, CircuitBuilder, GateIndex},
     env::Env,
+    token::{SignedNumType, UnsignedNumType},
     typed_ast::{
         Expr, ExprEnum, FnDef, Pattern, PatternEnum, Program, VariantExpr, VariantExprEnum,
     },
@@ -58,7 +59,7 @@ fn extend_to_bits(v: &mut Vec<usize>, ty: &Type, bits: usize) {
         let old_size = v.len();
         v.resize(bits, 0);
         v.copy_within(0..old_size, bits - old_size);
-        if let Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 = ty {
+        if let Type::Signed(_) = ty {
             v[0..old_size].fill(msb);
         } else {
             v[0..old_size].fill(0);
@@ -82,12 +83,12 @@ impl Expr {
             ExprEnum::False => {
                 vec![0]
             }
-            ExprEnum::NumUnsigned(n) => {
+            ExprEnum::NumUnsigned(n, _) => {
                 let mut bits = Vec::with_capacity(ty.size_in_bits_for_defs(Some(enums)));
                 unsigned_to_bits(*n, ty.size_in_bits_for_defs(Some(enums)), &mut bits);
                 bits.into_iter().map(|b| b as usize).collect()
             }
-            ExprEnum::NumSigned(n) => {
+            ExprEnum::NumSigned(n, _) => {
                 let mut bits = Vec::with_capacity(ty.size_in_bits_for_defs(Some(enums)));
                 signed_to_bits(*n, ty.size_in_bits_for_defs(Some(enums)), &mut bits);
                 bits.into_iter().map(|b| b as usize).collect()
@@ -121,8 +122,8 @@ impl Expr {
                 let mut index = index.compile(enums, fns, env, circuit);
                 extend_to_bits(
                     &mut index,
-                    &Type::Usize,
-                    Type::Usize.size_in_bits_for_defs(Some(enums)),
+                    &Type::Unsigned(UnsignedNumType::Usize),
+                    Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(Some(enums)),
                 );
                 let out_of_bounds_elem = 1;
                 for mux_layer in (0..index.len()).rev() {
@@ -160,8 +161,8 @@ impl Expr {
                 let value = value.compile(enums, fns, env, circuit);
                 extend_to_bits(
                     &mut index,
-                    &Type::Usize,
-                    Type::Usize.size_in_bits_for_defs(Some(enums)),
+                    &Type::Unsigned(UnsignedNumType::Usize),
+                    Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(Some(enums)),
                 );
                 let elem_bits = elem_ty.size_in_bits_for_defs(Some(enums));
 
@@ -467,7 +468,8 @@ impl Expr {
             }
             ExprEnum::Range(from, to) => {
                 let size = to - from;
-                let elem_bits = Type::Usize.size_in_bits_for_defs(Some(enums));
+                let elem_bits =
+                    Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(Some(enums));
                 let mut array = Vec::with_capacity(elem_bits * size);
                 for i in *from..*to {
                     for b in (0..elem_bits).rev() {
@@ -650,10 +652,7 @@ impl Pattern {
 }
 
 fn is_signed(ty: &Type) -> bool {
-    matches!(
-        ty,
-        Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128
-    )
+    matches!(ty, Type::Signed(_))
 }
 
 impl Type {
@@ -662,12 +661,12 @@ impl Type {
             (Type::Enum(name), Some(enums)) => enum_max_size(enums.get(name).unwrap(), enums),
             (ty, _) => match ty {
                 Type::Bool => 1,
-                Type::Usize => usize::BITS as usize,
-                Type::U8 | Type::I8 => 8,
-                Type::U16 | Type::I16 => 16,
-                Type::U32 | Type::I32 => 32,
-                Type::U64 | Type::I64 => 64,
-                Type::U128 | Type::I128 => 128,
+                Type::Unsigned(UnsignedNumType::Usize) => usize::BITS as usize,
+                Type::Unsigned(UnsignedNumType::U8) | Type::Signed(SignedNumType::I8) => 8,
+                Type::Unsigned(UnsignedNumType::U16) | Type::Signed(SignedNumType::I16) => 16,
+                Type::Unsigned(UnsignedNumType::U32) | Type::Signed(SignedNumType::I32) => 32,
+                Type::Unsigned(UnsignedNumType::U64) | Type::Signed(SignedNumType::I64) => 64,
+                Type::Unsigned(UnsignedNumType::U128) | Type::Signed(SignedNumType::I128) => 128,
                 Type::Array(elem, size) => elem.size_in_bits_for_defs(enums) * size,
                 Type::Tuple(values) => {
                     let mut size = 0;

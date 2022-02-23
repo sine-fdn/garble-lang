@@ -7,7 +7,7 @@ use crate::{
     literal::Literal,
     parse::ParseError,
     scan::ScanError,
-    typed_ast::Program,
+    typed_ast::Program, token::{UnsignedNumType, SignedNumType},
 };
 
 /// Evaluates a [`crate::circuit::Circuit`] with inputs supplied by different parties.
@@ -178,57 +178,57 @@ impl Evaluator {
 
     /// Decodes the evaluated result as a usize int.
     pub fn get_usize(&self) -> Result<usize, EvalError> {
-        self.get_unsigned(Type::Usize).map(|n| n as usize)
+        self.get_unsigned(Type::Unsigned(UnsignedNumType::Usize)).map(|n| n as usize)
     }
 
     /// Decodes the evaluated result as a u8 int.
     pub fn get_u8(&self) -> Result<u8, EvalError> {
-        self.get_unsigned(Type::U8).map(|n| n as u8)
+        self.get_unsigned(Type::Unsigned(UnsignedNumType::U8)).map(|n| n as u8)
     }
 
     /// Decodes the evaluated result as a u16 int.
     pub fn get_u16(&self) -> Result<u16, EvalError> {
-        self.get_unsigned(Type::U16).map(|n| n as u16)
+        self.get_unsigned(Type::Unsigned(UnsignedNumType::U16)).map(|n| n as u16)
     }
 
     /// Decodes the evaluated result as a u32 int.
     pub fn get_u32(&self) -> Result<u32, EvalError> {
-        self.get_unsigned(Type::U32).map(|n| n as u32)
+        self.get_unsigned(Type::Unsigned(UnsignedNumType::U32)).map(|n| n as u32)
     }
 
     /// Decodes the evaluated result as a u64 int.
     pub fn get_u64(&self) -> Result<u64, EvalError> {
-        self.get_unsigned(Type::U64).map(|n| n as u64)
+        self.get_unsigned(Type::Unsigned(UnsignedNumType::U64)).map(|n| n as u64)
     }
 
     /// Decodes the evaluated result as a u128 int.
     pub fn get_u128(&self) -> Result<u128, EvalError> {
-        self.get_unsigned(Type::U128)
+        self.get_unsigned(Type::Unsigned(UnsignedNumType::U128))
     }
 
     /// Decodes the evaluated result as a i8 int.
     pub fn get_i8(&self) -> Result<i8, EvalError> {
-        self.get_signed(Type::I8).map(|n| n as i8)
+        self.get_signed(Type::Signed(SignedNumType::I8)).map(|n| n as i8)
     }
 
     /// Decodes the evaluated result as a i16 int.
     pub fn get_i16(&self) -> Result<i16, EvalError> {
-        self.get_signed(Type::I16).map(|n| n as i16)
+        self.get_signed(Type::Signed(SignedNumType::I16)).map(|n| n as i16)
     }
 
     /// Decodes the evaluated result as a i32 int.
     pub fn get_i32(&self) -> Result<i32, EvalError> {
-        self.get_signed(Type::I32).map(|n| n as i32)
+        self.get_signed(Type::Signed(SignedNumType::I32)).map(|n| n as i32)
     }
 
     /// Decodes the evaluated result as a i64 int.
     pub fn get_i64(&self) -> Result<i64, EvalError> {
-        self.get_signed(Type::I64).map(|n| n as i64)
+        self.get_signed(Type::Signed(SignedNumType::I64)).map(|n| n as i64)
     }
 
     /// Decodes the evaluated result as a i128 int.
     pub fn get_i128(&self) -> Result<i128, EvalError> {
-        self.get_signed(Type::I128)
+        self.get_signed(Type::Signed(SignedNumType::I128))
     }
 
     /// Decodes the evaluated result as a literal (with enums looked up in the program).

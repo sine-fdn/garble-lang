@@ -2,7 +2,7 @@
 
 use std::{iter::Peekable, str::Chars};
 
-use crate::token::{MetaInfo, Token, TokenEnum};
+use crate::token::{MetaInfo, SignedNumType, Token, TokenEnum, UnsignedNumType};
 
 /// An error found during scanning, with its location in the source code.
 #[derive(Debug, Clone)]
@@ -133,7 +133,33 @@ impl<'a> Scanner<'a> {
                         } else {
                             let n: String = digits.into_iter().collect();
                             if let Ok(n) = n.parse::<i128>() {
-                                self.push_token(TokenEnum::SignedNum(n));
+                                let mut literal_suffix = String::new();
+                                while let Some(char) = self.next_matches_alphanumeric() {
+                                    literal_suffix.push(char);
+                                }
+                                let literal_suffix = match literal_suffix.as_str() {
+                                    "" if n >= i32::MIN as i128 && n <= i32::MAX as i128 => None,
+                                    "i8" if n >= i8::MIN as i128 && n <= i8::MAX as i128 => {
+                                        Some(SignedNumType::I8)
+                                    }
+                                    "i16" if n >= i16::MIN as i128 && n <= i16::MAX as i128 => {
+                                        Some(SignedNumType::I16)
+                                    }
+                                    "i32" if n >= i32::MIN as i128 && n <= i32::MAX as i128 => {
+                                        Some(SignedNumType::I32)
+                                    }
+                                    "i64" if n >= i64::MIN as i128 && n <= i64::MAX as i128 => {
+                                        Some(SignedNumType::I64)
+                                    }
+                                    "i128" => Some(SignedNumType::I128),
+                                    _ => {
+                                        self.push_error(ScanErrorEnum::InvalidUnsignedNum(
+                                            format!("{n}{literal_suffix}"),
+                                        ));
+                                        None
+                                    }
+                                };
+                                self.push_token(TokenEnum::SignedNum(n, literal_suffix));
                             } else {
                                 self.push_error(ScanErrorEnum::InvalidSignedNum(n));
                             }
@@ -146,15 +172,30 @@ impl<'a> Scanner<'a> {
                         while let Some(digit) = self.next_matches_digit() {
                             digits.push(digit);
                         }
-                        if digits.is_empty() {
-                            self.push_token(TokenEnum::Minus);
-                        } else {
-                            let n: String = digits.into_iter().collect();
-                            if let Ok(n) = n.parse::<u128>() {
-                                self.push_token(TokenEnum::UnsignedNum(n));
-                            } else {
-                                self.push_error(ScanErrorEnum::InvalidUnsignedNum(n));
+                        let n: String = digits.into_iter().collect();
+                        if let Ok(n) = n.parse::<u128>() {
+                            let mut literal_suffix = String::new();
+                            while let Some(char) = self.next_matches_alphanumeric() {
+                                literal_suffix.push(char);
                             }
+                            let literal_suffix = match literal_suffix.as_str() {
+                                "" if n <= i32::MAX as u128 => None,
+                                "usize" if n <= usize::MAX as u128 => Some(UnsignedNumType::Usize),
+                                "u8" if n <= u8::MAX as u128 => Some(UnsignedNumType::U8),
+                                "u16" if n <= u16::MAX as u128 => Some(UnsignedNumType::U16),
+                                "u32" if n <= u32::MAX as u128 => Some(UnsignedNumType::U32),
+                                "u64" if n <= u64::MAX as u128 => Some(UnsignedNumType::U64),
+                                "u128" => Some(UnsignedNumType::U128),
+                                _ => {
+                                    self.push_error(ScanErrorEnum::InvalidUnsignedNum(format!(
+                                        "{n}{literal_suffix}"
+                                    )));
+                                    None
+                                }
+                            };
+                            self.push_token(TokenEnum::UnsignedNum(n, literal_suffix));
+                        } else {
+                            self.push_error(ScanErrorEnum::InvalidUnsignedNum(n));
                         }
                     } else if is_alphanumeric(c) {
                         let mut chars = vec![c];

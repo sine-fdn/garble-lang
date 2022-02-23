@@ -10,9 +10,9 @@ pub enum TokenEnum {
     /// Identifier of alphanumeric chars.
     Identifier(String),
     /// Usigned number.
-    UnsignedNum(u128),
+    UnsignedNum(u128, Option<UnsignedNumType>),
     /// Signed number.
-    SignedNum(i128),
+    SignedNum(i128, Option<SignedNumType>),
     /// `enum` keyword.
     KeywordEnum,
     /// `fn` keyword.
@@ -85,6 +85,38 @@ pub enum TokenEnum {
     DoubleGreaterThan,
     /// `<<`.
     DoubleLessThan,
+}
+
+/// A suffix indicating the explicit unsigned number type of the literal.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum UnsignedNumType {
+    /// Unsigned integer type used to index arrays, length depends on the host platform.
+    Usize,
+    /// 8-bit unsigned integer type.
+    U8,
+    /// 16-bit unsigned integer type.
+    U16,
+    /// 32-bit unsigned integer type.
+    U32,
+    /// 64-bit unsigned integer type.
+    U64,
+    /// 128-bit unsigned integer type.
+    U128,
+}
+
+/// A suffix indicating the explicit signed number type of the literal.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum SignedNumType {
+    /// 8-bit signed integer type.
+    I8,
+    /// 16-bit signed integer type.
+    I16,
+    /// 32-bit signed integer type.
+    I32,
+    /// 64-bit signed integer type.
+    I64,
+    /// 128-bit signed integer type.
+    I128,
 }
 
 /// The location of a token in the source code, from start `(line, column)` to end `(line, column)`.
