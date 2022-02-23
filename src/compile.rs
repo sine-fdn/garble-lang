@@ -18,10 +18,6 @@ impl Program {
     /// Assumes that the input program has been correctly type-checked and **panics** if
     /// incompatible types are found that should have been caught by the type-checker.
     pub fn compile(&self) -> Circuit {
-        let mut fns = HashMap::new();
-        for (fn_name, fn_def) in self.fn_defs.iter() {
-            fns.insert(fn_name.clone(), fn_def);
-        }
         let mut env = Env::new();
         let mut input_gates = vec![];
         let mut wire = 2;
@@ -35,35 +31,12 @@ impl Program {
             input_gates.push(type_size);
             env.set(identifier.clone(), wires);
         }
-        let mut enums = HashMap::new();
-        for (enum_name, enum_def) in &self.enum_defs {
-            let mut variants = HashMap::new();
-            for variant in &enum_def.variants {
-                let types = variant.types().unwrap_or_default();
-                variants.insert(variant.variant_name().to_string(), types);
-            }
-            enums.insert(enum_name.clone(), variants);
-        }
         let mut circuit = CircuitBuilder::new(input_gates);
-        let output_gates = self
-            .main
-            .body
-            .compile(&self.enum_defs, &fns, &mut env, &mut circuit);
+        let output_gates =
+            self.main
+                .body
+                .compile(&self.enum_defs, &self.fn_defs, &mut env, &mut circuit);
         circuit.build(output_gates)
-    }
-}
-
-fn extend_to_bits(v: &mut Vec<usize>, ty: &Type, bits: usize) {
-    if v.len() != bits {
-        let msb = v[0];
-        let old_size = v.len();
-        v.resize(bits, 0);
-        v.copy_within(0..old_size, bits - old_size);
-        if let Type::Signed(_) = ty {
-            v[0..old_size].fill(msb);
-        } else {
-            v[0..old_size].fill(0);
-        }
     }
 }
 
@@ -71,7 +44,7 @@ impl Expr {
     fn compile(
         &self,
         enums: &HashMap<String, EnumDef>,
-        fns: &HashMap<String, &FnDef>,
+        fns: &HashMap<String, FnDef>,
         env: &mut Env<Vec<GateIndex>>,
         circuit: &mut CircuitBuilder,
     ) -> Vec<GateIndex> {
@@ -375,7 +348,7 @@ impl Expr {
                 body
             }
             ExprEnum::FnCall(identifier, args) => {
-                let fn_def = *fns.get(identifier).unwrap();
+                let fn_def = fns.get(identifier).unwrap();
                 let mut body = fn_def.body.clone();
                 for (ParamDef(identifier, ty), arg) in fn_def.params.iter().zip(args) {
                     let let_expr =
@@ -533,7 +506,7 @@ impl Pattern {
         &self,
         match_expr: &[GateIndex],
         enums: &HashMap<String, EnumDef>,
-        fns: &HashMap<String, &FnDef>,
+        fns: &HashMap<String, FnDef>,
         env: &mut Env<Vec<GateIndex>>,
         circuit: &mut CircuitBuilder,
     ) -> GateIndex {
@@ -651,10 +624,6 @@ impl Pattern {
     }
 }
 
-fn is_signed(ty: &Type) -> bool {
-    matches!(ty, Type::Signed(_))
-}
-
 impl Type {
     pub(crate) fn size_in_bits_for_defs(&self, enums: Option<&HashMap<String, EnumDef>>) -> usize {
         match (self, enums) {
@@ -735,4 +704,22 @@ pub(crate) fn signed_as_wires(n: i128, size: usize) -> Vec<usize> {
     let mut bits = Vec::with_capacity(size);
     signed_to_bits(n, size, &mut bits);
     bits.into_iter().map(|b| b as usize).collect()
+}
+
+fn extend_to_bits(v: &mut Vec<usize>, ty: &Type, bits: usize) {
+    if v.len() != bits {
+        let msb = v[0];
+        let old_size = v.len();
+        v.resize(bits, 0);
+        v.copy_within(0..old_size, bits - old_size);
+        if let Type::Signed(_) = ty {
+            v[0..old_size].fill(msb);
+        } else {
+            v[0..old_size].fill(0);
+        }
+    }
+}
+
+fn is_signed(ty: &Type) -> bool {
+    matches!(ty, Type::Signed(_))
 }
