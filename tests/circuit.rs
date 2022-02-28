@@ -61,7 +61,7 @@ fn main(b: bool, x: i32) -> i32 {
 fn optimize_not_equivalence() -> Result<(), String> {
     let unoptimized = "
 fn main(b: bool) -> bool {
-    !(!b)
+    !!b
 }
 ";
     let optimized = "
