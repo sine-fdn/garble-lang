@@ -1,10 +1,12 @@
 //! The circuit representation used by the compiler.
 
+use std::collections::HashMap;
+
 /// Data type to uniquely identify gates.
 pub type GateIndex = usize;
 
 /// Description of a gate executed under S-MPC.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Gate {
     /// A logical XOR gate attached to the two specified input wires.
     Xor(GateIndex, GateIndex),
@@ -77,7 +79,7 @@ impl Circuit {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum BuilderGate {
     Xor(GateIndex, GateIndex),
     And(GateIndex, GateIndex),
@@ -87,6 +89,8 @@ pub(crate) enum BuilderGate {
 pub(crate) struct CircuitBuilder {
     input_gates: Vec<usize>,
     gates: Vec<BuilderGate>,
+    cache: HashMap<BuilderGate, GateIndex>,
+    negated: HashMap<GateIndex, GateIndex>,
     gate_counter: usize,
 }
 
@@ -99,11 +103,75 @@ impl CircuitBuilder {
         Self {
             input_gates,
             gates: vec![],
+            cache: HashMap::new(),
+            negated: HashMap::new(),
             gate_counter,
         }
     }
 
-    pub fn build(self, output_gates: Vec<GateIndex>) -> Circuit {
+    fn remove_unused_gates(&mut self, output_gates: Vec<GateIndex>) -> Vec<GateIndex> {
+        let mut shift = 2;
+        for p in self.input_gates.iter() {
+            shift += p;
+        }
+
+        let mut output_gate_stack = output_gates.clone();
+        let mut used_gates = vec![false; self.gates.len()];
+        while let Some(gate_index) = output_gate_stack.pop() {
+            if gate_index >= shift {
+                let shifted_index = gate_index - shift;
+                used_gates[shifted_index] = true;
+                let (x, y) = match self.gates[shifted_index] {
+                    BuilderGate::Xor(x, y) => (x, y),
+                    BuilderGate::And(x, y) => (x, y),
+                };
+                if x >= shift && !used_gates[x - shift] {
+                    output_gate_stack.push(x);
+                }
+                if y >= shift && !used_gates[y - shift] {
+                    output_gate_stack.push(y);
+                }
+            }
+        }
+        let mut unused_gates = 0;
+        let mut unused_before_gate = vec![0; self.gates.len()];
+        for (w, used) in used_gates.iter().enumerate() {
+            if !used {
+                unused_gates += 1;
+            }
+            unused_before_gate[w] = unused_gates;
+        }
+        for gate in self.gates.iter_mut() {
+            let (x, y) = match gate {
+                BuilderGate::Xor(x, y) => (x, y),
+                BuilderGate::And(x, y) => (x, y),
+            };
+            if *x > shift {
+                *x -= unused_before_gate[*x - shift];
+            }
+            if *y > shift {
+                *y -= unused_before_gate[*y - shift];
+            }
+        }
+        let mut without_unused_gates = Vec::with_capacity(self.gates.len() - unused_gates);
+        for (w, &used) in used_gates.iter().enumerate() {
+            if used {
+                without_unused_gates.push(self.gates[w]);
+            }
+        }
+        self.gates = without_unused_gates;
+        output_gates.into_iter().map(|w| {
+            if w > shift {
+                w - unused_before_gate[w - shift]
+            } else {
+                w
+            }
+        }).collect()
+    }
+
+    pub fn build(mut self, output_gates: Vec<GateIndex>) -> Circuit {
+        let output_gates = self.remove_unused_gates(output_gates);
+
         let mut input_shift = 0;
         for p in self.input_gates.iter() {
             input_shift += p;
@@ -156,15 +224,60 @@ impl CircuitBuilder {
     }
 
     pub fn push_xor(&mut self, x: GateIndex, y: GateIndex) -> GateIndex {
-        self.gate_counter += 1;
-        self.gates.push(BuilderGate::Xor(x, y));
-        self.gate_counter - 1
+        if x == 0 {
+            return y;
+        } else if y == 0 {
+            return x;
+        } else if x == y {
+            return 0;
+        } else if let Some(&x_negated) = self.negated.get(&x) {
+            if x_negated == y {
+                return 1;
+            }
+        }
+        let gate = BuilderGate::Xor(x, y);
+        if let Some(&wire) = self.cache.get(&gate) {
+            wire
+        } else {
+            self.gate_counter += 1;
+            self.gates.push(gate);
+            let gate_index = self.gate_counter - 1;
+            self.cache.insert(gate, gate_index);
+            if x == 1 {
+                self.negated.insert(y, gate_index);
+                self.negated.insert(gate_index, y);
+            }
+            if y == 1 {
+                self.negated.insert(x, gate_index);
+                self.negated.insert(gate_index, x);
+            }
+            gate_index
+        }
     }
 
     pub fn push_and(&mut self, x: GateIndex, y: GateIndex) -> GateIndex {
-        self.gate_counter += 1;
-        self.gates.push(BuilderGate::And(x, y));
-        self.gate_counter - 1
+        if x == 0 || y == 0 {
+            return 0;
+        } else if x == 1 {
+            return y;
+        } else if y == 1 {
+            return x;
+        } else if x == y {
+            return x;
+        } else if let Some(&x_negated) = self.negated.get(&x) {
+            if x_negated == y {
+                return 0;
+            }
+        }
+        let gate = BuilderGate::And(x, y);
+        if let Some(&wire) = self.cache.get(&gate) {
+            wire
+        } else {
+            self.gate_counter += 1;
+            self.gates.push(gate);
+            self.cache.insert(gate, self.gate_counter - 1);
+            self.gate_counter - 1
+        }
     }
 
     pub fn push_not(&mut self, x: GateIndex) -> GateIndex {
