@@ -56,3 +56,57 @@ fn main(b: bool, x: i32) -> i32 {
     assert_eq!(unoptimized.gates.len(), optimized.gates.len());
     Ok(())
 }
+
+#[test]
+fn optimize_not_equivalence() -> Result<(), String> {
+    let unoptimized = "
+fn main(b: bool) -> bool {
+    !(!b)
+}
+";
+    let optimized = "
+fn main(b: bool) -> bool {
+    b
+}
+";
+    let unoptimized = compile(&unoptimized).map_err(|e| e.prettify(&unoptimized))?;
+    let optimized = compile(&optimized).map_err(|e| e.prettify(&optimized))?;
+    assert_eq!(unoptimized.gates.len(), optimized.gates.len());
+    Ok(())
+}
+
+#[test]
+fn optimize_or_and_equivalence1() -> Result<(), String> {
+    let unoptimized = "
+fn main(x: bool, y: bool) -> bool {
+    x | (!x & y)
+}
+";
+    let optimized = "
+fn main(x: bool, y: bool) -> bool {
+    x | y
+}
+";
+    let unoptimized = compile(&unoptimized).map_err(|e| e.prettify(&unoptimized))?;
+    let optimized = compile(&optimized).map_err(|e| e.prettify(&optimized))?;
+    assert_eq!(unoptimized.gates.len(), optimized.gates.len());
+    Ok(())
+}
+
+#[test]
+fn optimize_or_and_equivalence2() -> Result<(), String> {
+    let unoptimized = "
+fn main(x: bool, y: bool) -> bool {
+    x & (!x | y)
+}
+";
+    let optimized = "
+fn main(x: bool, y: bool) -> bool {
+    x & y
+}
+";
+    let unoptimized = compile(&unoptimized).map_err(|e| e.prettify(&unoptimized))?;
+    let optimized = compile(&optimized).map_err(|e| e.prettify(&optimized))?;
+    assert_eq!(unoptimized.gates.len(), optimized.gates.len());
+    Ok(())
+}

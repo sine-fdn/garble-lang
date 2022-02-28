@@ -2,6 +2,9 @@
 
 use std::collections::HashMap;
 
+const MAX_OPTIMIZATION_DEPTH: u32 = 4;
+const PRINT_OPTIMIZATION_RATIO: bool = false;
+
 /// Data type to uniquely identify gates.
 pub type GateIndex = usize;
 
@@ -87,10 +90,12 @@ pub(crate) enum BuilderGate {
 
 #[derive(Clone, Debug)]
 pub(crate) struct CircuitBuilder {
+    shift: usize,
     input_gates: Vec<usize>,
     gates: Vec<BuilderGate>,
     cache: HashMap<BuilderGate, GateIndex>,
     negated: HashMap<GateIndex, GateIndex>,
+    gates_optimized: usize,
     gate_counter: usize,
 }
 
@@ -101,20 +106,18 @@ impl CircuitBuilder {
             gate_counter += input_gates_of_party;
         }
         Self {
+            shift: gate_counter,
             input_gates,
             gates: vec![],
             cache: HashMap::new(),
             negated: HashMap::new(),
+            gates_optimized: 0,
             gate_counter,
         }
     }
 
     fn remove_unused_gates(&mut self, output_gates: Vec<GateIndex>) -> Vec<GateIndex> {
-        let mut shift = 2;
-        for p in self.input_gates.iter() {
-            shift += p;
-        }
-
+        let shift = self.shift;
         let mut output_gate_stack = output_gates.clone();
         let mut used_gates = vec![false; self.gates.len()];
         while let Some(gate_index) = output_gate_stack.pop() {
@@ -159,23 +162,29 @@ impl CircuitBuilder {
                 without_unused_gates.push(self.gates[w]);
             }
         }
+        self.gates_optimized += unused_gates;
         self.gates = without_unused_gates;
-        output_gates.into_iter().map(|w| {
-            if w > shift {
-                w - unused_before_gate[w - shift]
-            } else {
-                w
-            }
-        }).collect()
+        output_gates
+            .into_iter()
+            .map(|w| {
+                if w > shift {
+                    w - unused_before_gate[w - shift]
+                } else {
+                    w
+                }
+            })
+            .collect()
     }
 
     pub fn build(mut self, output_gates: Vec<GateIndex>) -> Circuit {
         let output_gates = self.remove_unused_gates(output_gates);
 
-        let mut input_shift = 0;
-        for p in self.input_gates.iter() {
-            input_shift += p;
+        if PRINT_OPTIMIZATION_RATIO && self.gates_optimized > 0 {
+            let optimized = self.gates_optimized * 100 / (self.gates.len() + self.gates_optimized);
+            println!("Optimizations removed {optimized}% of all generated gates");
         }
+
+        let input_shift = self.shift - 2;
         let shift_gate_index_if_necessary = |i: GateIndex| {
             if i <= 1 {
                 i + input_shift
@@ -223,22 +232,99 @@ impl CircuitBuilder {
         }
     }
 
-    pub fn push_xor(&mut self, x: GateIndex, y: GateIndex) -> GateIndex {
+    fn optimize_gate(&self, w: GateIndex, is_true: GateIndex, depth: u32) -> GateIndex {
+        if depth >= MAX_OPTIMIZATION_DEPTH {
+            return w;
+        } else if w == is_true {
+            return 1;
+        } else if w >= self.shift {
+            match self.gates[w - self.shift] {
+                BuilderGate::Xor(x, y) => {
+                    if let Some(optimized) = self.optimize_xor(x, y, is_true, depth + 1) {
+                        return optimized;
+                    }
+                }
+                BuilderGate::And(x, y) => {
+                    if let Some(optimized) = self.optimize_and(x, y, is_true, depth + 1) {
+                        return optimized;
+                    }
+                }
+            }
+        }
+        w
+    }
+
+    fn optimize_xor(
+        &self,
+        x: GateIndex,
+        y: GateIndex,
+        is_true: GateIndex,
+        depth: u32,
+    ) -> Option<GateIndex> {
+        let x = self.optimize_gate(x, is_true, depth);
+        let y = self.optimize_gate(y, is_true, depth);
         if x == 0 {
-            return y;
+            return Some(y);
         } else if y == 0 {
-            return x;
+            return Some(x);
         } else if x == y {
-            return 0;
+            return Some(0);
         } else if let Some(&x_negated) = self.negated.get(&x) {
             if x_negated == y {
-                return 1;
+                return Some(1);
+            } else if y == 1 {
+                return Some(x_negated);
+            }
+        } else if let Some(&y_negated) = self.negated.get(&y) {
+            if y_negated == x {
+                return Some(1);
+            } else if x == 1 {
+                return Some(y_negated);
             }
         }
         let gate = BuilderGate::Xor(x, y);
         if let Some(&wire) = self.cache.get(&gate) {
-            wire
+            return Some(wire);
+        }
+        None
+    }
+
+    fn optimize_and(
+        &self,
+        x: GateIndex,
+        y: GateIndex,
+        is_true: GateIndex,
+        depth: u32,
+    ) -> Option<GateIndex> {
+        let x = self.optimize_gate(x, is_true, depth);
+        let y = self.optimize_gate(y, is_true, depth);
+        if x == 0 || y == 0 {
+            return Some(0);
+        } else if x == 1 {
+            return Some(y);
+        } else if y == 1 || x == y {
+            return Some(x);
+        } else if let Some(&x_negated) = self.negated.get(&x) {
+            if x_negated == y {
+                return Some(0);
+            }
+        } else if let Some(&y_negated) = self.negated.get(&y) {
+            if y_negated == x {
+                return Some(0);
+            }
+        }
+        if let Some(&wire) = self.cache.get(&BuilderGate::And(x, y)) {
+            return Some(wire);
+        }
+        None
+    }
+
+    pub fn push_xor(&mut self, x: GateIndex, y: GateIndex) -> GateIndex {
+        if let Some(optimized) = self.optimize_xor(x, y, 1, 0) {
+            self.gates_optimized += 1;
+            optimized
         } else {
+            let gate = BuilderGate::Xor(x, y);
             self.gate_counter += 1;
             self.gates.push(gate);
             let gate_index = self.gate_counter - 1;
@@ -256,23 +342,13 @@ impl CircuitBuilder {
     }
 
     pub fn push_and(&mut self, x: GateIndex, y: GateIndex) -> GateIndex {
-        if x == 0 || y == 0 {
-            return 0;
-        } else if x == 1 {
-            return y;
-        } else if y == 1 {
-            return x;
-        } else if x == y {
-            return x;
-        } else if let Some(&x_negated) = self.negated.get(&x) {
-            if x_negated == y {
-                return 0;
-            }
-        }
-        let gate = BuilderGate::And(x, y);
-        if let Some(&wire) = self.cache.get(&gate) {
-            wire
+        let x = self.optimize_gate(x, y, 0);
+        let y = self.optimize_gate(y, x, 0);
+        if let Some(optimized) = self.optimize_and(x, y, 1, MAX_OPTIMIZATION_DEPTH) {
+            self.gates_optimized += 1;
+            optimized
         } else {
+            let gate = BuilderGate::And(x, y);
             self.gate_counter += 1;
             self.gates.push(gate);
             self.cache.insert(gate, self.gate_counter - 1);
