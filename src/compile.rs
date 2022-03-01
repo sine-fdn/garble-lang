@@ -90,13 +90,19 @@ impl Expr {
                 array
             }
             ExprEnum::ArrayAccess(array, index) => {
+                let num_elems = match &array.1 {
+                    Type::Array(_, size) => *size,
+                    _ => panic!("Found a non-array value in an array access expr"),
+                };
                 let elem_bits = ty.size_in_bits_for_defs(Some(enums));
                 let mut array = array.compile(enums, fns, env, circuit);
                 let mut index = index.compile(enums, fns, env, circuit);
+                let index_bits =
+                    Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(Some(enums));
                 extend_to_bits(
                     &mut index,
                     &Type::Unsigned(UnsignedNumType::Usize),
-                    Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(Some(enums)),
+                    index_bits,
                 );
                 let out_of_bounds_elem = 1;
                 for mux_layer in (0..index.len()).rev() {
@@ -119,6 +125,13 @@ impl Expr {
                     }
                     array = muxed_array;
                 }
+                let mut array_len = Vec::with_capacity(index_bits);
+                unsigned_to_bits(num_elems as u128, index_bits, &mut array_len);
+                let array_len: Vec<usize> = array_len.into_iter().map(|b| b as usize).collect();
+                let (index_less_than_array_len, _) =
+                    circuit.push_comparator_circuit(index_bits, &index, false, &array_len, false);
+                let out_of_bounds = circuit.push_not(index_less_than_array_len);
+                circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, *meta);
                 array
             }
             ExprEnum::ArrayAssignment(array, index, value) => {
@@ -132,10 +145,12 @@ impl Expr {
                 let mut array = array.compile(enums, fns, env, circuit);
                 let mut index = index.compile(enums, fns, env, circuit);
                 let value = value.compile(enums, fns, env, circuit);
+                let index_bits =
+                    Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(Some(enums));
                 extend_to_bits(
                     &mut index,
                     &Type::Unsigned(UnsignedNumType::Usize),
-                    Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(Some(enums)),
+                    index_bits,
                 );
                 let elem_bits = elem_ty.size_in_bits_for_defs(Some(enums));
 
@@ -164,6 +179,13 @@ impl Expr {
                         array[i * elem_bits + b] = x1;
                     }
                 }
+                let mut array_len = Vec::with_capacity(index_bits);
+                unsigned_to_bits(*size as u128, index_bits, &mut array_len);
+                let array_len: Vec<usize> = array_len.into_iter().map(|b| b as usize).collect();
+                let (index_less_than_array_len, _) =
+                    circuit.push_comparator_circuit(index_bits, &index, false, &array_len, false);
+                let out_of_bounds = circuit.push_not(index_less_than_array_len);
+                circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, *meta);
                 array
             }
             ExprEnum::TupleLiteral(tuple) => {

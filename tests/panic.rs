@@ -120,6 +120,65 @@ fn main(x: i32) -> i32 {
     Ok(())
 }
 
+#[test]
+fn panic_on_out_of_bounds_access() -> Result<(), String> {
+    let prg = "
+fn main(i: usize) -> i32 {
+    [1, 2, 3][i]
+}
+";
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
+    let mut computation = Evaluator::from(circuit);
+
+    computation.set_usize(0);
+    let res = computation.run();
+    assert!(res.is_ok());
+
+    computation.set_usize(1);
+    let res = computation.run();
+    assert!(res.is_ok());
+
+    computation.set_usize(2);
+    let res = computation.run();
+    assert!(res.is_ok());
+
+    computation.set_usize(3);
+    let res = computation.run();
+    expect_panic(res, PanicReason::OutOfBounds);
+
+    Ok(())
+}
+
+#[test]
+fn panic_on_out_of_bounds_update() -> Result<(), String> {
+    let prg = "
+fn main(i: usize) -> i32 {
+    let updated = [1, 2, 3].update(i, 0);
+    updated[0]
+}
+";
+    let circuit = compile(prg).map_err(|e| e.prettify(prg))?;
+    let mut computation = Evaluator::from(circuit);
+
+    computation.set_usize(0);
+    let res = computation.run();
+    assert!(res.is_ok());
+
+    computation.set_usize(1);
+    let res = computation.run();
+    assert!(res.is_ok());
+
+    computation.set_usize(2);
+    let res = computation.run();
+    assert!(res.is_ok());
+
+    computation.set_usize(3);
+    let res = computation.run();
+    expect_panic(res, PanicReason::OutOfBounds);
+
+    Ok(())
+}
+
 fn expect_panic(computation: Result<(), EvalError>, expected: PanicReason) {
     assert!(computation.is_err());
     match computation.unwrap_err() {
