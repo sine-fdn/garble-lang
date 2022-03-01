@@ -12,18 +12,16 @@ use crate::{
 };
 
 /// Evaluates a [`crate::circuit::Circuit`] with inputs supplied by different parties.
-pub struct Evaluator {
-    circuit: Circuit,
+pub struct Evaluator<'a> {
+    circuit: &'a Circuit,
     inputs: Vec<Vec<bool>>,
-    output: Option<Vec<Option<bool>>>,
 }
 
-impl From<Circuit> for Evaluator {
-    fn from(circuit: Circuit) -> Self {
+impl<'a> From<&'a Circuit> for Evaluator<'a> {
+    fn from(circuit: &'a Circuit) -> Self {
         Self {
             circuit,
             inputs: vec![],
-            output: None,
         }
     }
 }
@@ -58,9 +56,9 @@ impl From<EvalPanic> for EvalError {
     }
 }
 
-impl Evaluator {
+impl<'a> Evaluator<'a> {
     /// Evaluates a [`crate::circuit::Circuit`] with the previously set inputs.
-    pub fn run(&mut self) -> Result<(), EvalError> {
+    pub fn run(self) -> Result<EvalOutput, EvalError> {
         if self.inputs.len() != self.circuit.input_gates.len() {
             return Err(EvalError::UnexpectedNumberOfParties);
         }
@@ -69,34 +67,17 @@ impl Evaluator {
                 return Err(EvalError::UnexpectedNumberOfInputsFromParty(p));
             }
         }
-        match self.circuit.eval(&self.inputs) {
-            Ok(result) => {
-                self.inputs.clear();
-                self.output = Some(result);
-                Ok(())
-            }
-            Err(e) => {
-                self.inputs.clear();
-                Err(e.into())
-            },
+        let gate_values = self.circuit.eval(&self.inputs)?;
+        let mut output: Vec<bool> = Vec::with_capacity(self.circuit.output_gates.len());
+        for output_gate in &self.circuit.output_gates {
+            output.push(gate_values[*output_gate].unwrap());
         }
+        Ok(EvalOutput(output))
     }
 
     fn push_input(&mut self) -> &mut Vec<bool> {
         self.inputs.push(vec![]);
         self.inputs.last_mut().unwrap()
-    }
-
-    fn get_output(&self) -> Result<Vec<bool>, EvalError> {
-        if let Some(output) = &self.output {
-            let mut output_bits = Vec::with_capacity(self.circuit.output_gates.len());
-            for output_gate in &self.circuit.output_gates {
-                output_bits.push(output[*output_gate].unwrap());
-            }
-            Ok(output_bits)
-        } else {
-            Err(EvalError::OutputHasNotBeenComputed)
-        }
     }
 
     /// Encodes a bool as a bits and sets it as the input from the party.
@@ -179,10 +160,17 @@ impl Evaluator {
             .unwrap()
             .extend(literal.as_bits(checked));
     }
+}
 
-    /// Decodes the evaluated result as a bool.
-    pub fn get_bool(&self) -> Result<bool, EvalError> {
-        let output = self.get_output()?;
+/// The encoded result of a circuit evaluation.
+#[derive(Debug, Clone)]
+pub struct EvalOutput(Vec<bool>);
+
+impl TryFrom<EvalOutput> for bool {
+    type Error = EvalError;
+
+    fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
+        let output = value.0;
         if output.len() == 1 {
             Ok(output[0])
         } else {
@@ -192,88 +180,117 @@ impl Evaluator {
             })
         }
     }
+}
 
-    /// Decodes the evaluated result as a usize int.
-    pub fn get_usize(&self) -> Result<usize, EvalError> {
-        self.get_unsigned(Type::Unsigned(UnsignedNumType::Usize))
+impl TryFrom<EvalOutput> for usize {
+    type Error = EvalError;
+
+    fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
+        value
+            .into_unsigned(Type::Unsigned(UnsignedNumType::Usize))
             .map(|n| n as usize)
     }
+}
 
-    /// Decodes the evaluated result as a u8 int.
-    pub fn get_u8(&self) -> Result<u8, EvalError> {
-        self.get_unsigned(Type::Unsigned(UnsignedNumType::U8))
+impl TryFrom<EvalOutput> for u8 {
+    type Error = EvalError;
+
+    fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
+        value
+            .into_unsigned(Type::Unsigned(UnsignedNumType::U8))
             .map(|n| n as u8)
     }
+}
 
-    /// Decodes the evaluated result as a u16 int.
-    pub fn get_u16(&self) -> Result<u16, EvalError> {
-        self.get_unsigned(Type::Unsigned(UnsignedNumType::U16))
+impl TryFrom<EvalOutput> for u16 {
+    type Error = EvalError;
+
+    fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
+        value
+            .into_unsigned(Type::Unsigned(UnsignedNumType::U16))
             .map(|n| n as u16)
     }
+}
 
-    /// Decodes the evaluated result as a u32 int.
-    pub fn get_u32(&self) -> Result<u32, EvalError> {
-        self.get_unsigned(Type::Unsigned(UnsignedNumType::U32))
+impl TryFrom<EvalOutput> for u32 {
+    type Error = EvalError;
+
+    fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
+        value
+            .into_unsigned(Type::Unsigned(UnsignedNumType::U32))
             .map(|n| n as u32)
     }
+}
 
-    /// Decodes the evaluated result as a u64 int.
-    pub fn get_u64(&self) -> Result<u64, EvalError> {
-        self.get_unsigned(Type::Unsigned(UnsignedNumType::U64))
+impl TryFrom<EvalOutput> for u64 {
+    type Error = EvalError;
+
+    fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
+        value
+            .into_unsigned(Type::Unsigned(UnsignedNumType::U64))
             .map(|n| n as u64)
     }
+}
 
-    /// Decodes the evaluated result as a u128 int.
-    pub fn get_u128(&self) -> Result<u128, EvalError> {
-        self.get_unsigned(Type::Unsigned(UnsignedNumType::U128))
+impl TryFrom<EvalOutput> for u128 {
+    type Error = EvalError;
+
+    fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
+        value.into_unsigned(Type::Unsigned(UnsignedNumType::U128))
     }
+}
 
-    /// Decodes the evaluated result as a i8 int.
-    pub fn get_i8(&self) -> Result<i8, EvalError> {
-        self.get_signed(Type::Signed(SignedNumType::I8))
+impl TryFrom<EvalOutput> for i8 {
+    type Error = EvalError;
+
+    fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
+        value
+            .into_signed(Type::Signed(SignedNumType::I8))
             .map(|n| n as i8)
     }
+}
 
-    /// Decodes the evaluated result as a i16 int.
-    pub fn get_i16(&self) -> Result<i16, EvalError> {
-        self.get_signed(Type::Signed(SignedNumType::I16))
+impl TryFrom<EvalOutput> for i16 {
+    type Error = EvalError;
+
+    fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
+        value
+            .into_signed(Type::Signed(SignedNumType::I16))
             .map(|n| n as i16)
     }
+}
 
-    /// Decodes the evaluated result as a i32 int.
-    pub fn get_i32(&self) -> Result<i32, EvalError> {
-        self.get_signed(Type::Signed(SignedNumType::I32))
+impl TryFrom<EvalOutput> for i32 {
+    type Error = EvalError;
+
+    fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
+        value
+            .into_signed(Type::Signed(SignedNumType::I32))
             .map(|n| n as i32)
     }
+}
 
-    /// Decodes the evaluated result as a i64 int.
-    pub fn get_i64(&self) -> Result<i64, EvalError> {
-        self.get_signed(Type::Signed(SignedNumType::I64))
+impl TryFrom<EvalOutput> for i64 {
+    type Error = EvalError;
+
+    fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
+        value
+            .into_signed(Type::Signed(SignedNumType::I64))
             .map(|n| n as i64)
     }
+}
 
-    /// Decodes the evaluated result as a i128 int.
-    pub fn get_i128(&self) -> Result<i128, EvalError> {
-        self.get_signed(Type::Signed(SignedNumType::I128))
+impl TryFrom<EvalOutput> for i128 {
+    type Error = EvalError;
+
+    fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
+        value.into_signed(Type::Signed(SignedNumType::I128))
     }
+}
 
-    /// Decodes the evaluated result as a literal (with enums looked up in the program).
-    pub fn get_literal(&self, checked: &Program, ty: &Type) -> Result<Literal, EvalError> {
-        let output = self.get_output()?;
-        let size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
-        if output.len() == size {
-            let bits: Vec<bool> = output.iter().copied().take(size).collect();
-            Ok(Literal::from_bits(checked, ty, &bits)?)
-        } else {
-            Err(EvalError::OutputTypeMismatch {
-                expected: ty.clone(),
-                actual_bits: output.len(),
-            })
-        }
-    }
-
-    fn get_unsigned(&self, ty: Type) -> Result<u128, EvalError> {
-        let output = self.get_output()?;
+impl EvalOutput {
+    fn into_unsigned(self, ty: Type) -> Result<u128, EvalError> {
+        let output = self.0;
         let size = ty.size_in_bits_for_defs(None);
         if output.len() == size {
             let mut n = 0;
@@ -289,8 +306,8 @@ impl Evaluator {
         }
     }
 
-    fn get_signed(&self, ty: Type) -> Result<i128, EvalError> {
-        let output = self.get_output()?;
+    fn into_signed(self, ty: Type) -> Result<i128, EvalError> {
+        let output = self.0;
         let size = ty.size_in_bits_for_defs(None);
         if output.len() == size {
             let mut n = 0;
@@ -301,6 +318,21 @@ impl Evaluator {
         } else {
             Err(EvalError::OutputTypeMismatch {
                 expected: ty,
+                actual_bits: output.len(),
+            })
+        }
+    }
+
+    /// Decodes the evaluated result as a literal (with enums looked up in the program).
+    pub fn into_literal(self, checked: &Program, ty: &Type) -> Result<Literal, EvalError> {
+        let output = self.0;
+        let size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
+        if output.len() == size {
+            let bits: Vec<bool> = output.iter().copied().take(size).collect();
+            Ok(Literal::from_bits(checked, ty, &bits)?)
+        } else {
+            Err(EvalError::OutputTypeMismatch {
+                expected: ty.clone(),
                 actual_bits: output.len(),
             })
         }
