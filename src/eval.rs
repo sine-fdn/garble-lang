@@ -2,12 +2,13 @@
 
 use crate::{
     ast::Type,
-    circuit::Circuit,
+    circuit::{Circuit, EvalPanic},
     compile::{signed_to_bits, unsigned_to_bits},
     literal::Literal,
     parse::ParseError,
     scan::ScanError,
-    typed_ast::Program, token::{UnsignedNumType, SignedNumType},
+    token::{SignedNumType, UnsignedNumType},
+    typed_ast::Program,
 };
 
 /// Evaluates a [`crate::circuit::Circuit`] with inputs supplied by different parties.
@@ -47,6 +48,14 @@ pub enum EvalError {
         /// The number of output bits.
         actual_bits: usize,
     },
+    /// The evaluation panicked, for example due to an integer overflow or div by zero.
+    Panic(EvalPanic),
+}
+
+impl From<EvalPanic> for EvalError {
+    fn from(e: EvalPanic) -> Self {
+        Self::Panic(e)
+    }
 }
 
 impl Evaluator {
@@ -60,9 +69,17 @@ impl Evaluator {
                 return Err(EvalError::UnexpectedNumberOfInputsFromParty(p));
             }
         }
-        self.output = Some(self.circuit.eval(&self.inputs));
-        self.inputs.clear();
-        Ok(())
+        match self.circuit.eval(&self.inputs) {
+            Ok(result) => {
+                self.inputs.clear();
+                self.output = Some(result);
+                Ok(())
+            }
+            Err(e) => {
+                self.inputs.clear();
+                Err(e.into())
+            },
+        }
     }
 
     fn push_input(&mut self) -> &mut Vec<bool> {
@@ -178,27 +195,32 @@ impl Evaluator {
 
     /// Decodes the evaluated result as a usize int.
     pub fn get_usize(&self) -> Result<usize, EvalError> {
-        self.get_unsigned(Type::Unsigned(UnsignedNumType::Usize)).map(|n| n as usize)
+        self.get_unsigned(Type::Unsigned(UnsignedNumType::Usize))
+            .map(|n| n as usize)
     }
 
     /// Decodes the evaluated result as a u8 int.
     pub fn get_u8(&self) -> Result<u8, EvalError> {
-        self.get_unsigned(Type::Unsigned(UnsignedNumType::U8)).map(|n| n as u8)
+        self.get_unsigned(Type::Unsigned(UnsignedNumType::U8))
+            .map(|n| n as u8)
     }
 
     /// Decodes the evaluated result as a u16 int.
     pub fn get_u16(&self) -> Result<u16, EvalError> {
-        self.get_unsigned(Type::Unsigned(UnsignedNumType::U16)).map(|n| n as u16)
+        self.get_unsigned(Type::Unsigned(UnsignedNumType::U16))
+            .map(|n| n as u16)
     }
 
     /// Decodes the evaluated result as a u32 int.
     pub fn get_u32(&self) -> Result<u32, EvalError> {
-        self.get_unsigned(Type::Unsigned(UnsignedNumType::U32)).map(|n| n as u32)
+        self.get_unsigned(Type::Unsigned(UnsignedNumType::U32))
+            .map(|n| n as u32)
     }
 
     /// Decodes the evaluated result as a u64 int.
     pub fn get_u64(&self) -> Result<u64, EvalError> {
-        self.get_unsigned(Type::Unsigned(UnsignedNumType::U64)).map(|n| n as u64)
+        self.get_unsigned(Type::Unsigned(UnsignedNumType::U64))
+            .map(|n| n as u64)
     }
 
     /// Decodes the evaluated result as a u128 int.
@@ -208,22 +230,26 @@ impl Evaluator {
 
     /// Decodes the evaluated result as a i8 int.
     pub fn get_i8(&self) -> Result<i8, EvalError> {
-        self.get_signed(Type::Signed(SignedNumType::I8)).map(|n| n as i8)
+        self.get_signed(Type::Signed(SignedNumType::I8))
+            .map(|n| n as i8)
     }
 
     /// Decodes the evaluated result as a i16 int.
     pub fn get_i16(&self) -> Result<i16, EvalError> {
-        self.get_signed(Type::Signed(SignedNumType::I16)).map(|n| n as i16)
+        self.get_signed(Type::Signed(SignedNumType::I16))
+            .map(|n| n as i16)
     }
 
     /// Decodes the evaluated result as a i32 int.
     pub fn get_i32(&self) -> Result<i32, EvalError> {
-        self.get_signed(Type::Signed(SignedNumType::I32)).map(|n| n as i32)
+        self.get_signed(Type::Signed(SignedNumType::I32))
+            .map(|n| n as i32)
     }
 
     /// Decodes the evaluated result as a i64 int.
     pub fn get_i64(&self) -> Result<i64, EvalError> {
-        self.get_signed(Type::Signed(SignedNumType::I64)).map(|n| n as i64)
+        self.get_signed(Type::Signed(SignedNumType::I64))
+            .map(|n| n as i64)
     }
 
     /// Decodes the evaluated result as a i128 int.
