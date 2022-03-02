@@ -43,7 +43,7 @@ fn main() -> Result<(), std::io::Error> {
             }
             match computation.run() {
                 Err(e) => {
-                    println!("{}", e.prettify(""));
+                    println!("{}", e.prettify(&prg));
                     exit(65);
                 }
                 Ok(output) => {
@@ -54,7 +54,7 @@ fn main() -> Result<(), std::io::Error> {
                             println!("{}", result);
                         }
                         Err(e) => {
-                            println!("{}", e.prettify(""));
+                            println!("{}", e.prettify(&prg));
                             exit(70);
                         }
                     }
