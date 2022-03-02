@@ -154,7 +154,6 @@ impl CompileTimeError {
             msg += &format!("--> {}:\n", err);
             msg += &prettify_meta(prg, *meta);
         }
-        println!("{}", msg);
         msg
     }
 }

@@ -5,7 +5,7 @@ use garble::{ast::ParamDef, check, eval::Evaluator, literal::Literal};
 fn main() -> Result<(), std::io::Error> {
     let args: Vec<String> = args().collect();
     if args.len() < 2 {
-        println!("Usage: {} file [input1] [input2] ...", args[0]);
+        eprintln!("Usage: {} file [input1] [input2] ...", args[0]);
         exit(64);
     }
     let mut f = File::open(&args[1])?;
@@ -17,7 +17,7 @@ fn main() -> Result<(), std::io::Error> {
         Ok(checked) => {
             let main_params = &checked.main.params;
             if main_params.len() != args.len() - 2 {
-                println!(
+                eprintln!(
                     "Expected {} inputs, but found {}: {:?}",
                     main_params.len(),
                     args.len() - 2,
@@ -31,7 +31,7 @@ fn main() -> Result<(), std::io::Error> {
                 match param {
                     Ok(param) => params.push(param),
                     Err(e) => {
-                        println!("{}", e.prettify(arg));
+                        eprintln!("{}", e.prettify(arg));
                         exit(65);
                     }
                 }
@@ -43,7 +43,7 @@ fn main() -> Result<(), std::io::Error> {
             }
             match computation.run() {
                 Err(e) => {
-                    println!("{}", e.prettify(""));
+                    eprintln!("{}", e.prettify(&prg));
                     exit(65);
                 }
                 Ok(output) => {
@@ -54,7 +54,7 @@ fn main() -> Result<(), std::io::Error> {
                             println!("{}", result);
                         }
                         Err(e) => {
-                            println!("{}", e.prettify(""));
+                            eprintln!("{}", e.prettify(&prg));
                             exit(70);
                         }
                     }
@@ -63,7 +63,7 @@ fn main() -> Result<(), std::io::Error> {
             }
         }
         Err(e) => {
-            println!("{}", e.prettify(&prg));
+            eprintln!("{}", e.prettify(&prg));
             exit(65);
         }
     }
