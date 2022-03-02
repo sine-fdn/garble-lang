@@ -42,7 +42,7 @@ impl Circuit {
     ///
     /// Assumes that the inputs have been previously type-checked and **panics** if the number of
     /// parties or the bits of a particular party do not match the circuit.
-    pub fn eval(&self, inputs: &[Vec<bool>]) -> Result<Vec<bool>, EvalPanic> {
+    pub fn eval(&self, inputs: &[Vec<bool>]) -> Vec<bool> {
         let mut input_len = 0;
         for p in self.input_gates.iter() {
             input_len += p;
@@ -85,7 +85,7 @@ impl Circuit {
         for output_gate in &self.output_gates {
             output_packed.push(output[*output_gate].unwrap());
         }
-        EvalPanic::parse(&output_packed).map(|output| output.to_vec())
+        output_packed
     }
 }
 
