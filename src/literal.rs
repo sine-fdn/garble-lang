@@ -12,7 +12,7 @@ use crate::{
     scan::scan,
     token::{SignedNumType, UnsignedNumType},
     typed_ast::{Expr, ExprEnum, Program, VariantExpr, VariantExprEnum},
-    CompileTimeError,
+    CompileTimeError, circuit::EvalPanic,
 };
 
 /// A subset of [`crate::typed_ast::Expr`] that is used as input / output by an
@@ -62,8 +62,25 @@ impl Literal {
         Ok(expr.into_literal())
     }
 
+    /// Decodes the bits as a panic or literal of the specified type, looking up enum defs in the
+    /// program.
+    ///
+    /// `bits` must include the _panic portion of the circuit_, meaning all wires carrying panic
+    /// information must be included in the bits.
+    pub fn from_result_bits(checked: &Program, ty: &Type, bits: &[bool]) -> Result<Self, EvalError> {
+        match EvalPanic::parse(bits) {
+            Ok(bits) => Literal::from_unwrapped_bits(checked, ty, bits),
+            Err(panic) => Err(EvalError::Panic(panic)),
+        }
+    }
+
     /// Decodes the bits as a literal of the specified type, looking up enum defs in the program.
-    pub fn from_bits(checked: &Program, ty: &Type, bits: &[bool]) -> Result<Self, EvalError> {
+    ///
+    /// `bits` must be the _non-panic output-only portion of the circuit_, meaning all wires
+    /// carrying panic information must already have been removed prior to parsing the bits. If you
+    /// want to parse a circuit output that might have panicked, use
+    /// [`from_output`] instead.
+    pub fn from_unwrapped_bits(checked: &Program, ty: &Type, bits: &[bool]) -> Result<Self, EvalError> {
         match ty {
             Type::Bool => {
                 if bits.len() == 1 {
@@ -115,7 +132,7 @@ impl Literal {
                 let mut i = 0;
                 for _ in 0..*size {
                     let bits = &bits[i..i + ty_size];
-                    elems.push(Literal::from_bits(checked, ty, bits)?);
+                    elems.push(Literal::from_unwrapped_bits(checked, ty, bits)?);
                     i += ty_size;
                 }
                 Ok(Literal::Array(elems))
@@ -126,7 +143,7 @@ impl Literal {
                 for ty in field_types {
                     let ty_size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
                     let bits = &bits[i..i + ty_size];
-                    fields.push(Literal::from_bits(checked, ty, bits)?);
+                    fields.push(Literal::from_unwrapped_bits(checked, ty, bits)?);
                     i += ty_size;
                 }
                 Ok(Literal::Tuple(fields))
@@ -149,7 +166,7 @@ impl Literal {
                         let mut fields = Vec::with_capacity(field_types.len());
                         let mut i = tag_size;
                         for ty in field_types {
-                            let field = Literal::from_bits(
+                            let field = Literal::from_unwrapped_bits(
                                 checked,
                                 ty,
                                 &bits[i..i + ty.size_in_bits_for_defs(Some(&checked.enum_defs))],

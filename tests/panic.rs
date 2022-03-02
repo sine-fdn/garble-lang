@@ -190,9 +190,11 @@ fn main(i: usize) -> i32 {
     Ok(())
 }
 
-fn expect_panic(computation: Result<EvalOutput, EvalError>, expected: PanicReason) {
-    assert!(computation.is_err());
-    match computation.unwrap_err() {
+fn expect_panic(eval_result: Result<EvalOutput, EvalError>, expected: PanicReason) {
+    assert!(eval_result.is_ok());
+    let eval_output = Vec::<bool>::try_from(eval_result.unwrap());
+    assert!(eval_output.is_err());
+    match eval_output.unwrap_err() {
         EvalError::Panic(EvalPanic { reason, .. }) => assert_eq!(expected, reason),
         e => panic!("Expected a panic, but found {:?}", e),
     }

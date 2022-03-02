@@ -67,11 +67,7 @@ impl<'a> Evaluator<'a> {
                 return Err(EvalError::UnexpectedNumberOfInputsFromParty(p));
             }
         }
-        let gate_values = self.circuit.eval(&self.inputs)?;
-        let mut output: Vec<bool> = Vec::with_capacity(self.circuit.output_gates.len());
-        for output_gate in &self.circuit.output_gates {
-            output.push(gate_values[*output_gate].unwrap());
-        }
+        let output = self.circuit.eval(&self.inputs);
         Ok(EvalOutput(output))
     }
 
@@ -170,7 +166,7 @@ impl TryFrom<EvalOutput> for bool {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
-        let output = value.0;
+        let output = EvalPanic::parse(&value.0)?;
         if output.len() == 1 {
             Ok(output[0])
         } else {
@@ -288,9 +284,20 @@ impl TryFrom<EvalOutput> for i128 {
     }
 }
 
+impl TryFrom<EvalOutput> for Vec<bool> {
+    type Error = EvalError;
+
+    fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
+        match EvalPanic::parse(&value.0) {
+            Ok(output) => Ok(output.iter().copied().collect()),
+            Err(panic) => Err(EvalError::Panic(panic)),
+        }
+    }
+}
+
 impl EvalOutput {
     fn into_unsigned(self, ty: Type) -> Result<u128, EvalError> {
-        let output = self.0;
+        let output = EvalPanic::parse(&self.0)?;
         let size = ty.size_in_bits_for_defs(None);
         if output.len() == size {
             let mut n = 0;
@@ -307,7 +314,7 @@ impl EvalOutput {
     }
 
     fn into_signed(self, ty: Type) -> Result<i128, EvalError> {
-        let output = self.0;
+        let output = EvalPanic::parse(&self.0)?;
         let size = ty.size_in_bits_for_defs(None);
         if output.len() == size {
             let mut n = 0;
@@ -325,16 +332,6 @@ impl EvalOutput {
 
     /// Decodes the evaluated result as a literal (with enums looked up in the program).
     pub fn into_literal(self, checked: &Program, ty: &Type) -> Result<Literal, EvalError> {
-        let output = self.0;
-        let size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
-        if output.len() == size {
-            let bits: Vec<bool> = output.iter().copied().take(size).collect();
-            Ok(Literal::from_bits(checked, ty, &bits)?)
-        } else {
-            Err(EvalError::OutputTypeMismatch {
-                expected: ty.clone(),
-                actual_bits: output.len(),
-            })
-        }
+        Literal::from_result_bits(checked, ty, &self.0)
     }
 }
