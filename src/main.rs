@@ -37,26 +37,30 @@ fn main() -> Result<(), std::io::Error> {
                 }
             }
             let circuit = checked.compile();
-            let mut computation = Evaluator::from(circuit);
+            let mut computation = Evaluator::from(&circuit);
             for param in params {
                 computation.set_literal(&checked, param);
             }
-            if let Err(e) = computation.run() {
-                println!("{}", e.prettify(""));
-                exit(65);
-            };
-            let ret_ty = &checked.main.body.1;
-            let result = computation.get_literal(&checked, ret_ty);
-            match result {
-                Ok(result) => {
-                    println!("{}", result);
-                }
+            match computation.run() {
                 Err(e) => {
                     println!("{}", e.prettify(""));
-                    exit(70);
+                    exit(65);
+                }
+                Ok(output) => {
+                    let ret_ty = &checked.main.body.1;
+                    let result = output.into_literal(&checked, ret_ty);
+                    match result {
+                        Ok(result) => {
+                            println!("{}", result);
+                        }
+                        Err(e) => {
+                            println!("{}", e.prettify(""));
+                            exit(70);
+                        }
+                    }
+                    Ok(())
                 }
             }
-            Ok(())
         }
         Err(e) => {
             println!("{}", e.prettify(&prg));
