@@ -1,10 +1,7 @@
 //! The circuit representation used by the compiler.
 
+use crate::{compile::wires_as_unsigned, token::MetaInfo};
 use std::collections::HashMap;
-use crate::{
-    compile::{unsigned_as_wires, wires_as_unsigned},
-    token::MetaInfo,
-};
 
 // This module currently implements 4 very basic types of circuit optimizations:
 //
@@ -141,34 +138,35 @@ pub(crate) struct CircuitBuilder {
     panic_gates: PanicResult,
 }
 
+const USIZE_BITS: usize = usize::BITS as usize;
+
 /// A collection of wires that carry information about whether and where a panic occurred.
 #[derive(Debug, Clone)]
 pub struct PanicResult {
     /// A boolean wire indicating whether a panic has occurred.
     pub has_panicked: GateIndex,
     /// The (encoded) reason why the panic occurred (overflow, div-by-zero, etc).
-    pub panic_type: Vec<GateIndex>,
+    pub panic_type: [GateIndex; USIZE_BITS],
     /// The (encoded) first line in the source code where the panic occurred.
-    pub start_line: Vec<GateIndex>,
+    pub start_line: [GateIndex; USIZE_BITS],
     /// The (encoded) first column of the first line in the source code where the panic occurred.
-    pub start_column: Vec<GateIndex>,
+    pub start_column: [GateIndex; USIZE_BITS],
     /// The (encoded) last line in the source code where the panic occurred.
-    pub end_line: Vec<GateIndex>,
+    pub end_line: [GateIndex; USIZE_BITS],
     /// The (encoded) last column of the last line in the source code where the panic occurred.
-    pub end_column: Vec<GateIndex>,
+    pub end_column: [GateIndex; USIZE_BITS],
 }
 
 impl PanicResult {
     /// Returns a `PanicResult` indicating that no panic has occurred.
     pub fn ok() -> Self {
-        let usize_len = usize::BITS as usize;
         Self {
             has_panicked: 0,
             panic_type: PanicReason::Overflow.as_bits(),
-            start_line: vec![0; usize_len],
-            start_column: vec![0; usize_len],
-            end_line: vec![0; usize_len],
-            end_column: vec![0; usize_len],
+            start_line: [0; USIZE_BITS],
+            start_column: [0; USIZE_BITS],
+            end_line: [0; USIZE_BITS],
+            end_column: [0; USIZE_BITS],
         }
     }
 }
@@ -194,13 +192,13 @@ impl PanicReason {
         }
     }
 
-    fn as_bits(&self) -> Vec<GateIndex> {
+    fn as_bits(&self) -> [GateIndex; USIZE_BITS] {
         let n = match self {
             PanicReason::Overflow => 1,
             PanicReason::DivByZero => 2,
             PanicReason::OutOfBounds => 3,
         };
-        unsigned_as_wires(n, 8)
+        unsigned_as_usize_bits(n)
     }
 }
 
@@ -276,7 +274,8 @@ impl CircuitBuilder {
             *x = shift_gate_index_if_necessary(*x);
             *y = shift_gate_index_if_necessary(*y);
         }
-        self.panic_gates.has_panicked = shift_gate_index_if_necessary(self.panic_gates.has_panicked);
+        self.panic_gates.has_panicked =
+            shift_gate_index_if_necessary(self.panic_gates.has_panicked);
         for w in self.panic_gates.panic_type.iter_mut() {
             *w = shift_gate_index_if_necessary(*w);
         }
@@ -368,20 +367,19 @@ impl CircuitBuilder {
             .map(shift_gate_index_if_necessary)
             .collect();
 
-        let shift_gate_indexes_if_necessary = |indexes: &[usize]| -> Vec<usize> {
+        let shift_gate_indexes_if_necessary = |mut indexes: [usize; USIZE_BITS]| -> [usize; USIZE_BITS] {
+            for wire in indexes.iter_mut() {
+                *wire = shift_gate_index_if_necessary(*wire);
+            }
             indexes
-                .iter()
-                .copied()
-                .map(shift_gate_index_if_necessary)
-                .collect()
         };
         let panic_gates = PanicResult {
             has_panicked: shift_gate_index_if_necessary(self.panic_gates.has_panicked),
-            panic_type: shift_gate_indexes_if_necessary(&self.panic_gates.panic_type),
-            start_line: shift_gate_indexes_if_necessary(&self.panic_gates.start_line),
-            start_column: shift_gate_indexes_if_necessary(&self.panic_gates.start_column),
-            end_line: shift_gate_indexes_if_necessary(&self.panic_gates.end_line),
-            end_column: shift_gate_indexes_if_necessary(&self.panic_gates.end_column),
+            panic_type: shift_gate_indexes_if_necessary(self.panic_gates.panic_type),
+            start_line: shift_gate_indexes_if_necessary(self.panic_gates.start_line),
+            start_column: shift_gate_indexes_if_necessary(self.panic_gates.start_column),
+            end_line: shift_gate_indexes_if_necessary(self.panic_gates.end_line),
+            end_column: shift_gate_indexes_if_necessary(self.panic_gates.end_column),
         };
         Circuit {
             input_gates: self.input_gates,
@@ -394,14 +392,13 @@ impl CircuitBuilder {
     pub fn push_panic_if(&mut self, cond: GateIndex, reason: PanicReason, meta: MetaInfo) {
         let already_panicked = self.panic_gates.has_panicked;
         self.panic_gates.has_panicked = self.push_or(self.panic_gates.has_panicked, cond);
-        let size = usize::BITS as usize;
         let current = PanicResult {
             has_panicked: 1,
             panic_type: reason.as_bits(),
-            start_line: unsigned_as_wires(meta.start.0 as u128, size),
-            start_column: unsigned_as_wires(meta.start.1 as u128, size),
-            end_line: unsigned_as_wires(meta.end.0 as u128, size),
-            end_column: unsigned_as_wires(meta.end.1 as u128, size),
+            start_line: unsigned_as_usize_bits(meta.start.0 as u128),
+            start_column: unsigned_as_usize_bits(meta.start.1 as u128),
+            end_line: unsigned_as_usize_bits(meta.end.0 as u128),
+            end_column: unsigned_as_usize_bits(meta.end.1 as u128),
         };
         for i in 0..self.panic_gates.start_line.len() {
             self.panic_gates.start_line[i] = self.push_mux(
@@ -822,4 +819,12 @@ impl CircuitBuilder {
         }
         (acc_lt, acc_gt)
     }
+}
+
+fn unsigned_as_usize_bits(n: u128) -> [usize; USIZE_BITS] {
+    let mut bits = [0; USIZE_BITS];
+    for i in 0..USIZE_BITS {
+        bits[i] = (n >> (USIZE_BITS - 1 - i) & 1) as usize;
+    }
+    bits
 }
