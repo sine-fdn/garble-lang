@@ -1,5 +1,6 @@
 //! The circuit representation used by the compiler.
 
+use crate::{compile::wires_as_unsigned, token::MetaInfo};
 use std::collections::HashMap;
 
 // This module currently implements 4 very basic types of circuit optimizations:
@@ -15,7 +16,7 @@ const PRINT_OPTIMIZATION_RATIO: bool = false;
 pub type GateIndex = usize;
 
 /// Description of a gate executed under S-MPC.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Gate {
     /// A logical XOR gate attached to the two specified input wires.
     Xor(GateIndex, GateIndex),
@@ -25,8 +26,17 @@ pub enum Gate {
     Not(GateIndex),
 }
 
+/// A decoded panic, indicating why and where a panic occurred.
+#[derive(Debug, Clone)]
+pub struct EvalPanic {
+    /// The reason why the panic occurred.
+    pub reason: PanicReason,
+    /// The location in the source code where the panic occurred.
+    pub panicked_at: MetaInfo,
+}
+
 /// Representation of a circuit evaluated by an S-MPC engine.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct Circuit {
     /// The different parties, with `usize` at index `i` as the number of input bits for party `i`.
     pub input_gates: Vec<usize>,
@@ -34,6 +44,8 @@ pub struct Circuit {
     pub gates: Vec<Gate>,
     /// The indices of the gates in [`Circuit::gates`] that produce output bits.
     pub output_gates: Vec<GateIndex>,
+    /// The output gates that carry information about a panic, if any occurred.
+    pub panic_gates: PanicResult,
 }
 
 impl Circuit {
@@ -41,7 +53,7 @@ impl Circuit {
     ///
     /// Assumes that the inputs have been previously type-checked and **panics** if the number of
     /// parties or the bits of a particular party do not match the circuit.
-    pub fn eval(&self, inputs: &[Vec<bool>]) -> Vec<Option<bool>> {
+    pub fn eval(&self, inputs: &[Vec<bool>]) -> Result<Vec<Option<bool>>, EvalPanic> {
         let mut input_len = 0;
         for p in self.input_gates.iter() {
             input_len += p;
@@ -79,22 +91,42 @@ impl Circuit {
             };
             output[w] = Some(output_bit);
         }
-        for (w, output) in output.iter_mut().enumerate() {
-            if !self.output_gates.contains(&w) {
-                *output = None;
+        let resolve_wires_as_usize = |wires: &[usize]| -> usize {
+            let resolved: Vec<bool> = wires.iter().map(|w| output[*w].unwrap()).collect();
+            wires_as_unsigned(&resolved) as usize
+        };
+        if output[self.panic_gates.has_panicked].unwrap() {
+            let reason =
+                PanicReason::from_num(resolve_wires_as_usize(&self.panic_gates.panic_type));
+            let start_line = resolve_wires_as_usize(&self.panic_gates.start_line) as usize;
+            let start_column = resolve_wires_as_usize(&self.panic_gates.start_column) as usize;
+            let end_line = resolve_wires_as_usize(&self.panic_gates.end_line) as usize;
+            let end_column = resolve_wires_as_usize(&self.panic_gates.end_column) as usize;
+            Err(EvalPanic {
+                reason,
+                panicked_at: MetaInfo {
+                    start: (start_line, start_column),
+                    end: (end_line, end_column),
+                },
+            })
+        } else {
+            for (w, output) in output.iter_mut().enumerate() {
+                if !self.output_gates.contains(&w) {
+                    *output = None;
+                }
             }
+            Ok(output)
         }
-        output
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum BuilderGate {
     Xor(GateIndex, GateIndex),
     And(GateIndex, GateIndex),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct CircuitBuilder {
     shift: usize,
     input_gates: Vec<usize>,
@@ -103,6 +135,71 @@ pub(crate) struct CircuitBuilder {
     negated: HashMap<GateIndex, GateIndex>,
     gates_optimized: usize,
     gate_counter: usize,
+    panic_gates: PanicResult,
+}
+
+const USIZE_BITS: usize = usize::BITS as usize;
+
+/// A collection of wires that carry information about whether and where a panic occurred.
+#[derive(Debug, Clone)]
+pub struct PanicResult {
+    /// A boolean wire indicating whether a panic has occurred.
+    pub has_panicked: GateIndex,
+    /// The (encoded) reason why the panic occurred (overflow, div-by-zero, etc).
+    pub panic_type: [GateIndex; USIZE_BITS],
+    /// The (encoded) first line in the source code where the panic occurred.
+    pub start_line: [GateIndex; USIZE_BITS],
+    /// The (encoded) first column of the first line in the source code where the panic occurred.
+    pub start_column: [GateIndex; USIZE_BITS],
+    /// The (encoded) last line in the source code where the panic occurred.
+    pub end_line: [GateIndex; USIZE_BITS],
+    /// The (encoded) last column of the last line in the source code where the panic occurred.
+    pub end_column: [GateIndex; USIZE_BITS],
+}
+
+impl PanicResult {
+    /// Returns a `PanicResult` indicating that no panic has occurred.
+    pub fn ok() -> Self {
+        Self {
+            has_panicked: 0,
+            panic_type: PanicReason::Overflow.as_bits(),
+            start_line: [0; USIZE_BITS],
+            start_column: [0; USIZE_BITS],
+            end_line: [0; USIZE_BITS],
+            end_column: [0; USIZE_BITS],
+        }
+    }
+}
+
+/// The reason why a panic occurred.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum PanicReason {
+    /// Arithmetic overflow.
+    Overflow,
+    /// Division by zero.
+    DivByZero,
+    /// Array out of bounds access.
+    OutOfBounds,
+}
+
+impl PanicReason {
+    fn from_num(n: usize) -> Self {
+        match n {
+            1 => PanicReason::Overflow,
+            2 => PanicReason::DivByZero,
+            3 => PanicReason::OutOfBounds,
+            r => panic!("Invalid panic reason: {}", r),
+        }
+    }
+
+    fn as_bits(&self) -> [GateIndex; USIZE_BITS] {
+        let n = match self {
+            PanicReason::Overflow => 1,
+            PanicReason::DivByZero => 2,
+            PanicReason::OutOfBounds => 3,
+        };
+        unsigned_as_usize_bits(n)
+    }
 }
 
 impl CircuitBuilder {
@@ -119,6 +216,7 @@ impl CircuitBuilder {
             negated: HashMap::new(),
             gates_optimized: 0,
             gate_counter,
+            panic_gates: PanicResult::ok(),
         }
     }
 
@@ -128,6 +226,12 @@ impl CircuitBuilder {
         // inputs (and their inputs, etc.) as used:
         let shift = self.shift;
         let mut output_gate_stack = output_gates.clone();
+        output_gate_stack.push(self.panic_gates.has_panicked);
+        output_gate_stack.extend(self.panic_gates.panic_type.iter());
+        output_gate_stack.extend(self.panic_gates.start_line.iter());
+        output_gate_stack.extend(self.panic_gates.start_column.iter());
+        output_gate_stack.extend(self.panic_gates.end_line.iter());
+        output_gate_stack.extend(self.panic_gates.end_column.iter());
         let mut used_gates = vec![false; self.gates.len()];
         while let Some(gate_index) = output_gate_stack.pop() {
             if gate_index >= shift {
@@ -155,17 +259,37 @@ impl CircuitBuilder {
         }
         // Now that we know which gates are useless, iterate through the circuit and shift the
         // indices of the useful gates to reuse the freed space:
+        let shift_gate_index_if_necessary = |index: usize| {
+            if index > shift {
+                index - unused_before_gate[index - shift]
+            } else {
+                index
+            }
+        };
         for gate in self.gates.iter_mut() {
             let (x, y) = match gate {
                 BuilderGate::Xor(x, y) => (x, y),
                 BuilderGate::And(x, y) => (x, y),
             };
-            if *x > shift {
-                *x -= unused_before_gate[*x - shift];
-            }
-            if *y > shift {
-                *y -= unused_before_gate[*y - shift];
-            }
+            *x = shift_gate_index_if_necessary(*x);
+            *y = shift_gate_index_if_necessary(*y);
+        }
+        self.panic_gates.has_panicked =
+            shift_gate_index_if_necessary(self.panic_gates.has_panicked);
+        for w in self.panic_gates.panic_type.iter_mut() {
+            *w = shift_gate_index_if_necessary(*w);
+        }
+        for w in self.panic_gates.start_line.iter_mut() {
+            *w = shift_gate_index_if_necessary(*w);
+        }
+        for w in self.panic_gates.start_column.iter_mut() {
+            *w = shift_gate_index_if_necessary(*w);
+        }
+        for w in self.panic_gates.end_line.iter_mut() {
+            *w = shift_gate_index_if_necessary(*w);
+        }
+        for w in self.panic_gates.end_column.iter_mut() {
+            *w = shift_gate_index_if_necessary(*w);
         }
         let mut without_unused_gates = Vec::with_capacity(self.gates.len() - unused_gates);
         for (w, &used) in used_gates.iter().enumerate() {
@@ -242,11 +366,105 @@ impl CircuitBuilder {
             .into_iter()
             .map(shift_gate_index_if_necessary)
             .collect();
+
+        let shift_gate_indexes_if_necessary = |mut indexes: [usize; USIZE_BITS]| -> [usize; USIZE_BITS] {
+            for wire in indexes.iter_mut() {
+                *wire = shift_gate_index_if_necessary(*wire);
+            }
+            indexes
+        };
+        let panic_gates = PanicResult {
+            has_panicked: shift_gate_index_if_necessary(self.panic_gates.has_panicked),
+            panic_type: shift_gate_indexes_if_necessary(self.panic_gates.panic_type),
+            start_line: shift_gate_indexes_if_necessary(self.panic_gates.start_line),
+            start_column: shift_gate_indexes_if_necessary(self.panic_gates.start_column),
+            end_line: shift_gate_indexes_if_necessary(self.panic_gates.end_line),
+            end_column: shift_gate_indexes_if_necessary(self.panic_gates.end_column),
+        };
         Circuit {
             input_gates: self.input_gates,
             gates,
             output_gates,
+            panic_gates,
         }
+    }
+
+    pub fn push_panic_if(&mut self, cond: GateIndex, reason: PanicReason, meta: MetaInfo) {
+        let already_panicked = self.panic_gates.has_panicked;
+        self.panic_gates.has_panicked = self.push_or(self.panic_gates.has_panicked, cond);
+        let current = PanicResult {
+            has_panicked: 1,
+            panic_type: reason.as_bits(),
+            start_line: unsigned_as_usize_bits(meta.start.0 as u128),
+            start_column: unsigned_as_usize_bits(meta.start.1 as u128),
+            end_line: unsigned_as_usize_bits(meta.end.0 as u128),
+            end_column: unsigned_as_usize_bits(meta.end.1 as u128),
+        };
+        for i in 0..self.panic_gates.start_line.len() {
+            self.panic_gates.start_line[i] = self.push_mux(
+                already_panicked,
+                self.panic_gates.start_line[i],
+                current.start_line[i],
+            );
+            self.panic_gates.start_column[i] = self.push_mux(
+                already_panicked,
+                self.panic_gates.start_column[i],
+                current.start_column[i],
+            );
+            self.panic_gates.end_line[i] = self.push_mux(
+                already_panicked,
+                self.panic_gates.end_line[i],
+                current.end_line[i],
+            );
+            self.panic_gates.end_column[i] = self.push_mux(
+                already_panicked,
+                self.panic_gates.end_column[i],
+                current.end_column[i],
+            );
+        }
+        for i in 0..current.panic_type.len() {
+            self.panic_gates.panic_type[i] = self.push_mux(
+                already_panicked,
+                self.panic_gates.panic_type[i],
+                current.panic_type[i],
+            );
+        }
+    }
+
+    pub fn peek_panic(&self) -> &PanicResult {
+        &self.panic_gates
+    }
+
+    pub fn replace_panic_with(&mut self, p: PanicResult) -> PanicResult {
+        std::mem::replace(&mut self.panic_gates, p)
+    }
+
+    pub fn mux_panic(
+        &mut self,
+        condition: GateIndex,
+        t: &PanicResult,
+        f: &PanicResult,
+    ) -> PanicResult {
+        let mut panic_gates = PanicResult::ok();
+        panic_gates.has_panicked = self.push_mux(condition, t.has_panicked, f.has_panicked);
+        for (i, (&if_true, &if_false)) in t.panic_type.iter().zip(f.panic_type.iter()).enumerate() {
+            panic_gates.panic_type[i] = self.push_mux(condition, if_true, if_false);
+        }
+        for (i, (&if_true, &if_false)) in t.start_line.iter().zip(f.start_line.iter()).enumerate() {
+            panic_gates.start_line[i] = self.push_mux(condition, if_true, if_false);
+        }
+        for (i, (&if_true, &if_false)) in
+            t.start_column.iter().zip(f.start_column.iter()).enumerate()
+        {
+            panic_gates.start_column[i] = self.push_mux(condition, if_true, if_false);
+        }
+        for (i, (&if_true, &if_false)) in t.end_line.iter().zip(f.end_line.iter()).enumerate() {
+            panic_gates.end_line[i] = self.push_mux(condition, if_true, if_false);
+        }
+        for (i, (&if_true, &if_false)) in t.end_column.iter().zip(f.end_column.iter()).enumerate() {
+            panic_gates.end_column[i] = self.push_mux(condition, if_true, if_false);
+        }
+        panic_gates
     }
 
     // - Constant evaluation (e.g. x ^ 0 == x; x & 1 == x; x & 0 == 0)
@@ -453,19 +671,21 @@ impl CircuitBuilder {
         &mut self,
         x: &[GateIndex],
         y: &[GateIndex],
-    ) -> (Vec<GateIndex>, GateIndex) {
+    ) -> (Vec<GateIndex>, GateIndex, GateIndex) {
         assert_eq!(x.len(), y.len());
         let bits = x.len();
 
+        let mut carry_prev = 0;
         let mut carry = 0;
         let mut sum = vec![0; bits];
         // sequence of full adders:
         for i in (0..bits).rev() {
             let (s, c) = self.push_adder(x[i], y[i], carry);
             sum[i] = s;
+            carry_prev = carry;
             carry = c;
         }
-        (sum, carry)
+        (sum, carry, carry_prev)
     }
 
     pub fn push_negation_circuit(&mut self, x: &[GateIndex]) -> Vec<GateIndex> {
@@ -501,7 +721,7 @@ impl CircuitBuilder {
             carry = self.push_and(carry, y);
         }
 
-        let (mut sum_extended, _carry) = self.push_addition_circuit(&x_extended, &z);
+        let (mut sum_extended, _, _) = self.push_addition_circuit(&x_extended, &z);
         let sum = sum_extended.split_off(1);
         (sum, sum_extended[0])
     }
@@ -599,4 +819,12 @@ impl CircuitBuilder {
         }
         (acc_lt, acc_gt)
     }
+}
+
+fn unsigned_as_usize_bits(n: u128) -> [usize; USIZE_BITS] {
+    let mut bits = [0; USIZE_BITS];
+    for (i, bit) in bits.iter_mut().enumerate().take(USIZE_BITS) {
+        *bit = (n >> (USIZE_BITS - 1 - i) & 1) as usize;
+    }
+    bits
 }

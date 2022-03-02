@@ -96,8 +96,21 @@ impl TypeError {
 impl EvalError {
     /// Returns a human-readable error description, showing where the error occurred in the source.
     pub fn prettify(&self, prg: &str) -> String {
-        let e = Error::EvalError(self.clone());
-        e.prettify(prg)
+        match self {
+            EvalError::Panic(panic) => {
+                let mut msg = "".to_string();
+                let meta = panic.panicked_at;
+                msg += &format!(
+                    "Panic due to {:?} on line {}:{}\n",
+                    panic.reason,
+                    meta.start.0 + 1,
+                    meta.start.1 + 1
+                );
+                msg += &prettify_meta(prg, meta);
+                msg
+            }
+            _ => format!("{self:?}"),
+        }
     }
 }
 
@@ -106,7 +119,7 @@ impl Error {
     pub fn prettify(&self, prg: &str) -> String {
         match self {
             Error::CompileTimeError(e) => e.prettify(prg),
-            Error::EvalError(e) => format!("{:?}", e),
+            Error::EvalError(e) => e.prettify(prg),
         }
     }
 }

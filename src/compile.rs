@@ -4,7 +4,7 @@ use std::{cmp::max, collections::HashMap};
 
 use crate::{
     ast::{EnumDef, Op, ParamDef, Type, UnaryOp},
-    circuit::{Circuit, CircuitBuilder, GateIndex},
+    circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, PanicResult},
     env::Env,
     token::{SignedNumType, UnsignedNumType},
     typed_ast::{
@@ -90,13 +90,19 @@ impl Expr {
                 array
             }
             ExprEnum::ArrayAccess(array, index) => {
+                let num_elems = match &array.1 {
+                    Type::Array(_, size) => *size,
+                    _ => panic!("Found a non-array value in an array access expr"),
+                };
                 let elem_bits = ty.size_in_bits_for_defs(Some(enums));
                 let mut array = array.compile(enums, fns, env, circuit);
                 let mut index = index.compile(enums, fns, env, circuit);
+                let index_bits =
+                    Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(Some(enums));
                 extend_to_bits(
                     &mut index,
                     &Type::Unsigned(UnsignedNumType::Usize),
-                    Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(Some(enums)),
+                    index_bits,
                 );
                 let out_of_bounds_elem = 1;
                 for mux_layer in (0..index.len()).rev() {
@@ -119,6 +125,13 @@ impl Expr {
                     }
                     array = muxed_array;
                 }
+                let mut array_len = Vec::with_capacity(index_bits);
+                unsigned_to_bits(num_elems as u128, index_bits, &mut array_len);
+                let array_len: Vec<usize> = array_len.into_iter().map(|b| b as usize).collect();
+                let (index_less_than_array_len, _) =
+                    circuit.push_comparator_circuit(index_bits, &index, false, &array_len, false);
+                let out_of_bounds = circuit.push_not(index_less_than_array_len);
+                circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, *meta);
                 array
             }
             ExprEnum::ArrayAssignment(array, index, value) => {
@@ -132,10 +145,12 @@ impl Expr {
                 let mut array = array.compile(enums, fns, env, circuit);
                 let mut index = index.compile(enums, fns, env, circuit);
                 let value = value.compile(enums, fns, env, circuit);
+                let index_bits =
+                    Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(Some(enums));
                 extend_to_bits(
                     &mut index,
                     &Type::Unsigned(UnsignedNumType::Usize),
-                    Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(Some(enums)),
+                    index_bits,
                 );
                 let elem_bits = elem_ty.size_in_bits_for_defs(Some(enums));
 
@@ -164,6 +179,13 @@ impl Expr {
                         array[i * elem_bits + b] = x1;
                     }
                 }
+                let mut array_len = Vec::with_capacity(index_bits);
+                unsigned_to_bits(*size as u128, index_bits, &mut array_len);
+                let array_len: Vec<usize> = array_len.into_iter().map(|b| b as usize).collect();
+                let (index_less_than_array_len, _) =
+                    circuit.push_comparator_circuit(index_bits, &index, false, &array_len, false);
+                let out_of_bounds = circuit.push_not(index_less_than_array_len);
+                circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, *meta);
                 array
             }
             ExprEnum::TupleLiteral(tuple) => {
@@ -263,8 +285,27 @@ impl Expr {
                         }
                         output_bits
                     }
-                    Op::Sub => circuit.push_subtraction_circuit(&x, &y).0,
-                    Op::Add => circuit.push_addition_circuit(&x, &y).0,
+                    Op::Sub => {
+                        let y = circuit.push_negation_circuit(&y);
+                        let (sum, carry, carry_prev) = circuit.push_addition_circuit(&x, &y);
+                        let overflow = if is_signed(ty) {
+                            circuit.push_xor(carry, carry_prev)
+                        } else {
+                            carry
+                        };
+                        circuit.push_panic_if(overflow, PanicReason::Overflow, *meta);
+                        sum
+                    }
+                    Op::Add => {
+                        let (sum, carry, carry_prev) = circuit.push_addition_circuit(&x, &y);
+                        let overflow = if is_signed(ty_x) || is_signed(ty_y) {
+                            circuit.push_xor(carry, carry_prev)
+                        } else {
+                            carry
+                        };
+                        circuit.push_panic_if(overflow, PanicReason::Overflow, *meta);
+                        sum
+                    }
                     Op::Mul => {
                         let mut sums: Vec<Vec<GateIndex>> = vec![vec![0; bits]; bits];
                         let mut carries: Vec<Vec<GateIndex>> = vec![vec![0; bits]; bits];
@@ -291,6 +332,12 @@ impl Expr {
                         result
                     }
                     Op::Div => {
+                        let mut all_zero = 1;
+                        for b in y.iter() {
+                            let eq = circuit.push_eq(*b, 0);
+                            all_zero = circuit.push_and(all_zero, eq);
+                        }
+                        circuit.push_panic_if(all_zero, PanicReason::DivByZero, *meta);
                         if is_signed(ty) {
                             circuit.push_signed_division_circuit(&mut x, &mut y).0
                         } else {
@@ -359,19 +406,24 @@ impl Expr {
             }
             ExprEnum::If(condition, case_true, case_false) => {
                 let condition = condition.compile(enums, fns, env, circuit);
-                let case_true = case_true.compile(enums, fns, env, circuit);
-                let case_false = case_false.compile(enums, fns, env, circuit);
+                let panic_before_branches = circuit.peek_panic().clone();
+
                 assert_eq!(condition.len(), 1);
-                assert_eq!(case_true.len(), case_false.len());
                 let condition = condition[0];
-                let not_condition = circuit.push_not(condition);
+
+                let case_true = case_true.compile(enums, fns, env, circuit);
+                let panic_if_true = circuit.replace_panic_with(panic_before_branches.clone());
+
+                let case_false = case_false.compile(enums, fns, env, circuit);
+                let panic_if_false = circuit.replace_panic_with(panic_before_branches);
+
+                let muxed_panic = circuit.mux_panic(condition, &panic_if_true, &panic_if_false);
+                circuit.replace_panic_with(muxed_panic);
+
+                assert_eq!(case_true.len(), case_false.len());
                 let mut gate_indexes = Vec::with_capacity(case_true.len());
                 for i in 0..case_true.len() {
-                    let case_true = case_true[i];
-                    let case_false = case_false[i];
-                    let gate_if_true = circuit.push_and(case_true, condition);
-                    let gate_if_false = circuit.push_and(case_false, not_condition);
-                    gate_indexes.push(circuit.push_xor(gate_if_true, gate_if_false));
+                    gate_indexes.push(circuit.push_mux(condition, case_true[i], case_false[i]));
                 }
                 gate_indexes
             }
@@ -476,14 +528,20 @@ impl Expr {
                 let expr = expr.compile(enums, fns, env, circuit);
                 let mut has_prev_match = 0;
                 let mut muxed_ret_expr = vec![0; bits];
+                let mut muxed_panic = circuit.peek_panic().clone();
 
                 for (pattern, ret_expr) in clauses {
                     env.push();
+
+                    circuit.replace_panic_with(PanicResult::ok());
+
                     let is_match = pattern.compile(&expr, enums, fns, env, circuit);
                     let ret_expr = ret_expr.compile(enums, fns, env, circuit);
 
                     let no_prev_match = circuit.push_not(has_prev_match);
                     let s = circuit.push_and(no_prev_match, is_match);
+
+                    muxed_panic = circuit.mux_panic(s, &circuit.peek_panic().clone(), &muxed_panic);
                     for i in 0..bits {
                         let x0 = ret_expr[i];
                         let x1 = muxed_ret_expr[i];
@@ -492,6 +550,7 @@ impl Expr {
                     has_prev_match = circuit.push_or(has_prev_match, is_match);
                     env.pop();
                 }
+                circuit.replace_panic_with(muxed_panic);
                 muxed_ret_expr
             }
         }
@@ -701,6 +760,14 @@ pub(crate) fn signed_as_wires(n: i128, size: usize) -> Vec<usize> {
     let mut bits = Vec::with_capacity(size);
     signed_to_bits(n, size, &mut bits);
     bits.into_iter().map(|b| b as usize).collect()
+}
+
+pub(crate) fn wires_as_unsigned(wires: &[bool]) -> u128 {
+    let mut n = 0;
+    for (i, output) in wires.iter().copied().enumerate() {
+        n += (output as u128) << (wires.len() - 1 - i);
+    }
+    n
 }
 
 fn extend_to_bits(v: &mut Vec<usize>, ty: &Type, bits: usize) {
