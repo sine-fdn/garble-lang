@@ -617,19 +617,19 @@ impl Parser {
     fn parse_unary(&mut self) -> Result<Expr, ()> {
         // -, !
         if let Some(meta) = self.next_matches(&TokenEnum::Bang) {
-            let primary = self.parse_primary()?;
-            let Expr(_, expr_meta) = primary;
+            let unary = self.parse_unary()?;
+            let Expr(_, expr_meta) = unary;
             let meta = join_meta(meta, expr_meta);
             Ok(Expr(
-                ExprEnum::UnaryOp(UnaryOp::Not, Box::new(primary)),
+                ExprEnum::UnaryOp(UnaryOp::Not, Box::new(unary)),
                 meta,
             ))
         } else if let Some(meta) = self.next_matches(&TokenEnum::Minus) {
-            let primary = self.parse_primary()?;
-            let Expr(_, expr_meta) = primary;
+            let unary = self.parse_unary()?;
+            let Expr(_, expr_meta) = unary;
             let meta = join_meta(meta, expr_meta);
             Ok(Expr(
-                ExprEnum::UnaryOp(UnaryOp::Neg, Box::new(primary)),
+                ExprEnum::UnaryOp(UnaryOp::Neg, Box::new(unary)),
                 meta,
             ))
         } else {

@@ -259,10 +259,7 @@ impl Expr {
                     Op::BitOr => {
                         let mut output_bits = vec![0; bits];
                         for i in 0..bits {
-                            let xor = circuit.push_xor(x[i], y[i]);
-                            let and = circuit.push_and(x[i], y[i]);
-                            let or = circuit.push_xor(xor, and);
-                            output_bits[i] = or;
+                            output_bits[i] = circuit.push_or(x[i], y[i]);
                         }
                         output_bits
                     }

@@ -1,10 +1,21 @@
 //! The circuit representation used by the compiler.
 
+use std::collections::HashMap;
+
+// This module currently implements 4 very basic types of circuit optimizations:
+//
+// 1. Constant evaluation (e.g. x ^ 0 == x; x & 1 == x; x & 0 == 0)
+// 2. Sub-expression sharing (wires are re-used if a gate with the same type and inputs exists)
+// 3. Pruning of useless gates (gates that are not part of the output nor used by other gates)
+// 4. Rewriting of equivalences up to a max depth (e.g. x & (!x | y) == x & y)
+const MAX_OPTIMIZATION_DEPTH: u32 = 4;
+const PRINT_OPTIMIZATION_RATIO: bool = false;
+
 /// Data type to uniquely identify gates.
 pub type GateIndex = usize;
 
 /// Description of a gate executed under S-MPC.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Gate {
     /// A logical XOR gate attached to the two specified input wires.
     Xor(GateIndex, GateIndex),
@@ -21,7 +32,7 @@ pub struct Circuit {
     pub input_gates: Vec<usize>,
     /// The non-input intermediary gates.
     pub gates: Vec<Gate>,
-    /// The indexes of the gates in [`Circuit::gates`] that produce output bits.
+    /// The indices of the gates in [`Circuit::gates`] that produce output bits.
     pub output_gates: Vec<GateIndex>,
 }
 
@@ -77,7 +88,7 @@ impl Circuit {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum BuilderGate {
     Xor(GateIndex, GateIndex),
     And(GateIndex, GateIndex),
@@ -85,8 +96,12 @@ pub(crate) enum BuilderGate {
 
 #[derive(Clone, Debug)]
 pub(crate) struct CircuitBuilder {
+    shift: usize,
     input_gates: Vec<usize>,
     gates: Vec<BuilderGate>,
+    cache: HashMap<BuilderGate, GateIndex>,
+    negated: HashMap<GateIndex, GateIndex>,
+    gates_optimized: usize,
     gate_counter: usize,
 }
 
@@ -97,17 +112,96 @@ impl CircuitBuilder {
             gate_counter += input_gates_of_party;
         }
         Self {
+            shift: gate_counter,
             input_gates,
             gates: vec![],
+            cache: HashMap::new(),
+            negated: HashMap::new(),
+            gates_optimized: 0,
             gate_counter,
         }
     }
 
-    pub fn build(self, output_gates: Vec<GateIndex>) -> Circuit {
-        let mut input_shift = 0;
-        for p in self.input_gates.iter() {
-            input_shift += p;
+    // Pruning of useless gates (gates that are not part of the output nor used by other gates):
+    fn remove_unused_gates(&mut self, output_gates: Vec<GateIndex>) -> Vec<GateIndex> {
+        // To find all unused gates, we start at the output gates and recursively mark all their
+        // inputs (and their inputs, etc.) as used:
+        let shift = self.shift;
+        let mut output_gate_stack = output_gates.clone();
+        let mut used_gates = vec![false; self.gates.len()];
+        while let Some(gate_index) = output_gate_stack.pop() {
+            if gate_index >= shift {
+                let shifted_index = gate_index - shift;
+                used_gates[shifted_index] = true;
+                let (x, y) = match self.gates[shifted_index] {
+                    BuilderGate::Xor(x, y) => (x, y),
+                    BuilderGate::And(x, y) => (x, y),
+                };
+                if x >= shift && !used_gates[x - shift] {
+                    output_gate_stack.push(x);
+                }
+                if y >= shift && !used_gates[y - shift] {
+                    output_gate_stack.push(y);
+                }
+            }
         }
+        let mut unused_gates = 0;
+        let mut unused_before_gate = vec![0; self.gates.len()];
+        for (w, used) in used_gates.iter().enumerate() {
+            if !used {
+                unused_gates += 1;
+            }
+            unused_before_gate[w] = unused_gates;
+        }
+        // Now that we know which gates are useless, iterate through the circuit and shift the
+        // indices of the useful gates to reuse the freed space:
+        for gate in self.gates.iter_mut() {
+            let (x, y) = match gate {
+                BuilderGate::Xor(x, y) => (x, y),
+                BuilderGate::And(x, y) => (x, y),
+            };
+            if *x > shift {
+                *x -= unused_before_gate[*x - shift];
+            }
+            if *y > shift {
+                *y -= unused_before_gate[*y - shift];
+            }
+        }
+        let mut without_unused_gates = Vec::with_capacity(self.gates.len() - unused_gates);
+        for (w, &used) in used_gates.iter().enumerate() {
+            if used {
+                without_unused_gates.push(self.gates[w]);
+            }
+        }
+        self.gates_optimized += unused_gates;
+        self.gates = without_unused_gates;
+        // The indices of the output gates might have become invalid due to shifting the gates
+        // around, so we need to shift the output indices as well:
+        output_gates
+            .into_iter()
+            .map(|w| {
+                if w > shift {
+                    w - unused_before_gate[w - shift]
+                } else {
+                    w
+                }
+            })
+            .collect()
+    }
+
+    pub fn build(mut self, output_gates: Vec<GateIndex>) -> Circuit {
+        let output_gates = self.remove_unused_gates(output_gates);
+
+        if PRINT_OPTIMIZATION_RATIO && self.gates_optimized > 0 {
+            let optimized = self.gates_optimized * 100 / (self.gates.len() + self.gates_optimized);
+            println!("Optimizations removed {optimized}% of all generated gates");
+        }
+
+        // All of the following shifts are necessary to translate between the intermediate circuit
+        // representation (where indices 0 and 1 always refer to constant false and true values) and
+        // the final representation (where there are no constant values and the constants have to be
+        // 'built' by XOR'ing two identical input wire + using NOT):
+        let input_shift = self.shift - 2;
         let shift_gate_index_if_necessary = |i: GateIndex| {
             if i <= 1 {
                 i + input_shift
@@ -155,16 +249,151 @@ impl CircuitBuilder {
         }
     }
 
+    // - Constant evaluation (e.g. x ^ 0 == x; x & 1 == x; x & 0 == 0)
+    // - Rewriting of equivalences up to a max depth (e.g. x & (!x | y) == x & y)
+    //
+    // `is_true` is set by `push_and` to simplify AND sub-exprs
+    fn optimize_gate(&self, w: GateIndex, is_true: GateIndex, depth: u32) -> GateIndex {
+        if depth >= MAX_OPTIMIZATION_DEPTH {
+            return w;
+        } else if w == is_true {
+            return 1;
+        } else if w >= self.shift {
+            match self.gates[w - self.shift] {
+                BuilderGate::Xor(x, y) => {
+                    if let Some(optimized) = self.optimize_xor(x, y, is_true, depth + 1) {
+                        return optimized;
+                    }
+                }
+                BuilderGate::And(x, y) => {
+                    if let Some(optimized) = self.optimize_and(x, y, is_true, depth + 1) {
+                        return optimized;
+                    }
+                }
+            }
+        }
+        w
+    }
+
+    // - Constant evaluation (e.g. x ^ 0 == x; x ^ x == 0)
+    // - Rewriting of equivalences up to a max depth (e.g. x & (!x | y) == x & y)
+    // - Sub-expression sharing (wires are re-used if a gate with the same type and inputs exists)
+    //
+    // `is_true` is set by `push_and` to simplify AND sub-exprs
+    fn optimize_xor(
+        &self,
+        x: GateIndex,
+        y: GateIndex,
+        is_true: GateIndex,
+        depth: u32,
+    ) -> Option<GateIndex> {
+        let x = self.optimize_gate(x, is_true, depth);
+        let y = self.optimize_gate(y, is_true, depth);
+        if x == 0 {
+            return Some(y);
+        } else if y == 0 {
+            return Some(x);
+        } else if x == y {
+            return Some(0);
+        } else if let Some(&x_negated) = self.negated.get(&x) {
+            if x_negated == y {
+                return Some(1);
+            } else if y == 1 {
+                return Some(x_negated);
+            }
+        } else if let Some(&y_negated) = self.negated.get(&y) {
+            if y_negated == x {
+                return Some(1);
+            } else if x == 1 {
+                return Some(y_negated);
+            }
+        }
+        // Sub-expression sharing:
+        if let Some(&wire) = self.cache.get(&BuilderGate::Xor(x, y)) {
+            return Some(wire);
+        }
+        None
+    }
+
+    // - Constant evaluation (e.g. x & x == x; x & 1 == x; x & 0 == 0)
+    // - Rewriting of equivalences up to a max depth (e.g. x & (!x | y) == x & y)
+    // - Sub-expression sharing (wires are re-used if a gate with the same type and inputs exists)
+    //
+    // `is_true` is set by `push_and` to simplify AND sub-exprs
+    fn optimize_and(
+        &self,
+        x: GateIndex,
+        y: GateIndex,
+        is_true: GateIndex,
+        depth: u32,
+    ) -> Option<GateIndex> {
+        let x = self.optimize_gate(x, is_true, depth);
+        let y = self.optimize_gate(y, is_true, depth);
+        if x == 0 || y == 0 {
+            return Some(0);
+        } else if x == 1 {
+            return Some(y);
+        } else if y == 1 || x == y {
+            return Some(x);
+        } else if let Some(&x_negated) = self.negated.get(&x) {
+            if x_negated == y {
+                return Some(0);
+            }
+        } else if let Some(&y_negated) = self.negated.get(&y) {
+            if y_negated == x {
+                return Some(0);
+            }
+        }
+        // Sub-expression sharing:
+        if let Some(&wire) = self.cache.get(&BuilderGate::And(x, y)) {
+            return Some(wire);
+        }
+        None
+    }
+
     pub fn push_xor(&mut self, x: GateIndex, y: GateIndex) -> GateIndex {
-        self.gate_counter += 1;
-        self.gates.push(BuilderGate::Xor(x, y));
-        self.gate_counter - 1
+        if let Some(optimized) = self.optimize_xor(x, y, 1, 0) {
+            self.gates_optimized += 1;
+            optimized
+        } else {
+            let gate = BuilderGate::Xor(x, y);
+            self.gate_counter += 1;
+            self.gates.push(gate);
+            let gate_index = self.gate_counter - 1;
+            self.cache.insert(gate, gate_index);
+            if x == 1 {
+                self.negated.insert(y, gate_index);
+                self.negated.insert(gate_index, y);
+            }
+            if y == 1 {
+                self.negated.insert(x, gate_index);
+                self.negated.insert(gate_index, x);
+            }
+            gate_index
+        }
     }
 
     pub fn push_and(&mut self, x: GateIndex, y: GateIndex) -> GateIndex {
-        self.gate_counter += 1;
-        self.gates.push(BuilderGate::And(x, y));
-        self.gate_counter - 1
+        // if we have (x & y) and x and/or y are sub-expressions, we can simplify each
+        // sub-expression while assuming that the other sub-expression is true (or the and as a
+        // whole would evaluate to false), e.g.:
+        //
+        // x & (!x | y)
+        // -> evaluate x while assuming that (!x | y) is true => no optimization possible
+        // -> evaluate (x! | y) while assuming that x is true => simplify (x! | y) to (0 | y) == y
+        // ==> whole expression is simplified to x & y
+        let x = self.optimize_gate(x, y, 0);
+        let y = self.optimize_gate(y, x, 0);
+        if let Some(optimized) = self.optimize_and(x, y, 1, MAX_OPTIMIZATION_DEPTH) {
+            self.gates_optimized += 1;
+            optimized
+        } else {
+            let gate = BuilderGate::And(x, y);
+            self.gate_counter += 1;
+            self.gates.push(gate);
+            self.cache.insert(gate, self.gate_counter - 1);
+            self.gate_counter - 1
+        }
     }
 
     pub fn push_not(&mut self, x: GateIndex) -> GateIndex {
