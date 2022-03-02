@@ -26,15 +26,6 @@ pub enum Gate {
     Not(GateIndex),
 }
 
-/// A decoded panic, indicating why and where a panic occurred.
-#[derive(Debug, Clone)]
-pub struct EvalPanic {
-    /// The reason why the panic occurred.
-    pub reason: PanicReason,
-    /// The location in the source code where the panic occurred.
-    pub panicked_at: MetaInfo,
-}
-
 /// Representation of a circuit evaluated by an S-MPC engine.
 #[derive(Debug, Clone)]
 pub struct Circuit {
@@ -44,8 +35,6 @@ pub struct Circuit {
     pub gates: Vec<Gate>,
     /// The indices of the gates in [`Circuit::gates`] that produce output bits.
     pub output_gates: Vec<GateIndex>,
-    /// The output gates that carry information about a panic, if any occurred.
-    pub panic_gates: PanicResult,
 }
 
 impl Circuit {
@@ -53,7 +42,7 @@ impl Circuit {
     ///
     /// Assumes that the inputs have been previously type-checked and **panics** if the number of
     /// parties or the bits of a particular party do not match the circuit.
-    pub fn eval(&self, inputs: &[Vec<bool>]) -> Result<Vec<Option<bool>>, EvalPanic> {
+    pub fn eval(&self, inputs: &[Vec<bool>]) -> Result<Vec<bool>, EvalPanic> {
         let mut input_len = 0;
         for p in self.input_gates.iter() {
             input_len += p;
@@ -91,32 +80,12 @@ impl Circuit {
             };
             output[w] = Some(output_bit);
         }
-        let resolve_wires_as_usize = |wires: &[usize]| -> usize {
-            let resolved: Vec<bool> = wires.iter().map(|w| output[*w].unwrap()).collect();
-            wires_as_unsigned(&resolved) as usize
-        };
-        if output[self.panic_gates.has_panicked].unwrap() {
-            let reason =
-                PanicReason::from_num(resolve_wires_as_usize(&self.panic_gates.panic_type));
-            let start_line = resolve_wires_as_usize(&self.panic_gates.start_line) as usize;
-            let start_column = resolve_wires_as_usize(&self.panic_gates.start_column) as usize;
-            let end_line = resolve_wires_as_usize(&self.panic_gates.end_line) as usize;
-            let end_column = resolve_wires_as_usize(&self.panic_gates.end_column) as usize;
-            Err(EvalPanic {
-                reason,
-                panicked_at: MetaInfo {
-                    start: (start_line, start_column),
-                    end: (end_line, end_column),
-                },
-            })
-        } else {
-            for (w, output) in output.iter_mut().enumerate() {
-                if !self.output_gates.contains(&w) {
-                    *output = None;
-                }
-            }
-            Ok(output)
+
+        let mut output_packed: Vec<bool> = Vec::with_capacity(self.output_gates.len());
+        for output_gate in &self.output_gates {
+            output_packed.push(output[*output_gate].unwrap());
         }
+        EvalPanic::parse(&output_packed).map(|output| output.to_vec())
     }
 }
 
@@ -139,6 +108,7 @@ pub(crate) struct CircuitBuilder {
 }
 
 const USIZE_BITS: usize = usize::BITS as usize;
+const PANIC_RESULT_SIZE_IN_BITS: usize = 1 + 5 * USIZE_BITS;
 
 /// A collection of wires that carry information about whether and where a panic occurred.
 #[derive(Debug, Clone)]
@@ -170,6 +140,54 @@ impl PanicResult {
         }
     }
 }
+
+
+/// A decoded panic, indicating why and where a panic occurred.
+#[derive(Debug, Clone)]
+pub struct EvalPanic {
+    /// The reason why the panic occurred.
+    pub reason: PanicReason,
+    /// The location in the source code where the panic occurred.
+    pub panicked_at: MetaInfo,
+}
+
+impl EvalPanic {
+    pub(crate) fn parse(bits: &[bool]) -> Result<&[bool], EvalPanic> {
+        let has_panicked = bits[0];
+        let panic_type: [bool; USIZE_BITS] = bits[1..USIZE_BITS + 1].try_into().unwrap();
+        let start_line: [bool; USIZE_BITS] = bits[USIZE_BITS + 1..(2 * USIZE_BITS) + 1]
+            .try_into()
+            .unwrap();
+        let start_column: [bool; USIZE_BITS] = bits[(2 * USIZE_BITS) + 1..(3 * USIZE_BITS) + 1]
+            .try_into()
+            .unwrap();
+        let end_line: [bool; USIZE_BITS] = bits[(3 * USIZE_BITS) + 1..(4 * USIZE_BITS) + 1]
+            .try_into()
+            .unwrap();
+        let end_column: [bool; USIZE_BITS] = bits[(4 * USIZE_BITS) + 1..(5 * USIZE_BITS) + 1]
+            .try_into()
+            .unwrap();
+        let reason = PanicReason::from_num(wires_as_unsigned(&panic_type) as usize);
+        if has_panicked {
+            Err(EvalPanic {
+                reason,
+                panicked_at: MetaInfo {
+                    start: (
+                        wires_as_unsigned(&start_line) as usize,
+                        wires_as_unsigned(&start_column) as usize,
+                    ),
+                    end: (
+                        wires_as_unsigned(&end_line) as usize,
+                        wires_as_unsigned(&end_column) as usize,
+                    ),
+                },
+            })
+        } else {
+            Ok(&bits[5 * USIZE_BITS + 1..])
+        }
+    }
+}
+
 
 /// The reason why a panic occurred.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -362,30 +380,28 @@ impl CircuitBuilder {
             .collect();
         gates.insert(0, Gate::Xor(0, 0)); // constant false
         gates.insert(1, Gate::Not(input_shift)); // constant true
-        let output_gates = output_gates
-            .into_iter()
-            .map(shift_gate_index_if_necessary)
-            .collect();
 
-        let shift_gate_indexes_if_necessary = |mut indexes: [usize; USIZE_BITS]| -> [usize; USIZE_BITS] {
+        let mut panic_and_output =
+            Vec::with_capacity(PANIC_RESULT_SIZE_IN_BITS + output_gates.len());
+        let shift_indexes_if_necessary = |mut indexes: [usize; USIZE_BITS]| -> [usize; USIZE_BITS] {
             for wire in indexes.iter_mut() {
                 *wire = shift_gate_index_if_necessary(*wire);
             }
             indexes
         };
-        let panic_gates = PanicResult {
-            has_panicked: shift_gate_index_if_necessary(self.panic_gates.has_panicked),
-            panic_type: shift_gate_indexes_if_necessary(self.panic_gates.panic_type),
-            start_line: shift_gate_indexes_if_necessary(self.panic_gates.start_line),
-            start_column: shift_gate_indexes_if_necessary(self.panic_gates.start_column),
-            end_line: shift_gate_indexes_if_necessary(self.panic_gates.end_line),
-            end_column: shift_gate_indexes_if_necessary(self.panic_gates.end_column),
-        };
+        panic_and_output.push(shift_gate_index_if_necessary(self.panic_gates.has_panicked));
+        panic_and_output.extend(shift_indexes_if_necessary(self.panic_gates.panic_type));
+        panic_and_output.extend(shift_indexes_if_necessary(self.panic_gates.start_line));
+        panic_and_output.extend(shift_indexes_if_necessary(self.panic_gates.start_column));
+        panic_and_output.extend(shift_indexes_if_necessary(self.panic_gates.end_line));
+        panic_and_output.extend(shift_indexes_if_necessary(self.panic_gates.end_column));
+
+        panic_and_output.extend(output_gates.into_iter().map(shift_gate_index_if_necessary));
+
         Circuit {
             input_gates: self.input_gates,
             gates,
-            output_gates,
-            panic_gates,
+            output_gates: panic_and_output,
         }
     }
 

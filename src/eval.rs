@@ -67,11 +67,7 @@ impl<'a> Evaluator<'a> {
                 return Err(EvalError::UnexpectedNumberOfInputsFromParty(p));
             }
         }
-        let gate_values = self.circuit.eval(&self.inputs)?;
-        let mut output: Vec<bool> = Vec::with_capacity(self.circuit.output_gates.len());
-        for output_gate in &self.circuit.output_gates {
-            output.push(gate_values[*output_gate].unwrap());
-        }
+        let output = self.circuit.eval(&self.inputs)?;
         Ok(EvalOutput(output))
     }
 
@@ -329,7 +325,7 @@ impl EvalOutput {
         let size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
         if output.len() == size {
             let bits: Vec<bool> = output.iter().copied().take(size).collect();
-            Ok(Literal::from_bits(checked, ty, &bits)?)
+            Ok(Literal::from_unwrapped_bits(checked, ty, &bits)?)
         } else {
             Err(EvalError::OutputTypeMismatch {
                 expected: ty.clone(),
