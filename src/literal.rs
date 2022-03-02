@@ -70,7 +70,7 @@ impl Literal {
     pub fn from_result_bits(checked: &Program, ty: &Type, bits: &[bool]) -> Result<Self, EvalError> {
         match EvalPanic::parse(bits) {
             Ok(bits) => Literal::from_unwrapped_bits(checked, ty, bits),
-            Err(_) => todo!(),
+            Err(panic) => Err(EvalError::Panic(panic)),
         }
     }
 
