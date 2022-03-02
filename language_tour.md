@@ -139,7 +139,18 @@ fn main(_a: i32, _b: i32) -> i32 {
 }
 ```
 
-**Please note that Garble currently does not provide any form of overflow detection, errors or panics. Overflows and divide-by-zero errors lead to undefined behavior (but do not crash the program).**
+Garble panics if an error occurs, for example due to an integer overflow during an addition:
+
+```
+Panic due to Overflow on line 17:43
+       | fn main(values: (u8, u8), op: Op) -> OpResult {
+       |     match (op, values) {
+  17 > |         (Op::Add, (x, y)) => OpResult::Ok(x + y),
+     > |                                           ^^^^^
+       |         (Op::Sub, (x, y)) => OpResult::Ok(x - y),
+```
+
+Garble currently panics on integer overflow in additions and subtractions (but not yet in multiplications or shifts), on division by zero and on out-of-bounds array access operations. Other error cases (such as overflow in multiplications) lead to undefined behavior and possibly garbage output, but do not crash the program.
 
 Garble does not do a lot of type coercions, so it is often necessary to either explicitly cast integers to the desired type or declare the type explicitly as part of the literal, with the type directly following the number:
 
