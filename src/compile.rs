@@ -286,13 +286,9 @@ impl Expr {
                         output_bits
                     }
                     Op::Sub => {
-                        let y = circuit.push_negation_circuit(&y);
-                        let (sum, carry, carry_prev) = circuit.push_addition_circuit(&x, &y);
-                        let overflow = if is_signed(ty) {
-                            circuit.push_xor(carry, carry_prev)
-                        } else {
-                            carry
-                        };
+                        //let y = circuit.push_negation_circuit(&y);
+                        //let (sum, carry, carry_prev) = circuit.push_addition_circuit(&x, &y);
+                        let (sum, overflow) = circuit.push_subtraction_circuit(&x, &y, is_signed(ty));
                         circuit.push_panic_if(overflow, PanicReason::Overflow, *meta);
                         sum
                     }
