@@ -253,6 +253,19 @@ impl Expr {
                     shift *= 2;
                     bits_unshifted = bits_shifted;
                 }
+                let max_filled_bits = match bits {
+                    8 => 3,
+                    16 => 4,
+                    32 => 5,
+                    64 => 6,
+                    128 => 7,
+                    bits => panic!("Unexpected number of bits to be shifted: {bits}"),
+                };
+                let mut overflow = 0;
+                for &w in y[..(8 - max_filled_bits)].iter() {
+                    overflow = circuit.push_or(overflow, w);
+                }
+                circuit.push_panic_if(overflow, PanicReason::Overflow, *meta);
                 bits_unshifted
             }
             ExprEnum::Op(op, x, y) => {
@@ -286,8 +299,6 @@ impl Expr {
                         output_bits
                     }
                     Op::Sub => {
-                        //let y = circuit.push_negation_circuit(&y);
-                        //let (sum, carry, carry_prev) = circuit.push_addition_circuit(&x, &y);
                         let (sum, overflow) =
                             circuit.push_subtraction_circuit(&x, &y, is_signed(ty));
                         circuit.push_panic_if(overflow, PanicReason::Overflow, *meta);
