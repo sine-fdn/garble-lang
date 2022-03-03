@@ -282,21 +282,18 @@ fn main(mode: bool, x: u16, y: u8) -> u16 {
         for x in 240..270 {
             for y in 0..20 {
                 let mut eval = Evaluator::from(&circuit);
-                let expected = if y >= 16 {
-                    0
-                } else if mode {
-                    x << y
-                } else {
-                    x >> y
-                };
                 eval.set_bool(mode);
                 eval.set_u16(x);
                 eval.set_u8(y);
-                let output = eval.run().map_err(|e| pretty_print(e, prg))?;
-                assert_eq!(
-                    u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
-                    expected
-                );
+                let result = eval.run().map_err(|e| pretty_print(e, prg))?;
+                let output = u16::try_from(result);
+                if y >= 16 {
+                    assert!(output.is_err(), "{x} {} {y}", if mode { "<<" } else { ">>" })
+                } else {
+                    let expected = if mode { x << y } else { x >> y };
+                    assert!(output.is_ok(), "{x} {} {y}", if mode { "<<" } else { ">>" });
+                    assert_eq!(output.unwrap(), expected, "{x} {} {y}", if mode { "<<" } else { ">>" });
+                }
             }
         }
     }
@@ -410,26 +407,18 @@ fn main(mode: bool, x: i16, y: u8) -> i16 {
         for x in -20..20 {
             for y in 0..20 {
                 let mut eval = Evaluator::from(&circuit);
-                // TODO: how do we want to handle overflows?
-                let expected = if y >= 16 && !mode && x < 0 {
-                    // shift right of signed num with overflow:
-                    -1
-                } else if y >= 16 {
-                    // shift with overflow:
-                    0
-                } else if mode {
-                    x << y
-                } else {
-                    x >> y
-                };
                 eval.set_bool(mode);
                 eval.set_i16(x);
                 eval.set_u8(y);
-                let output = eval.run().map_err(|e| pretty_print(e, prg))?;
-                assert_eq!(
-                    i16::try_from(output).map_err(|e| pretty_print(e, prg))?,
-                    expected
-                );
+                let result = eval.run().map_err(|e| pretty_print(e, prg))?;
+                let output = i16::try_from(result);
+                if y >= 16 {
+                    assert!(output.is_err(), "{x} {} {y}", if mode { "<<" } else { ">>" })
+                } else {
+                    let expected = if mode { x << y } else { x >> y };
+                    assert!(output.is_ok(), "{x} {} {y}", if mode { "<<" } else { ">>" });
+                    assert_eq!(output.unwrap(), expected, "{x} {} {y}", if mode { "<<" } else { ">>" });
+                }
             }
         }
     }
@@ -576,11 +565,9 @@ fn main(x: u8, y: u8) -> u8 {
             let output = u8::try_from(result);
             if (x as u16 * y as u16) > u8::MAX as u16 {
                 assert!(output.is_err(), "{x} * {y}");
-                //println!("{x} * {y} correctly panicked!");
             } else {
                 assert!(output.is_ok(), "{x} * {y}");
                 assert_eq!(output.unwrap(), x * y, "{x} * {y}");
-                //println!("{x} * {y} = {}", x * y);
             }
         }
     }
