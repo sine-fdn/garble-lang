@@ -288,7 +288,8 @@ impl Expr {
                     Op::Sub => {
                         //let y = circuit.push_negation_circuit(&y);
                         //let (sum, carry, carry_prev) = circuit.push_addition_circuit(&x, &y);
-                        let (sum, overflow) = circuit.push_subtraction_circuit(&x, &y, is_signed(ty));
+                        let (sum, overflow) =
+                            circuit.push_subtraction_circuit(&x, &y, is_signed(ty));
                         circuit.push_panic_if(overflow, PanicReason::Overflow, *meta);
                         sum
                     }
@@ -303,6 +304,21 @@ impl Expr {
                         sum
                     }
                     Op::Mul => {
+                        let is_result_neg = if is_signed(ty) {
+                            let is_x_negative = x[0];
+                            let is_y_negative = y[0];
+                            let x_negated = circuit.push_negation_circuit(&x);
+                            let y_negated = circuit.push_negation_circuit(&y);
+                            for (i, w) in x.iter_mut().enumerate() {
+                                *w = circuit.push_mux(is_x_negative, x_negated[i], *w);
+                            }
+                            for (i, w) in y.iter_mut().enumerate() {
+                                *w = circuit.push_mux(is_y_negative, y_negated[i], *w);
+                            }
+                            circuit.push_xor(is_x_negative, is_y_negative)
+                        } else {
+                            0
+                        };
                         let mut sums: Vec<Vec<GateIndex>> = vec![vec![0; bits]; bits];
                         let mut carries: Vec<Vec<GateIndex>> = vec![vec![0; bits]; bits];
                         let lsb_index = bits - 1;
@@ -321,10 +337,36 @@ impl Expr {
                                 carries[i][j] = carry;
                             }
                         }
+                        let mut overflow = carries[0][0];
+                        for (i, &w) in sums[0].iter().enumerate() {
+                            if i != lsb_index {
+                                overflow = circuit.push_or(overflow, w);
+                            }
+                        }
                         let mut result = vec![0; bits];
                         for (i, s) in sums.into_iter().enumerate() {
                             result[i] = s[lsb_index];
                         }
+                        if is_signed(ty) {
+                            let mut all_bits_except_msb_are_zero = 1;
+                            for &w in result.iter().skip(1) {
+                                let not_w = circuit.push_not(w);
+                                all_bits_except_msb_are_zero =
+                                    circuit.push_and(all_bits_except_msb_are_zero, not_w);
+                            }
+                            let result_is_signed = result[0];
+                            let not_all_bits_except_msb_are_zero =
+                                circuit.push_not(all_bits_except_msb_are_zero);
+                            let too_large_for_signed_representation = circuit
+                                .push_and(result_is_signed, not_all_bits_except_msb_are_zero);
+                            overflow =
+                                circuit.push_or(overflow, too_large_for_signed_representation);
+                            let result_negated = circuit.push_negation_circuit(&result);
+                            for (i, w) in result.iter_mut().enumerate() {
+                                *w = circuit.push_mux(is_result_neg, result_negated[i], *w);
+                            }
+                        }
+                        circuit.push_panic_if(overflow, PanicReason::Overflow, *meta);
                         result
                     }
                     Op::Div => {

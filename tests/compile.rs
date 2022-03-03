@@ -458,7 +458,7 @@ fn main(x: i16) -> i16 {
 }
 
 #[test]
-fn compile_sub_unsigned() -> Result<(), Error> {
+fn compile_unsigned_sub() -> Result<(), Error> {
     let prg = "
 fn main(x: u8, y: u8) -> u8 {
     x - y
@@ -471,7 +471,7 @@ fn main(x: u8, y: u8) -> u8 {
             eval.set_u8(x);
             eval.set_u8(y);
             let result = eval.run().map_err(|e| pretty_print(e, prg))?;
-            let output = u8::try_from(result).map_err(|e| pretty_print(e, prg));
+            let output = u8::try_from(result);
             if (x as i16 - y as i16) < 0 {
                 assert!(output.is_err(), "{x} - {y}");
             } else {
@@ -484,7 +484,7 @@ fn main(x: u8, y: u8) -> u8 {
 }
 
 #[test]
-fn compile_sub_signed() -> Result<(), Error> {
+fn compile_signed_sub() -> Result<(), Error> {
     let prg = "
 fn main(x: i8, y: i8) -> i8 {
     x - y
@@ -497,7 +497,7 @@ fn main(x: i8, y: i8) -> i8 {
             eval.set_i8(x);
             eval.set_i8(y);
             let result = eval.run().map_err(|e| pretty_print(e, prg))?;
-            let output = i8::try_from(result).map_err(|e| pretty_print(e, prg));
+            let output = i8::try_from(result);
             if (x as i16 - y as i16) < i8::MIN as i16 || (x as i16 - y as i16) > i8::MAX as i16 {
                 assert!(output.is_err(), "{x} - {y}");
             } else {
@@ -562,21 +562,26 @@ fn main(x: bool) -> bool {
 #[test]
 fn compile_unsigned_mul() -> Result<(), Error> {
     let prg = "
-fn main(x: u16, y: u16) -> u16 {
+fn main(x: u8, y: u8) -> u8 {
     x * y
 }
 ";
     let circuit = compile(prg).map_err(|e| pretty_print(e, prg))?;
-    for x in 0..20 {
-        for y in 250..300 {
+    for x in (0..=255).step_by(3) {
+        for y in (0..=255).step_by(3) {
             let mut eval = Evaluator::from(&circuit);
-            eval.set_u16(x);
-            eval.set_u16(y);
-            let output = eval.run().map_err(|e| pretty_print(e, prg))?;
-            assert_eq!(
-                u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
-                x * y
-            );
+            eval.set_u8(x);
+            eval.set_u8(y);
+            let result = eval.run().map_err(|e| pretty_print(e, prg))?;
+            let output = u8::try_from(result);
+            if (x as u16 * y as u16) > u8::MAX as u16 {
+                assert!(output.is_err(), "{x} * {y}");
+                //println!("{x} * {y} correctly panicked!");
+            } else {
+                assert!(output.is_ok(), "{x} * {y}");
+                assert_eq!(output.unwrap(), x * y, "{x} * {y}");
+                //println!("{x} * {y} = {}", x * y);
+            }
         }
     }
     Ok(())
@@ -585,21 +590,24 @@ fn main(x: u16, y: u16) -> u16 {
 #[test]
 fn compile_signed_mul() -> Result<(), Error> {
     let prg = "
-fn main(x: i16, y: i16) -> i16 {
+fn main(x: i8, y: i8) -> i8 {
     x * y
 }
 ";
     let circuit = compile(prg).map_err(|e| pretty_print(e, prg))?;
-    for x in -10..10 {
-        for y in -10..10 {
+    for x in (-128..=127).step_by(3) {
+        for y in (-128..=127).step_by(3) {
             let mut eval = Evaluator::from(&circuit);
-            eval.set_i16(x);
-            eval.set_i16(y);
-            let output = eval.run().map_err(|e| pretty_print(e, prg))?;
-            assert_eq!(
-                i16::try_from(output).map_err(|e| pretty_print(e, prg))?,
-                x * y
-            );
+            eval.set_i8(x);
+            eval.set_i8(y);
+            let result = eval.run().map_err(|e| pretty_print(e, prg))?;
+            let output = i8::try_from(result);
+            if (x as i16 * y as i16) < i8::MIN as i16 || (x as i16 * y as i16) > i8::MAX as i16 {
+                assert!(output.is_err(), "{x} * {y}");
+            } else {
+                assert!(output.is_ok(), "{x} * {y}");
+                assert_eq!(output.unwrap(), x * y, "{x} * {y}");
+            }
         }
     }
     Ok(())
