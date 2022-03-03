@@ -721,25 +721,32 @@ impl CircuitBuilder {
         &mut self,
         x: &[GateIndex],
         y: &[GateIndex],
+        is_signed: bool,
     ) -> (Vec<GateIndex>, GateIndex) {
         assert_eq!(x.len(), y.len());
         let bits = x.len();
 
-        // flip bits of y and increment y to get negative y:
-        let mut carry = 1;
         let mut x_extended = vec![0; bits + 1];
         x_extended[1..].copy_from_slice(x);
-        let mut z = vec![0; bits + 1];
-        for i in (0..bits + 1).rev() {
-            let y = if i == 0 { 1 } else { self.push_not(y[i - 1]) };
-            // half-adder:
-            z[i] = self.push_xor(carry, y);
-            carry = self.push_and(carry, y);
+        if is_signed {
+            x_extended[0] = x_extended[1];
         }
+        let mut y_extended = vec![0; bits + 1];
+        y_extended[1..].copy_from_slice(y);
+        if is_signed {
+            y_extended[0] = y_extended[1];
+        }
+        let y_negated = self.push_negation_circuit(&y_extended);
 
-        let (mut sum_extended, _, _) = self.push_addition_circuit(&x_extended, &z);
+        let (mut sum_extended, _, _) = self.push_addition_circuit(&x_extended, &y_negated);
+        let sign = sum_extended[0];
         let sum = sum_extended.split_off(1);
-        (sum, sum_extended[0])
+        let overflow = if is_signed {
+            self.push_xor(sign, sum[0])
+        } else {
+            sign
+        };
+        (sum, overflow)
     }
 
     pub fn push_unsigned_division_circuit(
@@ -761,7 +768,7 @@ impl CircuitBuilder {
             y_shifted[..(bits - shift_amount)]
                 .clone_from_slice(&y[shift_amount..((bits - shift_amount) + shift_amount)]);
 
-            let (x_sub, carry) = self.push_subtraction_circuit(&remainder, &y_shifted);
+            let (x_sub, carry) = self.push_subtraction_circuit(&remainder, &y_shifted, false);
             let carry_or_overflow = self.push_or(carry, overflow);
             for i in 0..bits {
                 remainder[i] = self.push_mux(carry_or_overflow, remainder[i], x_sub[i]);
