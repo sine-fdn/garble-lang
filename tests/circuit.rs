@@ -42,12 +42,12 @@ fn main(_x: i32) -> i32 {
 fn optimize_same_expr() -> Result<(), String> {
     let unoptimized = "
 fn main(b: bool, x: i32) -> i32 {
-    if b { x * x } else { x * x }
+    if b { x % x } else { x % x }
 }
 ";
     let optimized = "
 fn main(b: bool, x: i32) -> i32 {
-    let y = x * x;
+    let y = x % x;
     if b { y } else { y }
 }
 ";
