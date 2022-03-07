@@ -150,7 +150,7 @@ impl std::fmt::Display for TypeErrorEnum {
                     if let Some(field) = fields.next() {
                         field.fmt(f)?;
                     }
-                    while let Some(field) = fields.next() {
+                    for field in fields {
                         f.write_str(", ")?;
                         field.fmt(f)?;
                     }

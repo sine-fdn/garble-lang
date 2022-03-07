@@ -62,7 +62,7 @@ impl std::fmt::Display for EvalError {
                 if let Some(err) = errs.next() {
                     err.fmt(f)?;
                 }
-                while let Some(err) = errs.next() {
+                for err in errs {
                     f.write_str("\n")?;
                     err.fmt(f)?;
                 }
@@ -73,7 +73,7 @@ impl std::fmt::Display for EvalError {
                 if let Some(err) = errs.next() {
                     err.fmt(f)?;
                 }
-                while let Some(err) = errs.next() {
+                for err in errs {
                     f.write_str("\n")?;
                     err.fmt(f)?;
                 }
@@ -331,7 +331,7 @@ impl TryFrom<EvalOutput> for Vec<bool> {
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
         match EvalPanic::parse(&value.0) {
-            Ok(output) => Ok(output.iter().copied().collect()),
+            Ok(output) => Ok(output.to_vec()),
             Err(panic) => Err(EvalError::Panic(panic)),
         }
     }

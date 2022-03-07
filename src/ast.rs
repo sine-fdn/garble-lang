@@ -108,7 +108,7 @@ impl std::fmt::Display for Type {
                 if let Some(param) = params.next() {
                     param.fmt(f)?;
                 }
-                while let Some(param) = params.next() {
+                for param in params {
                     f.write_str(", ")?;
                     param.fmt(f)?;
                 }
@@ -128,7 +128,7 @@ impl std::fmt::Display for Type {
                 if let Some(field) = fields.next() {
                     field.fmt(f)?;
                 }
-                while let Some(field) = fields.next() {
+                for field in fields {
                     f.write_str(", ")?;
                     field.fmt(f)?;
                 }

@@ -104,7 +104,7 @@ pub struct Pattern(pub PatternEnum, pub Type, pub MetaInfo);
 impl std::fmt::Display for Pattern {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
-            PatternEnum::Identifier(name) => f.write_str(&name),
+            PatternEnum::Identifier(name) => f.write_str(name),
             PatternEnum::True => f.write_str("true"),
             PatternEnum::False => f.write_str("false"),
             PatternEnum::NumUnsigned(n) => n.fmt(f),
@@ -115,7 +115,7 @@ impl std::fmt::Display for Pattern {
                 if let Some(field) = fields.next() {
                     field.fmt(f)?;
                 }
-                while let Some(field) = fields.next() {
+                for field in fields {
                     f.write_str(", ")?;
                     field.fmt(f)?;
                 }
@@ -130,7 +130,7 @@ impl std::fmt::Display for Pattern {
                 if let Some(field) = fields.next() {
                     field.fmt(f)?;
                 }
-                while let Some(field) = fields.next() {
+                for field in fields {
                     f.write_str(", ")?;
                     field.fmt(f)?;
                 }
