@@ -132,7 +132,13 @@ impl Expr {
                     circuit.push_comparator_circuit(index_bits, &index, false, &array_len, false);
                 let out_of_bounds = circuit.push_not(index_less_than_array_len);
                 circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, *meta);
-                array
+                if array.is_empty() {
+                    // accessing a 0-size array will result in a panic, but we still need to return
+                    // an element of a valid size (even though it will not be used)
+                    vec![0; elem_bits]
+                } else {
+                    array
+                }
             }
             ExprEnum::ArrayAssignment(array, index, value) => {
                 let (elem_ty, size) = match ty {
@@ -223,6 +229,30 @@ impl Expr {
                     flipped[i] = circuit.push_not(*x);
                 }
                 flipped
+            }
+            ExprEnum::Op(Op::ShortCircuitAnd, x, y) => {
+                let x = x.compile(enums, fns, env, circuit);
+                assert_eq!(x.len(), 1);
+                let panic_before_y = circuit.peek_panic().clone();
+                let y = y.compile(enums, fns, env, circuit);
+                assert_eq!(y.len(), 1);
+
+                let panic = circuit.mux_panic(x[0], &circuit.peek_panic().clone(), &panic_before_y);
+                circuit.replace_panic_with(panic);
+
+                vec![circuit.push_and(x[0], y[0])]
+            }
+            ExprEnum::Op(Op::ShortCircuitOr, x, y) => {
+                let x = x.compile(enums, fns, env, circuit);
+                assert_eq!(x.len(), 1);
+                let panic_before_y = circuit.peek_panic().clone();
+                let y = y.compile(enums, fns, env, circuit);
+                assert_eq!(y.len(), 1);
+
+                let panic = circuit.mux_panic(x[0], &panic_before_y, &circuit.peek_panic().clone());
+                circuit.replace_panic_with(panic);
+
+                vec![circuit.push_or(x[0], y[0])]
             }
             ExprEnum::Op(op @ (Op::ShiftLeft | Op::ShiftRight), x, y) => {
                 let x = x.compile(enums, fns, env, circuit);
@@ -424,11 +454,17 @@ impl Expr {
                             _ => unreachable!(),
                         }
                     }
+                    Op::ShortCircuitAnd => {
+                        unreachable!("handled in the match clause one level up")
+                    }
+                    Op::ShortCircuitOr => {
+                        unreachable!("handled in the match clause one level up")
+                    }
                     Op::ShiftLeft => {
-                        unreachable!("handled in the match clause one layer up")
+                        unreachable!("handled in the match clause one level up")
                     }
                     Op::ShiftRight => {
-                        unreachable!("handled in the match clause one layer up")
+                        unreachable!("handled in the match clause one level up")
                     }
                 }
             }
@@ -820,7 +856,9 @@ pub(crate) fn wires_as_unsigned(wires: &[bool]) -> u128 {
 }
 
 fn extend_to_bits(v: &mut Vec<usize>, ty: &Type, bits: usize) {
-    if v.len() != bits {
+    if v.is_empty() {
+        v.resize(bits, 0);
+    } else if v.len() != bits {
         let msb = v[0];
         let old_size = v.len();
         v.resize(bits, 0);

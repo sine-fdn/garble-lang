@@ -261,7 +261,11 @@ pub(crate) fn coerce_type(expr: &mut typed_ast::Expr, expected: &Type) -> Result
     }
 }
 
-fn unify(e1: &mut typed_ast::Expr, e2: &mut typed_ast::Expr, m: MetaInfo) -> Result<Type, TypeError> {
+fn unify(
+    e1: &mut typed_ast::Expr,
+    e2: &mut typed_ast::Expr,
+    m: MetaInfo,
+) -> Result<Type, TypeError> {
     let typed_ast::Expr(expr1, ty1, meta1) = e1;
     let typed_ast::Expr(expr2, ty2, meta2) = e2;
     let ty = match (expr1, expr2) {
@@ -513,6 +517,25 @@ impl Expr {
                     let ty = unify(&mut x, &mut y, meta)?;
                     expect_num_type(&ty, meta)?;
                     (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), ty)
+                }
+                Op::ShortCircuitAnd | Op::ShortCircuitOr => {
+                    let x = x.type_check(env, fns, defs)?;
+                    let y = y.type_check(env, fns, defs)?;
+                    for (ty, meta) in [(&x.1, &x.2), (&y.1, &y.2)] {
+                        match ty {
+                            Type::Bool => {}
+                            ty => {
+                                return Err(TypeError(
+                                    TypeErrorEnum::UnexpectedType {
+                                        expected: Type::Bool,
+                                        actual: ty.clone(),
+                                    },
+                                    *meta,
+                                ))
+                            }
+                        }
+                    }
+                    (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), Type::Bool)
                 }
                 Op::BitAnd | Op::BitXor | Op::BitOr => {
                     let mut x = x.type_check(env, fns, defs)?;

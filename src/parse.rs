@@ -249,8 +249,30 @@ impl Parser {
                 Err(())
             }
         } else {
-            self.parse_equality()
+            self.parse_short_circuiting_or()
         }
+    }
+
+    fn parse_short_circuiting_or(&mut self) -> Result<Expr, ()> {
+        // ||
+        let mut x = self.parse_short_circuiting_and()?;
+        while self.next_matches(&TokenEnum::DoubleBar).is_some() {
+            let y = self.parse_short_circuiting_and()?;
+            let meta = join_expr_meta(&x, &y);
+            x = Expr(ExprEnum::Op(Op::ShortCircuitOr, Box::new(x), Box::new(y)), meta);
+        }
+        Ok(x)
+    }
+
+    fn parse_short_circuiting_and(&mut self) -> Result<Expr, ()> {
+        // &&
+        let mut x = self.parse_equality()?;
+        while self.next_matches(&TokenEnum::DoubleAmpersand).is_some() {
+            let y = self.parse_equality()?;
+            let meta = join_expr_meta(&x, &y);
+            x = Expr(ExprEnum::Op(Op::ShortCircuitAnd, Box::new(x), Box::new(y)), meta);
+        }
+        Ok(x)
     }
 
     fn parse_equality(&mut self) -> Result<Expr, ()> {
@@ -273,9 +295,9 @@ impl Parser {
     fn parse_comparison(&mut self) -> Result<Expr, ()> {
         // >, <
         let ops = vec![TokenEnum::LessThan, TokenEnum::GreaterThan];
-        let mut x = self.parse_logical_or()?;
+        let mut x = self.parse_or()?;
         while let Some((token, _)) = self.next_matches_one_of(&ops) {
-            let y = self.parse_logical_or()?;
+            let y = self.parse_or()?;
             let meta = join_expr_meta(&x, &y);
             let op = match token {
                 TokenEnum::LessThan => Op::LessThan,
@@ -287,29 +309,29 @@ impl Parser {
         Ok(x)
     }
 
-    fn parse_logical_or(&mut self) -> Result<Expr, ()> {
+    fn parse_or(&mut self) -> Result<Expr, ()> {
         // |
-        let mut x = self.parse_logical_xor()?;
+        let mut x = self.parse_xor()?;
         while self.next_matches(&TokenEnum::Bar).is_some() {
-            let y = self.parse_logical_xor()?;
+            let y = self.parse_xor()?;
             let meta = join_expr_meta(&x, &y);
             x = Expr(ExprEnum::Op(Op::BitOr, Box::new(x), Box::new(y)), meta);
         }
         Ok(x)
     }
 
-    fn parse_logical_xor(&mut self) -> Result<Expr, ()> {
+    fn parse_xor(&mut self) -> Result<Expr, ()> {
         // ^
-        let mut x = self.parse_logical_and()?;
+        let mut x = self.parse_and()?;
         while self.next_matches(&TokenEnum::Caret).is_some() {
-            let y = self.parse_logical_and()?;
+            let y = self.parse_and()?;
             let meta = join_expr_meta(&x, &y);
             x = Expr(ExprEnum::Op(Op::BitXor, Box::new(x), Box::new(y)), meta);
         }
         Ok(x)
     }
 
-    fn parse_logical_and(&mut self) -> Result<Expr, ()> {
+    fn parse_and(&mut self) -> Result<Expr, ()> {
         // &
         let mut x = self.parse_shift()?;
         while self.next_matches(&TokenEnum::Ampersand).is_some() {
