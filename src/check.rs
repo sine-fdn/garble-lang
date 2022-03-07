@@ -32,9 +32,7 @@ pub enum TypeErrorEnum {
     UnknownEnumVariant(String, String),
     /// No variable or function with the specified name exists in the current scope.
     UnknownIdentifier(String),
-    /// The unsigned number is larger than its type allows.
-    MaxNumUnsignedSizeExceeded(Type, u128),
-    /// The tuple does not have the specified field.
+    /// The index is larger than the specified tuple size.
     TupleAccessOutOfBounds(usize),
     /// A parameter name is used more than once in a function declaration.
     DuplicateFnParam(String),
@@ -50,8 +48,6 @@ pub enum TypeErrorEnum {
     ExpectedTupleType(Type),
     /// An enum type was expected.
     ExpectedEnumType(Type),
-    /// An enum variant was expected.
-    ExpectedEnumVariant(Vec<Type>),
     /// Expected an enum variant without fields, but found a tuple variant.
     ExpectedUnitVariantFoundTupleVariant,
     /// Expected an enum variant with fields, but found a unit variant.
@@ -62,20 +58,6 @@ pub enum TypeErrorEnum {
         expected: usize,
         /// The actual number of fields.
         actual: usize,
-    },
-    /// Expected a function type.
-    ExpectedFnType {
-        /// The expected function parameters.
-        expected: Vec<Type>,
-        /// The actual (non-function) type.
-        actual: Type,
-    },
-    /// The expected parameter types do not match the actual argument types.
-    ExpectedFnArgTypes {
-        /// The expected function parameter types.
-        expected: Vec<Type>,
-        /// The actual argument types.
-        actual: Vec<Type>,
     },
     /// Expected a different type.
     UnexpectedType {
@@ -94,6 +76,93 @@ pub enum TypeErrorEnum {
     PatternsAreNotExhaustive(Vec<PatternStack>),
     /// The expression cannot be matched upon.
     TypeDoesNotSupportPatternMatching(Type),
+}
+
+impl std::fmt::Display for TypeErrorEnum {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeErrorEnum::NoMainFnParams => f.write_str("The main function must have parameters"),
+            TypeErrorEnum::UnusedFn(name) => f.write_fmt(format_args!(
+                "Function '{name}' is declared, but never used"
+            )),
+            TypeErrorEnum::RecursiveFnDef(name) => f.write_fmt(format_args!(
+                "Function '{name}' is declared recursively, which is not supported"
+            )),
+            TypeErrorEnum::UnknownEnum(enum_name) => {
+                f.write_fmt(format_args!("Unknown enum '{enum_name}'"))
+            }
+            TypeErrorEnum::UnknownEnumVariant(enum_name, enum_variant) => f.write_fmt(
+                format_args!("Unknown enum variant '{enum_name}::{enum_variant}'"),
+            ),
+            TypeErrorEnum::UnknownIdentifier(name) => {
+                f.write_fmt(format_args!("Unknown identifier '{name}'"))
+            }
+            TypeErrorEnum::TupleAccessOutOfBounds(size) => {
+                f.write_fmt(format_args!("The tuple only has {size} fields"))
+            }
+            TypeErrorEnum::DuplicateFnParam(name) => f.write_fmt(format_args!(
+                "The function parameter '{name}' is declared multiple times"
+            )),
+            TypeErrorEnum::ExpectedBoolOrNumberType(ty) => f.write_fmt(format_args!(
+                "Expected a boolean or number type, but found {ty}"
+            )),
+            TypeErrorEnum::ExpectedNumberType(ty) => {
+                f.write_fmt(format_args!("Expected a number type, but found {ty}"))
+            }
+            TypeErrorEnum::ExpectedSignedNumberType(ty) => f.write_fmt(format_args!(
+                "Expected a signed number type, but found {ty}"
+            )),
+            TypeErrorEnum::ExpectedArrayType(ty) => {
+                f.write_fmt(format_args!("Expected an array type, but found {ty}"))
+            }
+            TypeErrorEnum::ExpectedTupleType(ty) => {
+                f.write_fmt(format_args!("Expected a tuple type, but found {ty}"))
+            }
+            TypeErrorEnum::ExpectedEnumType(ty) => {
+                f.write_fmt(format_args!("Expected an enum type, but found {ty}"))
+            }
+            TypeErrorEnum::ExpectedUnitVariantFoundTupleVariant => {
+                f.write_str("Expected a variant without fields, but found a tuple variant")
+            }
+            TypeErrorEnum::ExpectedTupleVariantFoundUnitVariant => {
+                f.write_str("Expected a tuple variant, but found a variant without fields")
+            }
+            TypeErrorEnum::UnexpectedEnumVariantArity { expected, actual } => {
+                f.write_fmt(format_args!(
+                    "Expected a variant with {expected} fields, but found {actual} fields"
+                ))
+            }
+            TypeErrorEnum::UnexpectedType { expected, actual } => {
+                f.write_fmt(format_args!("Expected type {expected}, but found {actual}"))
+            }
+            TypeErrorEnum::TypeMismatch((x, _), (y, _)) => f.write_fmt(format_args!(
+                "The operands have incompatible types; {x} vs {y}"
+            )),
+            TypeErrorEnum::InvalidRange(_, _) => f.write_str("Invalid range"),
+            TypeErrorEnum::PatternDoesNotMatchType(ty) => {
+                f.write_fmt(format_args!("The pattern does not match the type {ty}"))
+            }
+            TypeErrorEnum::PatternsAreNotExhaustive(missing) => {
+                f.write_str("The patterns are not exhaustive. Missing cases:\n\n")?;
+                for pattern in missing {
+                    f.write_str("  ")?;
+                    let mut fields = pattern.iter();
+                    if let Some(field) = fields.next() {
+                        field.fmt(f)?;
+                    }
+                    while let Some(field) = fields.next() {
+                        f.write_str(", ")?;
+                        field.fmt(f)?;
+                    }
+                    f.write_str("\n\n")?;
+                }
+                f.write_str("...in expression")
+            }
+            TypeErrorEnum::TypeDoesNotSupportPatternMatching(ty) => {
+                f.write_fmt(format_args!("Type {ty} does not support pattern matching"))
+            }
+        }
+    }
 }
 
 /// Static top-level definitions of enums and functions.
@@ -339,7 +408,7 @@ impl Expr {
                         ty,
                     )
                 } else {
-                    let e = TypeErrorEnum::TupleAccessOutOfBounds(*index);
+                    let e = TypeErrorEnum::TupleAccessOutOfBounds(value_types.len());
                     return Err(TypeError(e, *meta));
                 }
             }
@@ -461,9 +530,9 @@ impl Expr {
                         let expr = typed_ast::ExprEnum::FnCall(identifier.clone(), arg_exprs);
                         (expr, ret_ty)
                     } else {
-                        let e = TypeErrorEnum::ExpectedFnArgTypes {
-                            expected: arg_types,
-                            actual: fn_arg_types,
+                        let e = TypeErrorEnum::UnexpectedType {
+                            expected: Type::Fn(arg_types, Box::new(ret_ty.clone())),
+                            actual: Type::Fn(fn_arg_types, Box::new(ret_ty)),
                         };
                         return Err(TypeError(e, meta));
                     }
@@ -501,10 +570,10 @@ impl Expr {
                 let typed_ast::Expr(_, array_ty, array_meta) = &arr;
                 let (elem_ty, _) = expect_array_type(array_ty, *array_meta)?;
                 if closure.params.len() != 2 {
-                    let expected = vec![init.1, elem_ty];
+                    let expected = Type::Fn(vec![init.1, elem_ty], Box::new(closure.ty.clone()));
                     let param_types = closure.params.iter().map(|p| p.1.clone()).collect();
                     let actual = Type::Fn(param_types, Box::new(closure.ty.clone()));
-                    let e = TypeErrorEnum::ExpectedFnType { expected, actual };
+                    let e = TypeErrorEnum::UnexpectedType { expected, actual };
                     return Err(TypeError(e, closure.meta));
                 }
                 let ParamDef(acc_identifier, acc_param_ty) = &closure.params[0];
@@ -543,10 +612,10 @@ impl Expr {
                 let typed_ast::Expr(_, array_ty, array_meta) = &arr;
                 let (elem_ty, size) = expect_array_type(array_ty, *array_meta)?;
                 if closure.params.len() != 1 {
-                    let expected = vec![elem_ty];
+                    let expected = Type::Fn(vec![elem_ty], Box::new(closure.ty.clone()));
                     let param_types = closure.params.iter().map(|p| p.1.clone()).collect();
                     let actual = Type::Fn(param_types, Box::new(closure.ty.clone()));
-                    let e = TypeErrorEnum::ExpectedFnType { expected, actual };
+                    let e = TypeErrorEnum::UnexpectedType { expected, actual };
                     return Err(TypeError(e, closure.meta));
                 }
                 let ParamDef(elem_identifier, elem_param_ty) = &closure.params[0];
@@ -634,12 +703,12 @@ impl Expr {
                                     ty,
                                 )
                             }
-                            (VariantExprEnum::Unit, Some(types)) => {
-                                let e = TypeErrorEnum::ExpectedEnumVariant(types.clone());
+                            (VariantExprEnum::Unit, Some(_)) => {
+                                let e = TypeErrorEnum::ExpectedTupleVariantFoundUnitVariant;
                                 return Err(TypeError(e, meta));
                             }
                             (VariantExprEnum::Tuple(_), None) => {
-                                let e = TypeErrorEnum::ExpectedEnumVariant(Vec::new());
+                                let e = TypeErrorEnum::ExpectedUnitVariantFoundTupleVariant;
                                 return Err(TypeError(e, meta));
                             }
                         }
@@ -1062,7 +1131,9 @@ fn split_ctor(patterns: &[PatternStack], q: &[typed_ast::Pattern], defs: &Defs) 
             let variants = defs.enums.get(enum_name.as_str()).unwrap();
             variants
                 .iter()
-                .map(|(name, fields)| Ctor::Variant(enum_name.clone(), name.to_string(), fields.clone()))
+                .map(|(name, fields)| {
+                    Ctor::Variant(enum_name.clone(), name.to_string(), fields.clone())
+                })
                 .collect()
         }
         Type::Tuple(fields) => {
@@ -1127,14 +1198,21 @@ fn usefulness(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> Vec<
                         }
                         Ctor::Variant(enum_name, variant_name, None) => {
                             witness = vec![typed_ast::Pattern(
-                                typed_ast::PatternEnum::EnumUnit(enum_name.clone(), variant_name.clone()),
+                                typed_ast::PatternEnum::EnumUnit(
+                                    enum_name.clone(),
+                                    variant_name.clone(),
+                                ),
                                 Type::Enum(enum_name.clone()),
                                 meta,
                             )]
-                        },
+                        }
                         Ctor::Variant(enum_name, variant_name, Some(_)) => {
                             witness = vec![typed_ast::Pattern(
-                                typed_ast::PatternEnum::EnumTuple(enum_name.clone(), variant_name.clone(), witness),
+                                typed_ast::PatternEnum::EnumTuple(
+                                    enum_name.clone(),
+                                    variant_name.clone(),
+                                    witness,
+                                ),
                                 Type::Enum(enum_name.clone()),
                                 meta,
                             )]

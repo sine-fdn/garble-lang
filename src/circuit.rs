@@ -200,6 +200,16 @@ pub enum PanicReason {
     OutOfBounds,
 }
 
+impl std::fmt::Display for PanicReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            PanicReason::Overflow => "Overflow",
+            PanicReason::DivByZero => "Division By Zero",
+            PanicReason::OutOfBounds => "Array Access Out Of Bounds",
+        })
+    }
+}
+
 impl PanicReason {
     fn from_num(n: usize) -> Self {
         match n {

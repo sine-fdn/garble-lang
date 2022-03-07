@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{EnumDef, Op, ParamDef, Type, UnaryOp},
-    token::{MetaInfo, UnsignedNumType, SignedNumType},
+    token::{MetaInfo, SignedNumType, UnsignedNumType},
 };
 
 /// A program, consisting of top level definitions (enums or functions).
@@ -100,6 +100,61 @@ pub enum VariantExprEnum {
 /// A (possibly nested) pattern used by [`ExprEnum::Match`], with its location in the source code.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Pattern(pub PatternEnum, pub Type, pub MetaInfo);
+
+impl std::fmt::Display for Pattern {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            PatternEnum::Identifier(name) => f.write_str(&name),
+            PatternEnum::True => f.write_str("true"),
+            PatternEnum::False => f.write_str("false"),
+            PatternEnum::NumUnsigned(n) => n.fmt(f),
+            PatternEnum::NumSigned(n) => n.fmt(f),
+            PatternEnum::Tuple(fields) => {
+                f.write_str("(")?;
+                let mut fields = fields.iter();
+                if let Some(field) = fields.next() {
+                    field.fmt(f)?;
+                }
+                while let Some(field) = fields.next() {
+                    f.write_str(", ")?;
+                    field.fmt(f)?;
+                }
+                f.write_str(")")
+            }
+            PatternEnum::EnumUnit(enum_name, variant_name) => {
+                f.write_fmt(format_args!("{enum_name}::{variant_name}"))
+            }
+            PatternEnum::EnumTuple(enum_name, variant_name, fields) => {
+                f.write_fmt(format_args!("{enum_name}::{variant_name}("))?;
+                let mut fields = fields.iter();
+                if let Some(field) = fields.next() {
+                    field.fmt(f)?;
+                }
+                while let Some(field) = fields.next() {
+                    f.write_str(", ")?;
+                    field.fmt(f)?;
+                }
+                f.write_str(")")
+            }
+            PatternEnum::UnsignedInclusiveRange(min, max) => {
+                if min == max {
+                    min.fmt(f)
+                } else {
+                    let max = max + 1;
+                    f.write_fmt(format_args!("{min}..{max}"))
+                }
+            }
+            PatternEnum::SignedInclusiveRange(min, max) => {
+                if min == max {
+                    min.fmt(f)
+                } else {
+                    let max = max + 1;
+                    f.write_fmt(format_args!("{min}..{max}"))
+                }
+            }
+        }
+    }
+}
 
 /// The different kinds of patterns.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

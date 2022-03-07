@@ -12,11 +12,27 @@ pub struct ScanError(pub ScanErrorEnum, pub MetaInfo);
 #[derive(Debug, Clone)]
 pub enum ScanErrorEnum {
     /// The scanned character is not a valid token.
-    UnexpectedCharacter(char),
+    UnexpectedCharacter,
     /// The scanned token is not a valid unsigned number.
-    InvalidUnsignedNum(String),
+    InvalidUnsignedNum,
     /// The scanned token is not a valid signed number.
-    InvalidSignedNum(String),
+    InvalidSignedNum,
+}
+
+impl std::fmt::Display for ScanErrorEnum {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ScanErrorEnum::UnexpectedCharacter => {
+                f.write_str("Unexpected character")
+            }
+            ScanErrorEnum::InvalidUnsignedNum => {
+                f.write_str("Invalid unsigned number")
+            }
+            ScanErrorEnum::InvalidSignedNum => {
+                f.write_str("Invalid signed number")
+            }
+        }
+    }
 }
 
 /// A stream of tokens.
@@ -165,15 +181,13 @@ impl<'a> Scanner<'a> {
                                     }
                                     "i128" => Some(SignedNumType::I128),
                                     _ => {
-                                        self.push_error(ScanErrorEnum::InvalidUnsignedNum(
-                                            format!("{n}{literal_suffix}"),
-                                        ));
+                                        self.push_error(ScanErrorEnum::InvalidUnsignedNum);
                                         None
                                     }
                                 };
                                 self.push_token(TokenEnum::SignedNum(n, literal_suffix));
                             } else {
-                                self.push_error(ScanErrorEnum::InvalidSignedNum(n));
+                                self.push_error(ScanErrorEnum::InvalidSignedNum);
                             }
                         }
                     }
@@ -224,15 +238,13 @@ impl<'a> Scanner<'a> {
                                 }
                                 "u128" => TokenEnum::UnsignedNum(n, Some(UnsignedNumType::U128)),
                                 _ => {
-                                    self.push_error(ScanErrorEnum::InvalidUnsignedNum(format!(
-                                        "{n}{literal_suffix}"
-                                    )));
+                                    self.push_error(ScanErrorEnum::InvalidUnsignedNum);
                                     TokenEnum::UnsignedNum(n, None)
                                 }
                             };
                             self.push_token(token);
                         } else {
-                            self.push_error(ScanErrorEnum::InvalidUnsignedNum(n));
+                            self.push_error(ScanErrorEnum::InvalidUnsignedNum);
                         }
                     } else if is_alphanumeric(c) {
                         let mut chars = vec![c];
@@ -251,7 +263,7 @@ impl<'a> Scanner<'a> {
                             _ => self.push_token(TokenEnum::Identifier(identifier)),
                         }
                     } else {
-                        self.push_error(ScanErrorEnum::UnexpectedCharacter(c));
+                        self.push_error(ScanErrorEnum::UnexpectedCharacter);
                     }
                 }
             }

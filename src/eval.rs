@@ -1,5 +1,7 @@
 //! Evaluates a [`crate::circuit::Circuit`] with inputs supplied by different parties.
 
+use std::fmt::Debug;
+
 use crate::{
     ast::Type,
     circuit::{Circuit, EvalPanic},
@@ -37,8 +39,6 @@ pub enum EvalError {
     LiteralScanError(Vec<ScanError>),
     /// An input literal could not be parsed.
     LiteralParseError(Vec<ParseError>),
-    /// No output has been computed yet.
-    OutputHasNotBeenComputed,
     /// The number of output bits does not match the expected type.
     OutputTypeMismatch {
         /// The expected output type.
@@ -48,6 +48,48 @@ pub enum EvalError {
     },
     /// The evaluation panicked, for example due to an integer overflow or div by zero.
     Panic(EvalPanic),
+}
+
+impl std::fmt::Display for EvalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EvalError::UnexpectedNumberOfParties => f.write_str(
+                "The number of provided inputs does not match the expected number of parties of the circuit",
+            ),
+            EvalError::UnexpectedNumberOfInputsFromParty(party) => f.write_fmt(format_args!("Unexpected number of input bits from party {party}")),
+            EvalError::LiteralScanError(errs) => {
+                let mut errs = errs.iter();
+                if let Some(err) = errs.next() {
+                    err.fmt(f)?;
+                }
+                while let Some(err) = errs.next() {
+                    f.write_str("\n")?;
+                    err.fmt(f)?;
+                }
+                f.write_str("")
+            }
+            EvalError::LiteralParseError(errs) => {
+                let mut errs = errs.iter();
+                if let Some(err) = errs.next() {
+                    err.fmt(f)?;
+                }
+                while let Some(err) = errs.next() {
+                    f.write_str("\n")?;
+                    err.fmt(f)?;
+                }
+                f.write_str("")
+            }
+            EvalError::OutputTypeMismatch {
+                expected,
+                actual_bits,
+            } => {
+                f.write_fmt(format_args!("Expected the output to have {expected} bits, but found {actual_bits}"))
+            }
+            EvalError::Panic(p) => {
+                p.fmt(f)
+            }
+        }
+    }
 }
 
 impl From<EvalPanic> for EvalError {

@@ -101,7 +101,7 @@ impl EvalError {
                 let mut msg = "".to_string();
                 let meta = panic.panicked_at;
                 msg += &format!(
-                    "Panic due to {:?} on line {}:{}\n",
+                    "Panic due to {} on line {}:{}.\n\n",
                     panic.reason,
                     meta.start.0 + 1,
                     meta.start.1 + 1
@@ -109,7 +109,7 @@ impl EvalError {
                 msg += &prettify_meta(prg, meta);
                 msg
             }
-            _ => format!("{self:?}"),
+            _ => format!("{self}"),
         }
     }
 }
@@ -131,27 +131,27 @@ impl CompileTimeError {
         match self {
             CompileTimeError::ScanErrors(errs) => {
                 for ScanError(e, meta) in errs {
-                    errs_for_display.push(("Scan error", format!("{:?}", e), meta));
+                    errs_for_display.push(("Scan error", format!("{e}"), meta));
                 }
             }
             CompileTimeError::ParseError(errs) => {
                 for ParseError(e, meta) in errs {
-                    errs_for_display.push(("Parse error", format!("{:?}", e), meta));
+                    errs_for_display.push(("Parse error", format!("{e}"), meta));
                 }
             }
             CompileTimeError::TypeError(TypeError(e, meta)) => {
-                errs_for_display.push(("Type error", format!("{:?}", e), meta));
+                errs_for_display.push(("Type error", format!("{e}"), meta));
             }
         }
         let mut msg = "".to_string();
         for (err_type, err, meta) in errs_for_display {
             msg += &format!(
-                "{} on line {}:{}\n",
+                "{} on line {}:{}.\n",
                 err_type,
                 meta.start.0 + 1,
                 meta.start.1 + 1
             );
-            msg += &format!("--> {}:\n", err);
+            msg += &format!("{}:\n\n", err);
             msg += &prettify_meta(prg, *meta);
         }
         msg
