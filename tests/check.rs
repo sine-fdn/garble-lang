@@ -1,6 +1,9 @@
 use garble::{
+    ast::Type,
     check::{TypeError, TypeErrorEnum},
     scan::scan,
+    token::{MetaInfo, UnsignedNumType},
+    typed_ast::{Pattern, PatternEnum},
     Error,
 };
 
@@ -109,5 +112,108 @@ fn main() -> u8 {
         e,
         Err(TypeError(TypeErrorEnum::NoMainFnParams, _))
     ));
+    Ok(())
+}
+
+#[test]
+fn reject_non_exhaustive_range_pattern() -> Result<(), Error> {
+    let prg = "
+fn main(x: u8) -> i32 {
+  match x {
+    0 => 0,
+    1 => 1,
+    3..10 => 2,
+    11..255 => 3,
+    256 => 4,
+  }
+}
+  ";
+    let e = scan(prg).unwrap().parse().unwrap().type_check();
+    if let Err(TypeError(TypeErrorEnum::PatternsAreNotExhaustive(missing), _)) = e {
+        let meta = MetaInfo {
+            start: (0, 0),
+            end: (0, 0),
+        };
+        assert_eq!(
+            missing,
+            vec![
+                [Pattern(
+                    PatternEnum::UnsignedInclusiveRange(2, 2),
+                    Type::Unsigned(UnsignedNumType::U128),
+                    meta
+                )],
+                [Pattern(
+                    PatternEnum::UnsignedInclusiveRange(10, 10),
+                    Type::Unsigned(UnsignedNumType::U128),
+                    meta
+                )],
+                [Pattern(
+                    PatternEnum::UnsignedInclusiveRange(255, 255),
+                    Type::Unsigned(UnsignedNumType::U128),
+                    meta
+                )]
+            ]
+        );
+    } else {
+        panic!("Expected patterns to be non-exhaustive, but found {e:?}");
+    }
+    Ok(())
+}
+
+#[test]
+fn reject_non_exhaustive_tuple_pattern() -> Result<(), Error> {
+    let prg = "
+fn main(x: bool, y: bool, z: bool) -> i32 {
+  match (x, (y, z)) {
+    (true, _) => 1,
+    (_, (false, true)) => 2,
+    (false, (_, true)) => 3,
+  }
+}
+  ";
+    let e = scan(prg).unwrap().parse().unwrap().type_check();
+    if let Err(TypeError(TypeErrorEnum::PatternsAreNotExhaustive(missing), _)) = e {
+        let meta = MetaInfo {
+            start: (0, 0),
+            end: (0, 0),
+        };
+        assert_eq!(
+            missing,
+            vec![
+                [Pattern(
+                    PatternEnum::Tuple(vec![
+                        Pattern(PatternEnum::False, Type::Bool, meta),
+                        Pattern(
+                            PatternEnum::Tuple(vec![
+                                Pattern(PatternEnum::True, Type::Bool, meta),
+                                Pattern(PatternEnum::False, Type::Bool, meta),
+                            ]),
+                            Type::Tuple(vec![Type::Bool, Type::Bool]),
+                            meta
+                        ),
+                    ]),
+                    Type::Tuple(vec![Type::Bool, Type::Tuple(vec![Type::Bool, Type::Bool])]),
+                    meta
+                )],
+                [Pattern(
+                    PatternEnum::Tuple(vec![
+                        Pattern(PatternEnum::False, Type::Bool, meta),
+                        Pattern(
+                            PatternEnum::Tuple(vec![
+                                Pattern(PatternEnum::False, Type::Bool, meta),
+                                Pattern(PatternEnum::False, Type::Bool, meta),
+                            ]),
+                            Type::Tuple(vec![Type::Bool, Type::Bool]),
+                            meta
+                        ),
+                    ]),
+                    Type::Tuple(vec![Type::Bool, Type::Tuple(vec![Type::Bool, Type::Bool])]),
+                    meta
+                )],
+            ]
+        );
+    } else {
+        panic!("Expected patterns to be non-exhaustive, but found {e:?}");
+    }
     Ok(())
 }

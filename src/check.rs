@@ -91,7 +91,7 @@ pub enum TypeErrorEnum {
     /// The specified pattern does not match the type of the matched expression.
     PatternDoesNotMatchType(Type),
     /// The patterns do not cover all possible cases.
-    PatternsAreNotExhaustive,
+    PatternsAreNotExhaustive(Vec<PatternStack>),
     /// The expression cannot be matched upon.
     TypeDoesNotSupportPatternMatching(Type),
 }
@@ -380,7 +380,10 @@ impl Expr {
                             }
                         }
                     }
-                    (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), Type::Bool)
+                    (
+                        typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)),
+                        Type::Bool,
+                    )
                 }
                 Op::BitAnd | Op::BitXor | Op::BitOr => {
                     let mut x = x.type_check(env, fns, defs)?;
@@ -826,6 +829,9 @@ impl Pattern {
     }
 }
 
+// Implements the algorithm described at
+// https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_build/thir/pattern/usefulness/index.html
+// (which implements the paper http://moscova.inria.fr/~maranget/papers/warn/index.html)
 fn check_exhaustiveness(
     clauses: &[(typed_ast::Pattern, typed_ast::Expr)],
     ty: &Type,
@@ -838,8 +844,9 @@ fn check_exhaustiveness(
         ty.clone(),
         meta,
     )];
-    if is_useful(patterns, wildcard_pattern, defs) {
-        let e = TypeErrorEnum::PatternsAreNotExhaustive;
+    let witnesses = usefulness(patterns, wildcard_pattern, defs);
+    if !witnesses.is_empty() {
+        let e = TypeErrorEnum::PatternsAreNotExhaustive(witnesses);
         Err(TypeError(e, meta))
     } else {
         Ok(())
@@ -853,7 +860,7 @@ enum Ctor {
     UnsignedInclusiveRange(u128, u128),
     SignedInclusiveRange(i128, i128),
     Tuple(Vec<Type>),
-    Variant(String, Option<Vec<Type>>),
+    Variant(String, String, Option<Vec<Type>>),
 }
 
 type PatternStack = Vec<typed_ast::Pattern>;
@@ -875,7 +882,7 @@ fn specialize(ctor: &Ctor, pattern: &[typed_ast::Pattern]) -> Vec<PatternStack> 
             }
             _ => vec![],
         },
-        Ctor::Variant(v1, fields) => match head_enum {
+        Ctor::Variant(_, v1, fields) => match head_enum {
             typed_ast::PatternEnum::Identifier(_) => {
                 let field_types = fields.as_deref().unwrap_or_default();
                 let mut fields = Vec::with_capacity(field_types.len());
@@ -971,7 +978,11 @@ fn split_unsigned_range(patterns: &[PatternStack], min: u128, max: u128) -> Vec<
             ranges.push(Ctor::UnsignedInclusiveRange(range[0], range[0]));
         }
         if range[0] >= min && range[1] - 1 <= max {
-            ranges.push(Ctor::UnsignedInclusiveRange(range[0], range[1] - 1));
+            if range[0] < range[1] - 1 {
+                ranges.push(Ctor::UnsignedInclusiveRange(range[0] + 1, range[1] - 1));
+            } else {
+                ranges.push(Ctor::UnsignedInclusiveRange(range[0], range[1] - 1));
+            }
         }
     }
     ranges
@@ -1051,7 +1062,7 @@ fn split_ctor(patterns: &[PatternStack], q: &[typed_ast::Pattern], defs: &Defs) 
             let variants = defs.enums.get(enum_name.as_str()).unwrap();
             variants
                 .iter()
-                .map(|(name, fields)| Ctor::Variant(name.to_string(), fields.clone()))
+                .map(|(name, fields)| Ctor::Variant(enum_name.clone(), name.to_string(), fields.clone()))
                 .collect()
         }
         Type::Tuple(fields) => {
@@ -1063,12 +1074,17 @@ fn split_ctor(patterns: &[PatternStack], q: &[typed_ast::Pattern], defs: &Defs) 
     }
 }
 
-fn is_useful(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> bool {
+fn usefulness(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> Vec<PatternStack> {
     if patterns.is_empty() {
-        true
+        vec![vec![]]
     } else if patterns[0].is_empty() || q.is_empty() {
-        false
+        vec![]
     } else {
+        let mut witnesses = vec![];
+        let meta = MetaInfo {
+            start: (0, 0),
+            end: (0, 0),
+        };
         for ctor in split_ctor(&patterns, &q, defs) {
             let mut specialized = Vec::new();
             for p in patterns.iter() {
@@ -1076,12 +1092,59 @@ fn is_useful(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> bool 
                 specialized.extend(pattern_specialized);
             }
             for q in specialize(&ctor, &q) {
-                if is_useful(specialized.clone(), q.clone(), defs) {
-                    return true;
+                for mut witness in usefulness(specialized.clone(), q.clone(), defs) {
+                    match &ctor {
+                        Ctor::True => witness.insert(
+                            0,
+                            typed_ast::Pattern(typed_ast::PatternEnum::True, Type::Bool, meta),
+                        ),
+                        Ctor::False => witness.insert(
+                            0,
+                            typed_ast::Pattern(typed_ast::PatternEnum::False, Type::Bool, meta),
+                        ),
+                        Ctor::UnsignedInclusiveRange(min, max) => witness.insert(
+                            0,
+                            typed_ast::Pattern(
+                                typed_ast::PatternEnum::UnsignedInclusiveRange(*min, *max),
+                                Type::Unsigned(UnsignedNumType::U128),
+                                meta,
+                            ),
+                        ),
+                        Ctor::SignedInclusiveRange(min, max) => witness.insert(
+                            0,
+                            typed_ast::Pattern(
+                                typed_ast::PatternEnum::SignedInclusiveRange(*min, *max),
+                                Type::Signed(SignedNumType::I128),
+                                meta,
+                            ),
+                        ),
+                        Ctor::Tuple(fields) => {
+                            witness = vec![typed_ast::Pattern(
+                                typed_ast::PatternEnum::Tuple(witness),
+                                Type::Tuple(fields.clone()),
+                                meta,
+                            )]
+                        }
+                        Ctor::Variant(enum_name, variant_name, None) => {
+                            witness = vec![typed_ast::Pattern(
+                                typed_ast::PatternEnum::EnumUnit(enum_name.clone(), variant_name.clone()),
+                                Type::Enum(enum_name.clone()),
+                                meta,
+                            )]
+                        },
+                        Ctor::Variant(enum_name, variant_name, Some(_)) => {
+                            witness = vec![typed_ast::Pattern(
+                                typed_ast::PatternEnum::EnumTuple(enum_name.clone(), variant_name.clone(), witness),
+                                Type::Enum(enum_name.clone()),
+                                meta,
+                            )]
+                        }
+                    }
+                    witnesses.push(witness);
                 }
             }
         }
-        false
+        witnesses
     }
 }
 
