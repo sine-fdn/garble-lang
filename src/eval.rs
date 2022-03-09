@@ -197,7 +197,7 @@ impl<'a> Evaluator<'a> {
         if self.inputs.len() < checked.main.params.len() {
             let ty = &checked.main.params[self.inputs.len()].1;
             let parsed = Literal::parse(checked, ty, literal)
-                .map_err(|e| EvalError::LiteralParseError(e))?;
+                .map_err(EvalError::LiteralParseError)?;
             self.set_literal(checked, parsed)?;
             Ok(())
         } else {
