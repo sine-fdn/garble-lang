@@ -245,7 +245,11 @@ impl Parser {
     fn parse_params(&mut self) -> Result<Vec<ParamDef>, ()> {
         let mut params = vec![self.parse_param()?];
         while self.next_matches(&TokenEnum::Comma).is_some() {
-            params.push(self.parse_param()?);
+            if self.peek(&TokenEnum::RightParen) {
+                break;
+            } else {
+                params.push(self.parse_param()?);
+            }
         }
         Ok(params)
     }
