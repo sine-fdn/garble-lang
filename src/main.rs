@@ -26,12 +26,12 @@ fn main() -> Result<(), std::io::Error> {
                 exit(65);
             }
             let mut params = Vec::with_capacity(main_params.len());
-            for (ParamDef(_, ty), arg) in main_params.iter().zip(&args[2..]) {
+            for (i, (ParamDef(_, ty), arg)) in main_params.iter().zip(&args[2..]).enumerate() {
                 let param = Literal::parse(&checked, ty, arg);
                 match param {
                     Ok(param) => params.push(param),
                     Err(e) => {
-                        eprintln!("{}", e.prettify(arg));
+                        eprintln!("Could not parse argument {i}!\n{}", e.prettify(arg));
                         exit(65);
                     }
                 }
