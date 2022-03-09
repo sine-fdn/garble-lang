@@ -96,6 +96,49 @@ pub enum Type {
     Enum(String),
 }
 
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Bool => f.write_str("bool"),
+            Type::Unsigned(n) => n.fmt(f),
+            Type::Signed(n) => n.fmt(f),
+            Type::Fn(params, ret_ty) => {
+                f.write_str("(")?;
+                let mut params = params.iter();
+                if let Some(param) = params.next() {
+                    param.fmt(f)?;
+                }
+                for param in params {
+                    f.write_str(", ")?;
+                    param.fmt(f)?;
+                }
+                f.write_str(") -> ")?;
+                ret_ty.fmt(f)
+            }
+            Type::Array(ty, size) => {
+                f.write_str("[")?;
+                ty.fmt(f)?;
+                f.write_str("; ")?;
+                size.fmt(f)?;
+                f.write_str("]")
+            }
+            Type::Tuple(fields) => {
+                f.write_str("(")?;
+                let mut fields = fields.iter();
+                if let Some(field) = fields.next() {
+                    field.fmt(f)?;
+                }
+                for field in fields {
+                    f.write_str(", ")?;
+                    field.fmt(f)?;
+                }
+                f.write_str(")")
+            }
+            Type::Enum(name) => f.write_str(name),
+        }
+    }
+}
+
 /// A parameter definition (parameter name and type).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ParamDef(pub String, pub Type);

@@ -35,8 +35,6 @@ pub enum ParseErrorEnum {
     InvalidPattern,
     /// The literal is not valid.
     InvalidLiteral,
-    /// Expected a constant number, but found an expression.
-    ExpectedConstantArraySize,
     /// Expected a type, but found a non-type token.
     ExpectedType,
     /// Expected an expression, but found a non-expr token.
@@ -46,7 +44,38 @@ pub enum ParseErrorEnum {
     /// Expected a method call or a field access.
     ExpectedMethodCallOrFieldAccess,
     /// Found an unexpected token.
-    UnexpectedToken,
+    Expected(TokenEnum),
+}
+
+impl std::fmt::Display for ParseErrorEnum {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParseErrorEnum::MissingMainFnDef => f.write_str("Missing 'main' function definition"),
+            ParseErrorEnum::InvalidTopLevelDef => {
+                f.write_str("Not a valid function or enum definition")
+            }
+            ParseErrorEnum::InvalidArraySize => {
+                let max = usize::MAX;
+                f.write_fmt(format_args!(
+                    "Invalid array size (must be a constant number <= {max})"
+                ))
+            }
+            ParseErrorEnum::InvalidTupleIndexSize => f.write_str("Invalid tuple index"),
+            ParseErrorEnum::InvalidMethodName => {
+                f.write_str("Invalid method name (only .map, .fold and .update are supported)")
+            }
+            ParseErrorEnum::InvalidRangeExpr => f.write_str("Invalid range expression"),
+            ParseErrorEnum::InvalidPattern => f.write_str("Invalid pattern"),
+            ParseErrorEnum::InvalidLiteral => f.write_str("Invalid literal"),
+            ParseErrorEnum::ExpectedType => f.write_str("Expected a type"),
+            ParseErrorEnum::ExpectedExpr => f.write_str("Expected an expression"),
+            ParseErrorEnum::ExpectedIdentifier => f.write_str("Expected an identifier"),
+            ParseErrorEnum::ExpectedMethodCallOrFieldAccess => {
+                f.write_str("Expected a method call or field access")
+            }
+            ParseErrorEnum::Expected(token) => f.write_fmt(format_args!("Expected '{token}'")),
+        }
+    }
 }
 
 impl Tokens {
@@ -259,7 +288,10 @@ impl Parser {
         while self.next_matches(&TokenEnum::DoubleBar).is_some() {
             let y = self.parse_short_circuiting_and()?;
             let meta = join_expr_meta(&x, &y);
-            x = Expr(ExprEnum::Op(Op::ShortCircuitOr, Box::new(x), Box::new(y)), meta);
+            x = Expr(
+                ExprEnum::Op(Op::ShortCircuitOr, Box::new(x), Box::new(y)),
+                meta,
+            );
         }
         Ok(x)
     }
@@ -270,7 +302,10 @@ impl Parser {
         while self.next_matches(&TokenEnum::DoubleAmpersand).is_some() {
             let y = self.parse_equality()?;
             let meta = join_expr_meta(&x, &y);
-            x = Expr(ExprEnum::Op(Op::ShortCircuitAnd, Box::new(x), Box::new(y)), meta);
+            x = Expr(
+                ExprEnum::Op(Op::ShortCircuitAnd, Box::new(x), Box::new(y)),
+                meta,
+            );
         }
         Ok(x)
     }
@@ -642,18 +677,12 @@ impl Parser {
             let unary = self.parse_unary()?;
             let Expr(_, expr_meta) = unary;
             let meta = join_meta(meta, expr_meta);
-            Ok(Expr(
-                ExprEnum::UnaryOp(UnaryOp::Not, Box::new(unary)),
-                meta,
-            ))
+            Ok(Expr(ExprEnum::UnaryOp(UnaryOp::Not, Box::new(unary)), meta))
         } else if let Some(meta) = self.next_matches(&TokenEnum::Minus) {
             let unary = self.parse_unary()?;
             let Expr(_, expr_meta) = unary;
             let meta = join_meta(meta, expr_meta);
-            Ok(Expr(
-                ExprEnum::UnaryOp(UnaryOp::Neg, Box::new(unary)),
-                meta,
-            ))
+            Ok(Expr(ExprEnum::UnaryOp(UnaryOp::Neg, Box::new(unary)), meta))
         } else {
             self.parse_primary()
         }
@@ -850,7 +879,7 @@ impl Parser {
                             return Err(());
                         }
                     } else {
-                        self.push_error_for_next(ParseErrorEnum::ExpectedConstantArraySize);
+                        self.push_error_for_next(ParseErrorEnum::InvalidArraySize);
                         return Err(());
                     };
                     let meta_end = self.expect(&TokenEnum::RightBracket)?;
@@ -1050,7 +1079,7 @@ impl Parser {
                 return Ok(meta);
             }
         }
-        self.push_error_for_next(ParseErrorEnum::UnexpectedToken);
+        self.push_error_for_next(ParseErrorEnum::Expected(t.clone()));
         Err(())
     }
 

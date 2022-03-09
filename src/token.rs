@@ -91,6 +91,62 @@ pub enum TokenEnum {
     DoubleLessThan,
 }
 
+impl std::fmt::Display for TokenEnum {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TokenEnum::Identifier(s) => f.write_str(s),
+            TokenEnum::UnsignedNum(num, suffix) => if let Some(suffix) = suffix {
+                f.write_fmt(format_args!("{num}{suffix}"))
+            } else {
+                f.write_fmt(format_args!("{num}"))
+            }
+            TokenEnum::SignedNum(num, suffix) => if let Some(suffix) = suffix {
+                f.write_fmt(format_args!("{num}{suffix}"))
+            } else {
+                f.write_fmt(format_args!("{num}"))
+            }
+            TokenEnum::KeywordEnum => f.write_str("enum"),
+            TokenEnum::KeywordFn => f.write_str("fn"),
+            TokenEnum::KeywordLet => f.write_str("let"),
+            TokenEnum::KeywordIf => f.write_str("if"),
+            TokenEnum::KeywordElse => f.write_str("else"),
+            TokenEnum::KeywordMatch => f.write_str("match"),
+            TokenEnum::KeywordAs => f.write_str("as"),
+            TokenEnum::Dot => f.write_str("."),
+            TokenEnum::Comma => f.write_str(","),
+            TokenEnum::Semicolon => f.write_str(";"),
+            TokenEnum::Colon => f.write_str(":"),
+            TokenEnum::DoubleColon => f.write_str("::"),
+            TokenEnum::Arrow => f.write_str("->"),
+            TokenEnum::FatArrow => f.write_str("=>"),
+            TokenEnum::LeftParen => f.write_str("("),
+            TokenEnum::RightParen => f.write_str(")"),
+            TokenEnum::LeftBrace => f.write_str("{"),
+            TokenEnum::RightBrace => f.write_str("}"),
+            TokenEnum::LeftBracket => f.write_str("["),
+            TokenEnum::RightBracket => f.write_str("]"),
+            TokenEnum::Plus => f.write_str("+"),
+            TokenEnum::Minus => f.write_str("-"),
+            TokenEnum::Slash => f.write_str("/"),
+            TokenEnum::Star => f.write_str("*"),
+            TokenEnum::Percent => f.write_str("%"),
+            TokenEnum::Ampersand => f.write_str("&"),
+            TokenEnum::DoubleAmpersand => f.write_str("&&"),
+            TokenEnum::Bar => f.write_str("|"),
+            TokenEnum::DoubleBar => f.write_str("||"),
+            TokenEnum::Caret => f.write_str("^"),
+            TokenEnum::Bang => f.write_str("!"),
+            TokenEnum::Eq => f.write_str("="),
+            TokenEnum::DoubleEq => f.write_str("=="),
+            TokenEnum::BangEq => f.write_str("!="),
+            TokenEnum::GreaterThan => f.write_str(">"),
+            TokenEnum::LessThan => f.write_str("<"),
+            TokenEnum::DoubleGreaterThan => f.write_str(">>"),
+            TokenEnum::DoubleLessThan => f.write_str("<<"),
+        }
+    }
+}
+
 /// A suffix indicating the explicit unsigned number type of the literal.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum UnsignedNumType {
@@ -108,6 +164,19 @@ pub enum UnsignedNumType {
     U128,
 }
 
+impl std::fmt::Display for UnsignedNumType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            UnsignedNumType::Usize => "usize",
+            UnsignedNumType::U8 => "u8",
+            UnsignedNumType::U16 => "u16",
+            UnsignedNumType::U32 => "u32",
+            UnsignedNumType::U64 => "u64",
+            UnsignedNumType::U128 => "u128",
+        })
+    }
+}
+
 /// A suffix indicating the explicit signed number type of the literal.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum SignedNumType {
@@ -121,6 +190,18 @@ pub enum SignedNumType {
     I64,
     /// 128-bit signed integer type.
     I128,
+}
+
+impl std::fmt::Display for SignedNumType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            SignedNumType::I8 => "i8",
+            SignedNumType::I16 => "i16",
+            SignedNumType::I32 => "i32",
+            SignedNumType::I64 => "i64",
+            SignedNumType::I128 => "i128",
+        })
+    }
 }
 
 /// The location of a token in the source code, from start `(line, column)` to end `(line, column)`.
