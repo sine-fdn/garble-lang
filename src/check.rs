@@ -940,6 +940,7 @@ enum Ctor {
     SignedInclusiveRange(i128, i128),
     Tuple(Vec<Type>),
     Variant(String, String, Option<Vec<Type>>),
+    Array(Box<Type>, usize),
 }
 
 type PatternStack = Vec<typed_ast::Pattern>;
@@ -1021,6 +1022,10 @@ fn specialize(ctor: &Ctor, pattern: &[typed_ast::Pattern]) -> Vec<PatternStack> 
             typed_ast::PatternEnum::Tuple(fields) => {
                 vec![fields.iter().cloned().chain(tail).collect()]
             }
+            _ => vec![],
+        },
+        Ctor::Array(_, _) => match head_enum {
+            typed_ast::PatternEnum::Identifier(_) => vec![tail.collect()],
             _ => vec![],
         },
     }
@@ -1149,7 +1154,8 @@ fn split_ctor(patterns: &[PatternStack], q: &[typed_ast::Pattern], defs: &Defs) 
         Type::Tuple(fields) => {
             vec![Ctor::Tuple(fields.clone())]
         }
-        Type::Fn(_, _) | Type::Array(_, _) => {
+        Type::Array(elem_ty, size) => vec![Ctor::Array(elem_ty.clone(), *size)],
+        Type::Fn(_, _) => {
             panic!("Type {:?} does not support pattern matching", ty)
         }
     }
@@ -1227,6 +1233,14 @@ fn usefulness(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> Vec<
                                 meta,
                             )]
                         }
+                        Ctor::Array(elem_ty, size) => witness.insert(
+                            0,
+                            typed_ast::Pattern(
+                                typed_ast::PatternEnum::Identifier("_".to_string()),
+                                Type::Array(elem_ty.clone(), *size),
+                                meta,
+                            ),
+                        ),
                     }
                     witnesses.push(witness);
                 }
