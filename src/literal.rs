@@ -6,13 +6,14 @@ use std::fmt::Display;
 use crate::{
     ast::{Type, Variant},
     check::{coerce_type, Defs, TypedFns},
+    circuit::EvalPanic,
     compile::{enum_max_size, enum_tag_number, enum_tag_size, signed_to_bits, unsigned_to_bits},
     env::Env,
     eval::EvalError,
     scan::scan,
     token::{SignedNumType, UnsignedNumType},
     typed_ast::{Expr, ExprEnum, Program, VariantExpr, VariantExprEnum},
-    CompileTimeError, circuit::EvalPanic,
+    CompileTimeError,
 };
 
 /// A subset of [`crate::typed_ast::Expr`] that is used as input / output by an
@@ -67,7 +68,11 @@ impl Literal {
     ///
     /// `bits` must include the _panic portion of the circuit_, meaning all wires carrying panic
     /// information must be included in the bits.
-    pub fn from_result_bits(checked: &Program, ty: &Type, bits: &[bool]) -> Result<Self, EvalError> {
+    pub fn from_result_bits(
+        checked: &Program,
+        ty: &Type,
+        bits: &[bool],
+    ) -> Result<Self, EvalError> {
         match EvalPanic::parse(bits) {
             Ok(bits) => Literal::from_unwrapped_bits(checked, ty, bits),
             Err(panic) => Err(EvalError::Panic(panic)),
@@ -80,7 +85,11 @@ impl Literal {
     /// carrying panic information must already have been removed prior to parsing the bits. If you
     /// want to parse a circuit output that might have panicked, use
     /// [`from_output`] instead.
-    pub fn from_unwrapped_bits(checked: &Program, ty: &Type, bits: &[bool]) -> Result<Self, EvalError> {
+    pub fn from_unwrapped_bits(
+        checked: &Program,
+        ty: &Type,
+        bits: &[bool],
+    ) -> Result<Self, EvalError> {
         match ty {
             Type::Bool => {
                 if bits.len() == 1 {

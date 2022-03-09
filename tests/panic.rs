@@ -1,7 +1,8 @@
 use garble::{
     circuit::{EvalPanic, PanicReason},
     compile,
-    eval::{EvalError, Evaluator, EvalOutput}, Error,
+    eval::{EvalError, EvalOutput, Evaluator},
+    Error,
 };
 
 #[test]
@@ -235,7 +236,7 @@ fn main(b: bool) -> bool {
     let mut eval = Evaluator::from(&circuit);
     eval.set_bool(true);
     expect_panic(eval.run(), PanicReason::OutOfBounds);
-    
+
     let mut eval = Evaluator::from(&circuit);
     eval.set_bool(false);
     expect_panic(eval.run(), PanicReason::OutOfBounds);
@@ -250,7 +251,7 @@ fn main(b: bool) -> bool {
     let mut eval = Evaluator::from(&circuit);
     eval.set_bool(true);
     expect_panic(eval.run(), PanicReason::DivByZero);
-    
+
     let mut eval = Evaluator::from(&circuit);
     eval.set_bool(false);
     expect_panic(eval.run(), PanicReason::DivByZero);
@@ -303,7 +304,7 @@ fn main(b: bool) -> bool {
     let mut eval = Evaluator::from(&circuit);
     eval.set_bool(true);
     expect_panic(eval.run(), PanicReason::OutOfBounds);
-    
+
     let mut eval = Evaluator::from(&circuit);
     eval.set_bool(false);
     expect_panic(eval.run(), PanicReason::OutOfBounds);
@@ -318,7 +319,7 @@ fn main(b: bool) -> bool {
     let mut eval = Evaluator::from(&circuit);
     eval.set_bool(true);
     expect_panic(eval.run(), PanicReason::DivByZero);
-    
+
     let mut eval = Evaluator::from(&circuit);
     eval.set_bool(false);
     expect_panic(eval.run(), PanicReason::DivByZero);

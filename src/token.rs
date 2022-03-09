@@ -95,15 +95,19 @@ impl std::fmt::Display for TokenEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             TokenEnum::Identifier(s) => f.write_str(s),
-            TokenEnum::UnsignedNum(num, suffix) => if let Some(suffix) = suffix {
-                f.write_fmt(format_args!("{num}{suffix}"))
-            } else {
-                f.write_fmt(format_args!("{num}"))
+            TokenEnum::UnsignedNum(num, suffix) => {
+                if let Some(suffix) = suffix {
+                    f.write_fmt(format_args!("{num}{suffix}"))
+                } else {
+                    f.write_fmt(format_args!("{num}"))
+                }
             }
-            TokenEnum::SignedNum(num, suffix) => if let Some(suffix) = suffix {
-                f.write_fmt(format_args!("{num}{suffix}"))
-            } else {
-                f.write_fmt(format_args!("{num}"))
+            TokenEnum::SignedNum(num, suffix) => {
+                if let Some(suffix) = suffix {
+                    f.write_fmt(format_args!("{num}{suffix}"))
+                } else {
+                    f.write_fmt(format_args!("{num}"))
+                }
             }
             TokenEnum::KeywordEnum => f.write_str("enum"),
             TokenEnum::KeywordFn => f.write_str("fn"),

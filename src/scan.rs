@@ -22,15 +22,9 @@ pub enum ScanErrorEnum {
 impl std::fmt::Display for ScanErrorEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ScanErrorEnum::UnexpectedCharacter => {
-                f.write_str("Unexpected character")
-            }
-            ScanErrorEnum::InvalidUnsignedNum => {
-                f.write_str("Invalid unsigned number")
-            }
-            ScanErrorEnum::InvalidSignedNum => {
-                f.write_str("Invalid signed number")
-            }
+            ScanErrorEnum::UnexpectedCharacter => f.write_str("Unexpected character"),
+            ScanErrorEnum::InvalidUnsignedNum => f.write_str("Invalid unsigned number"),
+            ScanErrorEnum::InvalidSignedNum => f.write_str("Invalid signed number"),
         }
     }
 }

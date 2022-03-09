@@ -288,11 +288,20 @@ fn main(mode: bool, x: u16, y: u8) -> u16 {
                 let result = eval.run().map_err(|e| pretty_print(e, prg))?;
                 let output = u16::try_from(result);
                 if y >= 16 {
-                    assert!(output.is_err(), "{x} {} {y}", if mode { "<<" } else { ">>" })
+                    assert!(
+                        output.is_err(),
+                        "{x} {} {y}",
+                        if mode { "<<" } else { ">>" }
+                    )
                 } else {
                     let expected = if mode { x << y } else { x >> y };
                     assert!(output.is_ok(), "{x} {} {y}", if mode { "<<" } else { ">>" });
-                    assert_eq!(output.unwrap(), expected, "{x} {} {y}", if mode { "<<" } else { ">>" });
+                    assert_eq!(
+                        output.unwrap(),
+                        expected,
+                        "{x} {} {y}",
+                        if mode { "<<" } else { ">>" }
+                    );
                 }
             }
         }
@@ -413,11 +422,20 @@ fn main(mode: bool, x: i16, y: u8) -> i16 {
                 let result = eval.run().map_err(|e| pretty_print(e, prg))?;
                 let output = i16::try_from(result);
                 if y >= 16 {
-                    assert!(output.is_err(), "{x} {} {y}", if mode { "<<" } else { ">>" })
+                    assert!(
+                        output.is_err(),
+                        "{x} {} {y}",
+                        if mode { "<<" } else { ">>" }
+                    )
                 } else {
                     let expected = if mode { x << y } else { x >> y };
                     assert!(output.is_ok(), "{x} {} {y}", if mode { "<<" } else { ">>" });
-                    assert_eq!(output.unwrap(), expected, "{x} {} {y}", if mode { "<<" } else { ">>" });
+                    assert_eq!(
+                        output.unwrap(),
+                        expected,
+                        "{x} {} {y}",
+                        if mode { "<<" } else { ">>" }
+                    );
                 }
             }
         }

@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::token::{MetaInfo, UnsignedNumType, SignedNumType};
+use crate::token::{MetaInfo, SignedNumType, UnsignedNumType};
 
 /// A program, consisting of top level definitions (enums or functions).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -294,5 +294,5 @@ pub enum Op {
     /// Short-circuiting and (`&&`).
     ShortCircuitAnd,
     /// Short-circuiting or (`||`).
-    ShortCircuitOr
+    ShortCircuitOr,
 }

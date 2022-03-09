@@ -141,7 +141,6 @@ impl PanicResult {
     }
 }
 
-
 /// A decoded panic, indicating why and where a panic occurred.
 #[derive(Debug, Clone)]
 pub struct EvalPanic {
@@ -187,7 +186,6 @@ impl EvalPanic {
         }
     }
 }
-
 
 /// The reason why a panic occurred.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
