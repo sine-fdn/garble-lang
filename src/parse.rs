@@ -274,9 +274,9 @@ impl Parser {
             let (var, _) = self.expect_identifier()?;
             self.expect(&TokenEnum::Eq)?;
             if let Ok(binding) = self.parse_expr() {
-                let meta_end = self.expect(&TokenEnum::Semicolon)?;
+                self.expect(&TokenEnum::Semicolon)?;
                 let body = self.parse_expr()?;
-                let meta = join_meta(meta, meta_end);
+                let meta = join_meta(meta, body.1);
                 Ok(Expr(
                     ExprEnum::Let(var, Box::new(binding), Box::new(body)),
                     meta,
