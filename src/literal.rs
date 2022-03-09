@@ -63,6 +63,53 @@ impl Literal {
         Ok(expr.into_literal())
     }
 
+    /// Checks whether the literal is of the specified types, looking up enum defs in the program.
+    pub fn is_of_type(&self, checked: &Program, ty: &Type) -> bool {
+        match (self, ty) {
+            (Literal::True, Type::Bool) => true,
+            (Literal::False, Type::Bool) => true,
+            (Literal::NumUnsigned(_, ty1), Type::Unsigned(ty2)) if ty1 == ty2 => true,
+            (Literal::NumSigned(_, ty1), Type::Signed(ty2)) if ty1 == ty2 => true,
+            (Literal::ArrayRepeat(elem, size1), Type::Array(elem_ty, size2)) => {
+                size1 == size2 && elem.is_of_type(checked, elem_ty)
+            }
+            (Literal::Array(elems), Type::Array(elem_ty, size)) if elems.len() == *size => {
+                elems.iter().all(|elem| elem.is_of_type(checked, elem_ty))
+            }
+            (Literal::Tuple(fields1), Type::Tuple(fields2)) if fields1.len() == fields2.len() => {
+                fields1
+                    .iter()
+                    .zip(fields2.iter())
+                    .all(|(f, ty)| f.is_of_type(checked, ty))
+            }
+            (Literal::Enum(enum_name1, variant_name1, fields1), Type::Enum(enum_name2))
+                if enum_name1 == enum_name2 =>
+            {
+                if let Some(enum_def) = checked.enum_defs.get(enum_name1) {
+                    if let Some(variant2) = enum_def.get_variant(variant_name1) {
+                        if variant_name1 == variant2.variant_name() {
+                            match (fields1, variant2) {
+                                (VariantLiteral::Unit, Variant::Unit(_)) => return true,
+                                (VariantLiteral::Tuple(fields1), Variant::Tuple(_, fields2)) => {
+                                    return fields1
+                                        .iter()
+                                        .zip(fields2.iter())
+                                        .all(|(f, ty)| f.is_of_type(checked, ty));
+                                }
+                                _ => return false,
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            (Literal::Range(min, max), Type::Array(elem_ty, size)) => {
+                elem_ty.as_ref() == &Type::Unsigned(UnsignedNumType::Usize) && max - min == *size
+            }
+            _ => false,
+        }
+    }
+
     /// Decodes the bits as a panic or literal of the specified type, looking up enum defs in the
     /// program.
     ///

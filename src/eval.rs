@@ -7,10 +7,9 @@ use crate::{
     circuit::{Circuit, EvalPanic},
     compile::{signed_to_bits, unsigned_to_bits},
     literal::Literal,
-    parse::ParseError,
-    scan::ScanError,
     token::{SignedNumType, UnsignedNumType},
     typed_ast::Program,
+    CompileTimeError,
 };
 
 /// Evaluates a [`crate::circuit::Circuit`] with inputs supplied by different parties.
@@ -35,10 +34,10 @@ pub enum EvalError {
     UnexpectedNumberOfParties,
     /// The input bits of the specified party does not match the circuit description.
     UnexpectedNumberOfInputsFromParty(usize),
-    /// An input literal could not be scanned.
-    LiteralScanError(Vec<ScanError>),
     /// An input literal could not be parsed.
-    LiteralParseError(Vec<ParseError>),
+    LiteralParseError(CompileTimeError),
+    /// The literal is not of the expected parameter type.
+    InvalidLiteralType(Literal, Type),
     /// The number of output bits does not match the expected type.
     OutputTypeMismatch {
         /// The expected output type.
@@ -57,27 +56,11 @@ impl std::fmt::Display for EvalError {
                 "The number of provided inputs does not match the expected number of parties of the circuit",
             ),
             EvalError::UnexpectedNumberOfInputsFromParty(party) => f.write_fmt(format_args!("Unexpected number of input bits from party {party}")),
-            EvalError::LiteralScanError(errs) => {
-                let mut errs = errs.iter();
-                if let Some(err) = errs.next() {
-                    err.fmt(f)?;
-                }
-                for err in errs {
-                    f.write_str("\n")?;
-                    err.fmt(f)?;
-                }
-                f.write_str("")
+            EvalError::LiteralParseError(err) => {
+                err.fmt(f)
             }
-            EvalError::LiteralParseError(errs) => {
-                let mut errs = errs.iter();
-                if let Some(err) = errs.next() {
-                    err.fmt(f)?;
-                }
-                for err in errs {
-                    f.write_str("\n")?;
-                    err.fmt(f)?;
-                }
-                f.write_str("")
+            EvalError::InvalidLiteralType(literal, ty) => {
+                f.write_fmt(format_args!("The argument literal is not of type {ty}: '{literal}'"))
             }
             EvalError::OutputTypeMismatch {
                 expected,
@@ -191,12 +174,35 @@ impl<'a> Evaluator<'a> {
     }
 
     /// Encodes a literal (with enums looked up in the program) and sets it as the party's input.
-    pub fn set_literal(&mut self, checked: &Program, literal: Literal) {
-        self.inputs.push(vec![]);
-        self.inputs
-            .last_mut()
-            .unwrap()
-            .extend(literal.as_bits(checked));
+    pub fn set_literal(&mut self, checked: &Program, literal: Literal) -> Result<(), EvalError> {
+        if self.inputs.len() < checked.main.params.len() {
+            let ty = &checked.main.params[self.inputs.len()].1;
+            if literal.is_of_type(checked, ty) {
+                self.inputs.push(vec![]);
+                self.inputs
+                    .last_mut()
+                    .unwrap()
+                    .extend(literal.as_bits(checked));
+                Ok(())
+            } else {
+                Err(EvalError::InvalidLiteralType(literal, ty.clone()))
+            }
+        } else {
+            Err(EvalError::UnexpectedNumberOfParties)
+        }
+    }
+
+    /// Parses a literal (with enums looked up in the program) and sets it as the party's input.
+    pub fn parse_literal(&mut self, checked: &Program, literal: &str) -> Result<(), EvalError> {
+        if self.inputs.len() < checked.main.params.len() {
+            let ty = &checked.main.params[self.inputs.len()].1;
+            let parsed = Literal::parse(checked, ty, literal)
+                .map_err(|e| EvalError::LiteralParseError(e))?;
+            self.set_literal(checked, parsed)?;
+            Ok(())
+        } else {
+            Err(EvalError::UnexpectedNumberOfParties)
+        }
     }
 }
 
@@ -373,7 +379,7 @@ impl EvalOutput {
     }
 
     /// Decodes the evaluated result as a literal (with enums looked up in the program).
-    pub fn into_literal(self, checked: &Program, ty: &Type) -> Result<Literal, EvalError> {
-        Literal::from_result_bits(checked, ty, &self.0)
+    pub fn into_literal(self, checked: &Program) -> Result<Literal, EvalError> {
+        Literal::from_result_bits(checked, &checked.main.body.1, &self.0)
     }
 }

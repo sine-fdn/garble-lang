@@ -39,7 +39,10 @@ fn main() -> Result<(), std::io::Error> {
             let circuit = checked.compile();
             let mut computation = Evaluator::from(&circuit);
             for param in params {
-                computation.set_literal(&checked, param);
+                if let Err(e) = computation.set_literal(&checked, param) {
+                    eprintln!("{}", e.prettify(&prg));
+                    exit(65);
+                }
             }
             match computation.run() {
                 Err(e) => {
@@ -47,8 +50,7 @@ fn main() -> Result<(), std::io::Error> {
                     exit(65);
                 }
                 Ok(output) => {
-                    let ret_ty = &checked.main.body.1;
-                    let result = output.into_literal(&checked, ret_ty);
+                    let result = output.into_literal(&checked);
                     match result {
                         Ok(result) => {
                             println!("{}", result);
