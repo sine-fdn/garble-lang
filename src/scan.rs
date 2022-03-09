@@ -135,7 +135,7 @@ impl<'a> Scanner<'a> {
                 }
                 '/' => {
                     if self.next_matches('/') {
-                        while !self.peek('\n') {
+                        while !(self.peek('\n') || self.is_empty()) {
                             self.advance();
                         }
                     } else {
@@ -304,6 +304,10 @@ impl<'a> Scanner<'a> {
             return *next_char == c;
         }
         false
+    }
+
+    fn is_empty(&mut self) -> bool {
+        self.chars.peek().is_none()
     }
 
     fn advance(&mut self) {
