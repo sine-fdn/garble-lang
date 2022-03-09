@@ -66,6 +66,13 @@ pub enum TypeErrorEnum {
         /// The actual type.
         actual: Type,
     },
+    /// Expected a different number of function arguments.
+    WrongNumberOfArgs {
+        /// The number of parameters declared by the function.
+        expected: usize,
+        /// The number of arguments provided by the caller.
+        actual: usize,
+    },
     /// The two types are incompatible, (e.g. incompatible number types in a `+` operation).
     TypeMismatch((Type, MetaInfo), (Type, MetaInfo)),
     /// The specified range has invalid min or max values.
@@ -134,6 +141,9 @@ impl std::fmt::Display for TypeErrorEnum {
             }
             TypeErrorEnum::UnexpectedType { expected, actual } => {
                 f.write_fmt(format_args!("Expected type {expected}, but found {actual}"))
+            }
+            TypeErrorEnum::WrongNumberOfArgs { expected, actual } => {
+                f.write_fmt(format_args!("The function expects {expected} parameter(s), but was called with {actual} argument(s)"))
             }
             TypeErrorEnum::TypeMismatch((x, _), (y, _)) => f.write_fmt(format_args!(
                 "The operands have incompatible types; {x} vs {y}"
@@ -530,9 +540,9 @@ impl Expr {
                         let expr = typed_ast::ExprEnum::FnCall(identifier.clone(), arg_exprs);
                         (expr, ret_ty)
                     } else {
-                        let e = TypeErrorEnum::UnexpectedType {
-                            expected: Type::Fn(arg_types, Box::new(ret_ty.clone())),
-                            actual: Type::Fn(fn_arg_types, Box::new(ret_ty)),
+                        let e = TypeErrorEnum::WrongNumberOfArgs {
+                            expected: fn_arg_types.len(),
+                            actual: arg_types.len(),
                         };
                         return Err(TypeError(e, meta));
                     }
