@@ -196,8 +196,8 @@ impl<'a> Evaluator<'a> {
     pub fn parse_literal(&mut self, checked: &Program, literal: &str) -> Result<(), EvalError> {
         if self.inputs.len() < checked.main.params.len() {
             let ty = &checked.main.params[self.inputs.len()].1;
-            let parsed = Literal::parse(checked, ty, literal)
-                .map_err(EvalError::LiteralParseError)?;
+            let parsed =
+                Literal::parse(checked, ty, literal).map_err(EvalError::LiteralParseError)?;
             self.set_literal(checked, parsed)?;
             Ok(())
         } else {
