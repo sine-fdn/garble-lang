@@ -65,8 +65,12 @@ pub enum TokenEnum {
     Percent,
     /// `&`.
     Ampersand,
+    /// `&&`.
+    DoubleAmpersand,
     /// `|`.
     Bar,
+    /// `||`.
+    DoubleBar,
     /// `^`.
     Caret,
     /// `!`.

@@ -184,157 +184,6 @@ impl Program {
     }
 }
 
-fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<(Type, usize), TypeError> {
-    match ty {
-        Type::Array(elem, size) => Ok((*elem.clone(), *size)),
-        _ => Err(TypeError(
-            TypeErrorEnum::ExpectedArrayType(ty.clone()),
-            meta,
-        )),
-    }
-}
-
-fn expect_tuple_type(ty: &Type, meta: MetaInfo) -> Result<Vec<Type>, TypeError> {
-    match ty {
-        Type::Tuple(types) => Ok(types.clone()),
-        _ => Err(TypeError(
-            TypeErrorEnum::ExpectedTupleType(ty.clone()),
-            meta,
-        )),
-    }
-}
-
-fn expect_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
-    match ty {
-        Type::Unsigned(_) | Type::Signed(_) => Ok(()),
-        _ => Err(TypeError(
-            TypeErrorEnum::ExpectedNumberType(ty.clone()),
-            meta,
-        )),
-    }
-}
-
-fn expect_signed_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
-    match ty {
-        Type::Signed(_) => Ok(()),
-        _ => Err(TypeError(
-            TypeErrorEnum::ExpectedSignedNumberType(ty.clone()),
-            meta,
-        )),
-    }
-}
-
-fn expect_bool_or_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
-    if let Type::Bool = ty {
-        return Ok(());
-    };
-    if let Ok(()) = expect_num_type(ty, meta) {
-        return Ok(());
-    }
-    Err(TypeError(
-        TypeErrorEnum::ExpectedBoolOrNumberType(ty.clone()),
-        meta,
-    ))
-}
-
-pub(crate) fn coerce_type(expr: &mut typed_ast::Expr, expected: &Type) -> Result<(), TypeError> {
-    let typed_ast::Expr(expr_enum, actual, meta) = &expr;
-    let actual = actual.clone();
-    if let typed_ast::ExprEnum::NumUnsigned(n, None) = expr_enum {
-        if is_coercible_unsigned(*n, expected) {
-            expr.1 = expected.clone();
-            return Ok(());
-        }
-    }
-    if let typed_ast::ExprEnum::NumSigned(n, None) = expr_enum {
-        if is_coercible_signed(*n, expected) {
-            expr.1 = expected.clone();
-            return Ok(());
-        }
-    }
-    if &actual == expected {
-        Ok(())
-    } else {
-        let expected = expected.clone();
-        let e = TypeErrorEnum::UnexpectedType { expected, actual };
-        Err(TypeError(e, *meta))
-    }
-}
-
-fn unify(e1: &mut typed_ast::Expr, e2: &mut typed_ast::Expr, m: MetaInfo) -> Result<Type, TypeError> {
-    let typed_ast::Expr(expr1, ty1, meta1) = e1;
-    let typed_ast::Expr(expr2, ty2, meta2) = e2;
-    let ty = match (expr1, expr2) {
-        (typed_ast::ExprEnum::NumUnsigned(n, None), _) if is_coercible_unsigned(*n, ty2) => {
-            Ok(ty2.clone())
-        }
-        (_, typed_ast::ExprEnum::NumUnsigned(n, None)) if is_coercible_unsigned(*n, ty1) => {
-            Ok(ty1.clone())
-        }
-        (typed_ast::ExprEnum::NumSigned(n, None), _) if is_coercible_signed(*n, ty2) => {
-            Ok(ty2.clone())
-        }
-        (_, typed_ast::ExprEnum::NumSigned(n, None)) if is_coercible_signed(*n, ty1) => {
-            Ok(ty1.clone())
-        }
-        _ if *ty1 == *ty2 => Ok(ty1.clone()),
-        _ => {
-            let e = TypeErrorEnum::TypeMismatch((ty1.clone(), *meta1), (ty2.clone(), *meta2));
-            Err(TypeError(e, m))
-        }
-    };
-    if let Ok(ty) = &ty {
-        e1.1 = ty.clone();
-        e2.1 = ty.clone();
-    }
-    ty
-}
-
-fn is_coercible_unsigned(n: u128, ty: &Type) -> bool {
-    if let Type::Unsigned(ty) = ty {
-        match ty {
-            UnsignedNumType::Usize => n <= usize::MAX as u128,
-            UnsignedNumType::U8 => n <= u8::MAX as u128,
-            UnsignedNumType::U16 => n <= u16::MAX as u128,
-            UnsignedNumType::U32 => n <= u32::MAX as u128,
-            UnsignedNumType::U64 => n <= u64::MAX as u128,
-            UnsignedNumType::U128 => true,
-        }
-    } else if let Type::Signed(ty) = ty {
-        match ty {
-            SignedNumType::I8 => n <= i8::MAX as u128,
-            SignedNumType::I16 => n <= i16::MAX as u128,
-            SignedNumType::I32 => n <= i32::MAX as u128,
-            SignedNumType::I64 => n <= i64::MAX as u128,
-            SignedNumType::I128 => n <= i128::MAX as u128,
-        }
-    } else {
-        false
-    }
-}
-
-fn is_coercible_signed(n: i128, ty: &Type) -> bool {
-    match ty {
-        Type::Bool => false,
-        Type::Unsigned(_) => {
-            if n < 0 {
-                false
-            } else {
-                is_coercible_unsigned(n as u128, ty)
-            }
-        }
-        Type::Signed(SignedNumType::I8) => n >= i8::MIN as i128 && n <= i8::MAX as i128,
-        Type::Signed(SignedNumType::I16) => n >= i16::MIN as i128 && n <= i16::MAX as i128,
-        Type::Signed(SignedNumType::I32) => n >= i32::MIN as i128 && n <= i32::MAX as i128,
-        Type::Signed(SignedNumType::I64) => n >= i64::MIN as i128 && n <= i64::MAX as i128,
-        Type::Signed(SignedNumType::I128) => true,
-        Type::Fn(_, _) => false,
-        Type::Array(_, _) => false,
-        Type::Tuple(_) => false,
-        Type::Enum(_) => false,
-    }
-}
-
 impl FnDef {
     fn type_check(&self, fns: &mut TypedFns, defs: &Defs) -> Result<typed_ast::FnDef, TypeError> {
         if fns.currently_being_checked.contains(&self.identifier) {
@@ -513,6 +362,25 @@ impl Expr {
                     let ty = unify(&mut x, &mut y, meta)?;
                     expect_num_type(&ty, meta)?;
                     (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), ty)
+                }
+                Op::ShortCircuitAnd | Op::ShortCircuitOr => {
+                    let x = x.type_check(env, fns, defs)?;
+                    let y = y.type_check(env, fns, defs)?;
+                    for (ty, meta) in [(&x.1, &x.2), (&y.1, &y.2)] {
+                        match ty {
+                            Type::Bool => {}
+                            ty => {
+                                return Err(TypeError(
+                                    TypeErrorEnum::UnexpectedType {
+                                        expected: Type::Bool,
+                                        actual: ty.clone(),
+                                    },
+                                    *meta,
+                                ))
+                            }
+                        }
+                    }
+                    (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), Type::Bool)
                 }
                 Op::BitAnd | Op::BitXor | Op::BitOr => {
                     let mut x = x.type_check(env, fns, defs)?;
@@ -1214,5 +1082,160 @@ fn is_useful(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> bool 
             }
         }
         false
+    }
+}
+
+fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<(Type, usize), TypeError> {
+    match ty {
+        Type::Array(elem, size) => Ok((*elem.clone(), *size)),
+        _ => Err(TypeError(
+            TypeErrorEnum::ExpectedArrayType(ty.clone()),
+            meta,
+        )),
+    }
+}
+
+fn expect_tuple_type(ty: &Type, meta: MetaInfo) -> Result<Vec<Type>, TypeError> {
+    match ty {
+        Type::Tuple(types) => Ok(types.clone()),
+        _ => Err(TypeError(
+            TypeErrorEnum::ExpectedTupleType(ty.clone()),
+            meta,
+        )),
+    }
+}
+
+fn expect_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
+    match ty {
+        Type::Unsigned(_) | Type::Signed(_) => Ok(()),
+        _ => Err(TypeError(
+            TypeErrorEnum::ExpectedNumberType(ty.clone()),
+            meta,
+        )),
+    }
+}
+
+fn expect_signed_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
+    match ty {
+        Type::Signed(_) => Ok(()),
+        _ => Err(TypeError(
+            TypeErrorEnum::ExpectedSignedNumberType(ty.clone()),
+            meta,
+        )),
+    }
+}
+
+fn expect_bool_or_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
+    if let Type::Bool = ty {
+        return Ok(());
+    };
+    if let Ok(()) = expect_num_type(ty, meta) {
+        return Ok(());
+    }
+    Err(TypeError(
+        TypeErrorEnum::ExpectedBoolOrNumberType(ty.clone()),
+        meta,
+    ))
+}
+
+pub(crate) fn coerce_type(expr: &mut typed_ast::Expr, expected: &Type) -> Result<(), TypeError> {
+    let typed_ast::Expr(expr_enum, actual, meta) = &expr;
+    let actual = actual.clone();
+    if let typed_ast::ExprEnum::NumUnsigned(n, None) = expr_enum {
+        if is_coercible_unsigned(*n, expected) {
+            expr.1 = expected.clone();
+            return Ok(());
+        }
+    }
+    if let typed_ast::ExprEnum::NumSigned(n, None) = expr_enum {
+        if is_coercible_signed(*n, expected) {
+            expr.1 = expected.clone();
+            return Ok(());
+        }
+    }
+    if &actual == expected {
+        Ok(())
+    } else {
+        let expected = expected.clone();
+        let e = TypeErrorEnum::UnexpectedType { expected, actual };
+        Err(TypeError(e, *meta))
+    }
+}
+
+fn unify(
+    e1: &mut typed_ast::Expr,
+    e2: &mut typed_ast::Expr,
+    m: MetaInfo,
+) -> Result<Type, TypeError> {
+    let typed_ast::Expr(expr1, ty1, meta1) = e1;
+    let typed_ast::Expr(expr2, ty2, meta2) = e2;
+    let ty = match (expr1, expr2) {
+        (typed_ast::ExprEnum::NumUnsigned(n, None), _) if is_coercible_unsigned(*n, ty2) => {
+            Ok(ty2.clone())
+        }
+        (_, typed_ast::ExprEnum::NumUnsigned(n, None)) if is_coercible_unsigned(*n, ty1) => {
+            Ok(ty1.clone())
+        }
+        (typed_ast::ExprEnum::NumSigned(n, None), _) if is_coercible_signed(*n, ty2) => {
+            Ok(ty2.clone())
+        }
+        (_, typed_ast::ExprEnum::NumSigned(n, None)) if is_coercible_signed(*n, ty1) => {
+            Ok(ty1.clone())
+        }
+        _ if *ty1 == *ty2 => Ok(ty1.clone()),
+        _ => {
+            let e = TypeErrorEnum::TypeMismatch((ty1.clone(), *meta1), (ty2.clone(), *meta2));
+            Err(TypeError(e, m))
+        }
+    };
+    if let Ok(ty) = &ty {
+        e1.1 = ty.clone();
+        e2.1 = ty.clone();
+    }
+    ty
+}
+
+fn is_coercible_unsigned(n: u128, ty: &Type) -> bool {
+    if let Type::Unsigned(ty) = ty {
+        match ty {
+            UnsignedNumType::Usize => n <= usize::MAX as u128,
+            UnsignedNumType::U8 => n <= u8::MAX as u128,
+            UnsignedNumType::U16 => n <= u16::MAX as u128,
+            UnsignedNumType::U32 => n <= u32::MAX as u128,
+            UnsignedNumType::U64 => n <= u64::MAX as u128,
+            UnsignedNumType::U128 => true,
+        }
+    } else if let Type::Signed(ty) = ty {
+        match ty {
+            SignedNumType::I8 => n <= i8::MAX as u128,
+            SignedNumType::I16 => n <= i16::MAX as u128,
+            SignedNumType::I32 => n <= i32::MAX as u128,
+            SignedNumType::I64 => n <= i64::MAX as u128,
+            SignedNumType::I128 => n <= i128::MAX as u128,
+        }
+    } else {
+        false
+    }
+}
+
+fn is_coercible_signed(n: i128, ty: &Type) -> bool {
+    match ty {
+        Type::Bool => false,
+        Type::Unsigned(_) => {
+            if n < 0 {
+                false
+            } else {
+                is_coercible_unsigned(n as u128, ty)
+            }
+        }
+        Type::Signed(SignedNumType::I8) => n >= i8::MIN as i128 && n <= i8::MAX as i128,
+        Type::Signed(SignedNumType::I16) => n >= i16::MIN as i128 && n <= i16::MAX as i128,
+        Type::Signed(SignedNumType::I32) => n >= i32::MIN as i128 && n <= i32::MAX as i128,
+        Type::Signed(SignedNumType::I64) => n >= i64::MIN as i128 && n <= i64::MAX as i128,
+        Type::Signed(SignedNumType::I128) => true,
+        Type::Fn(_, _) => false,
+        Type::Array(_, _) => false,
+        Type::Tuple(_) => false,
+        Type::Enum(_) => false,
     }
 }

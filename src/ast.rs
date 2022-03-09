@@ -248,4 +248,8 @@ pub enum Op {
     ShiftLeft,
     /// Bitwise shift-right (`>>`).
     ShiftRight,
+    /// Short-circuiting and (`&&`).
+    ShortCircuitAnd,
+    /// Short-circuiting or (`||`).
+    ShortCircuitOr
 }

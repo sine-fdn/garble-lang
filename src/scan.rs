@@ -69,11 +69,23 @@ impl<'a> Scanner<'a> {
                 ',' => self.push_token(TokenEnum::Comma),
                 ';' => self.push_token(TokenEnum::Semicolon),
                 '%' => self.push_token(TokenEnum::Percent),
-                '&' => self.push_token(TokenEnum::Ampersand),
-                '|' => self.push_token(TokenEnum::Bar),
                 '^' => self.push_token(TokenEnum::Caret),
                 '*' => self.push_token(TokenEnum::Star),
                 '+' => self.push_token(TokenEnum::Plus),
+                '&' => {
+                    if self.next_matches('&') {
+                        self.push_token(TokenEnum::DoubleAmpersand);
+                    } else {
+                        self.push_token(TokenEnum::Ampersand);
+                    }
+                }
+                '|' => {
+                    if self.next_matches('|') {
+                        self.push_token(TokenEnum::DoubleBar);
+                    } else {
+                        self.push_token(TokenEnum::Bar);
+                    }
+                }
                 '!' => {
                     if self.next_matches('=') {
                         self.push_token(TokenEnum::BangEq);
