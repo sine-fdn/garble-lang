@@ -850,6 +850,9 @@ impl Parser {
                     if self.peek(&TokenEnum::Comma) {
                         let mut fields = vec![expr];
                         while self.next_matches(&TokenEnum::Comma).is_some() {
+                            if self.peek(&TokenEnum::RightParen) {
+                                break;
+                            }
                             let child = if only_literal_children {
                                 self.parse_literal_recusively()?
                             } else {
