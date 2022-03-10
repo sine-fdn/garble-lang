@@ -1360,3 +1360,26 @@ fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
     println!("{}", pretty);
     e
 }
+
+#[test]
+fn compile_lexically_scoped_block() -> Result<(), Error> {
+    let prg = "
+fn main(x: i32) -> i32 {
+    let y = x + 1;
+    let z = {
+        let y = x + 10;
+        y
+    };
+    y
+}
+";
+    let circuit = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    for x in 0..10 {
+        let mut eval = Evaluator::from(&circuit);
+        eval.set_i32(x);
+        let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+        let output = i32::try_from(output).map_err(|e| pretty_print(e, prg))?;
+        assert_eq!(output, x + 1);
+    }
+    Ok(())
+}

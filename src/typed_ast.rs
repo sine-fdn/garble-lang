@@ -68,6 +68,8 @@ pub enum ExprEnum {
     UnaryOp(UnaryOp, Box<Expr>),
     /// Application of a binary operator.
     Op(Op, Box<Expr>, Box<Expr>),
+    /// A block that lexically scopes any bindings introduced within it.
+    LexicallyScopedBlock(Box<Expr>),
     /// Let expression, binds a variable to the expression and evaluates the body with it in scope.
     Let(String, Box<Expr>, Box<Expr>),
     /// Call of the specified function with a list of arguments.

@@ -498,6 +498,12 @@ impl Expr {
                     (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), ty_x)
                 }
             },
+            ExprEnum::LexicallyScopedBlock(expr) => {
+                env.push();
+                let typed_ast::Expr(expr, ty, _) = expr.type_check(env, fns, defs)?;
+                env.pop();
+                (expr, ty)
+            }
             ExprEnum::Let(var, binding, body) => {
                 let binding = binding.type_check(env, fns, defs)?;
                 env.push();

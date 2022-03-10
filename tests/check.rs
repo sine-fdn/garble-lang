@@ -217,3 +217,22 @@ fn main(x: bool, y: bool, z: bool) -> i32 {
     }
     Ok(())
 }
+
+#[test]
+fn reject_access_outside_lexical_scope() -> Result<(), Error> {
+    let prg = "
+fn main(x: i32) -> i32 {
+  let y = {
+    let z = 1;
+    z
+  };
+  z
+}
+";
+    let e = scan(prg)?.parse()?.type_check();
+    assert!(matches!(
+        e,
+        Err(TypeError(TypeErrorEnum::UnknownIdentifier(_), _))
+    ));
+    Ok(())
+}

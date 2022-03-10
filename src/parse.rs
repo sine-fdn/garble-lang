@@ -263,12 +263,12 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, ()> {
-        if self.next_matches(&TokenEnum::LeftBrace).is_some() {
+        if let Some(meta) = self.next_matches(&TokenEnum::LeftBrace) {
             // { ... }
-            // TODO: this does not create a lexical scope yet
             let expr = self.parse_expr()?;
-            self.expect(&TokenEnum::RightBrace)?;
-            Ok(expr)
+            let meta_end = self.expect(&TokenEnum::RightBrace)?;
+            let meta = join_meta(meta, meta_end);
+            Ok(Expr(ExprEnum::LexicallyScopedBlock(Box::new(expr)), meta))
         } else if let Some(meta) = self.next_matches(&TokenEnum::KeywordLet) {
             // let <var> = <binding>; <body>
             let (var, _) = self.expect_identifier()?;

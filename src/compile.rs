@@ -468,6 +468,12 @@ impl Expr {
                     }
                 }
             }
+            ExprEnum::LexicallyScopedBlock(expr) => {
+                env.push();
+                let expr = expr.compile(enums, fns, env, circuit);
+                env.pop();
+                expr
+            }
             ExprEnum::Let(var, binding, body) => {
                 let binding = binding.compile(enums, fns, env, circuit);
                 env.push();
