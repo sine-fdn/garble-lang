@@ -4,7 +4,7 @@ use std::fmt::Debug;
 
 use crate::{
     ast::Type,
-    circuit::{Circuit, EvalPanic},
+    circuit::{Circuit, EvalPanic, USIZE_BITS},
     compile::{signed_to_bits, unsigned_to_bits},
     literal::Literal,
     parse::ParseError,
@@ -127,7 +127,7 @@ impl<'a> Evaluator<'a> {
     /// Encodes a usize int as bits and sets it as the input from the party.
     pub fn set_usize(&mut self, n: usize) {
         let inputs = self.push_input();
-        unsigned_to_bits(n as u128, usize::BITS as usize, inputs);
+        unsigned_to_bits(n as u128, USIZE_BITS, inputs);
     }
 
     /// Encodes a u8 int as bits and sets it as the input from the party.
