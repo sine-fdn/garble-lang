@@ -66,6 +66,13 @@ pub enum TypeErrorEnum {
         /// The actual type.
         actual: Type,
     },
+    /// Expected a different number of function arguments.
+    WrongNumberOfArgs {
+        /// The number of parameters declared by the function.
+        expected: usize,
+        /// The number of arguments provided by the caller.
+        actual: usize,
+    },
     /// The two types are incompatible, (e.g. incompatible number types in a `+` operation).
     TypeMismatch((Type, MetaInfo), (Type, MetaInfo)),
     /// The specified range has invalid min or max values.
@@ -134,6 +141,9 @@ impl std::fmt::Display for TypeErrorEnum {
             }
             TypeErrorEnum::UnexpectedType { expected, actual } => {
                 f.write_fmt(format_args!("Expected type {expected}, but found {actual}"))
+            }
+            TypeErrorEnum::WrongNumberOfArgs { expected, actual } => {
+                f.write_fmt(format_args!("The function expects {expected} parameter(s), but was called with {actual} argument(s)"))
             }
             TypeErrorEnum::TypeMismatch((x, _), (y, _)) => f.write_fmt(format_args!(
                 "The operands have incompatible types; {x} vs {y}"
@@ -488,6 +498,12 @@ impl Expr {
                     (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), ty_x)
                 }
             },
+            ExprEnum::LexicallyScopedBlock(expr) => {
+                env.push();
+                let typed_ast::Expr(expr, ty, _) = expr.type_check(env, fns, defs)?;
+                env.pop();
+                (expr, ty)
+            }
             ExprEnum::Let(var, binding, body) => {
                 let binding = binding.type_check(env, fns, defs)?;
                 env.push();
@@ -530,9 +546,9 @@ impl Expr {
                         let expr = typed_ast::ExprEnum::FnCall(identifier.clone(), arg_exprs);
                         (expr, ret_ty)
                     } else {
-                        let e = TypeErrorEnum::UnexpectedType {
-                            expected: Type::Fn(arg_types, Box::new(ret_ty.clone())),
-                            actual: Type::Fn(fn_arg_types, Box::new(ret_ty)),
+                        let e = TypeErrorEnum::WrongNumberOfArgs {
+                            expected: fn_arg_types.len(),
+                            actual: arg_types.len(),
                         };
                         return Err(TypeError(e, meta));
                     }
@@ -930,6 +946,7 @@ enum Ctor {
     SignedInclusiveRange(i128, i128),
     Tuple(Vec<Type>),
     Variant(String, String, Option<Vec<Type>>),
+    Array(Box<Type>, usize),
 }
 
 type PatternStack = Vec<typed_ast::Pattern>;
@@ -1011,6 +1028,10 @@ fn specialize(ctor: &Ctor, pattern: &[typed_ast::Pattern]) -> Vec<PatternStack> 
             typed_ast::PatternEnum::Tuple(fields) => {
                 vec![fields.iter().cloned().chain(tail).collect()]
             }
+            _ => vec![],
+        },
+        Ctor::Array(_, _) => match head_enum {
+            typed_ast::PatternEnum::Identifier(_) => vec![tail.collect()],
             _ => vec![],
         },
     }
@@ -1139,7 +1160,8 @@ fn split_ctor(patterns: &[PatternStack], q: &[typed_ast::Pattern], defs: &Defs) 
         Type::Tuple(fields) => {
             vec![Ctor::Tuple(fields.clone())]
         }
-        Type::Fn(_, _) | Type::Array(_, _) => {
+        Type::Array(elem_ty, size) => vec![Ctor::Array(elem_ty.clone(), *size)],
+        Type::Fn(_, _) => {
             panic!("Type {:?} does not support pattern matching", ty)
         }
     }
@@ -1217,6 +1239,14 @@ fn usefulness(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> Vec<
                                 meta,
                             )]
                         }
+                        Ctor::Array(elem_ty, size) => witness.insert(
+                            0,
+                            typed_ast::Pattern(
+                                typed_ast::PatternEnum::Identifier("_".to_string()),
+                                Type::Array(elem_ty.clone(), *size),
+                                meta,
+                            ),
+                        ),
                     }
                     witnesses.push(witness);
                 }

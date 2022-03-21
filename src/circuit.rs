@@ -8,8 +8,6 @@ use std::collections::HashMap;
 // 1. Constant evaluation (e.g. x ^ 0 == x; x & 1 == x; x & 0 == 0)
 // 2. Sub-expression sharing (wires are re-used if a gate with the same type and inputs exists)
 // 3. Pruning of useless gates (gates that are not part of the output nor used by other gates)
-// 4. Rewriting of equivalences up to a max depth (e.g. x & (!x | y) == x & y)
-const MAX_OPTIMIZATION_DEPTH: u32 = 4;
 const PRINT_OPTIMIZATION_RATIO: bool = false;
 
 /// Data type to uniquely identify gates.
@@ -491,46 +489,9 @@ impl CircuitBuilder {
         panic_gates
     }
 
-    // - Constant evaluation (e.g. x ^ 0 == x; x & 1 == x; x & 0 == 0)
-    // - Rewriting of equivalences up to a max depth (e.g. x & (!x | y) == x & y)
-    //
-    // `is_true` is set by `push_and` to simplify AND sub-exprs
-    fn optimize_gate(&self, w: GateIndex, is_true: GateIndex, depth: u32) -> GateIndex {
-        if depth >= MAX_OPTIMIZATION_DEPTH {
-            return w;
-        } else if w == is_true {
-            return 1;
-        } else if w >= self.shift {
-            match self.gates[w - self.shift] {
-                BuilderGate::Xor(x, y) => {
-                    if let Some(optimized) = self.optimize_xor(x, y, is_true, depth + 1) {
-                        return optimized;
-                    }
-                }
-                BuilderGate::And(x, y) => {
-                    if let Some(optimized) = self.optimize_and(x, y, is_true, depth + 1) {
-                        return optimized;
-                    }
-                }
-            }
-        }
-        w
-    }
-
     // - Constant evaluation (e.g. x ^ 0 == x; x ^ x == 0)
-    // - Rewriting of equivalences up to a max depth (e.g. x & (!x | y) == x & y)
     // - Sub-expression sharing (wires are re-used if a gate with the same type and inputs exists)
-    //
-    // `is_true` is set by `push_and` to simplify AND sub-exprs
-    fn optimize_xor(
-        &self,
-        x: GateIndex,
-        y: GateIndex,
-        is_true: GateIndex,
-        depth: u32,
-    ) -> Option<GateIndex> {
-        let x = self.optimize_gate(x, is_true, depth);
-        let y = self.optimize_gate(y, is_true, depth);
+    fn optimize_xor(&self, x: GateIndex, y: GateIndex) -> Option<GateIndex> {
         if x == 0 {
             return Some(y);
         } else if y == 0 {
@@ -558,19 +519,8 @@ impl CircuitBuilder {
     }
 
     // - Constant evaluation (e.g. x & x == x; x & 1 == x; x & 0 == 0)
-    // - Rewriting of equivalences up to a max depth (e.g. x & (!x | y) == x & y)
     // - Sub-expression sharing (wires are re-used if a gate with the same type and inputs exists)
-    //
-    // `is_true` is set by `push_and` to simplify AND sub-exprs
-    fn optimize_and(
-        &self,
-        x: GateIndex,
-        y: GateIndex,
-        is_true: GateIndex,
-        depth: u32,
-    ) -> Option<GateIndex> {
-        let x = self.optimize_gate(x, is_true, depth);
-        let y = self.optimize_gate(y, is_true, depth);
+    fn optimize_and(&self, x: GateIndex, y: GateIndex) -> Option<GateIndex> {
         if x == 0 || y == 0 {
             return Some(0);
         } else if x == 1 {
@@ -594,7 +544,7 @@ impl CircuitBuilder {
     }
 
     pub fn push_xor(&mut self, x: GateIndex, y: GateIndex) -> GateIndex {
-        if let Some(optimized) = self.optimize_xor(x, y, 1, 0) {
+        if let Some(optimized) = self.optimize_xor(x, y) {
             self.gates_optimized += 1;
             optimized
         } else {
@@ -616,17 +566,7 @@ impl CircuitBuilder {
     }
 
     pub fn push_and(&mut self, x: GateIndex, y: GateIndex) -> GateIndex {
-        // if we have (x & y) and x and/or y are sub-expressions, we can simplify each
-        // sub-expression while assuming that the other sub-expression is true (or the and as a
-        // whole would evaluate to false), e.g.:
-        //
-        // x & (!x | y)
-        // -> evaluate x while assuming that (!x | y) is true => no optimization possible
-        // -> evaluate (x! | y) while assuming that x is true => simplify (x! | y) to (0 | y) == y
-        // ==> whole expression is simplified to x & y
-        let x = self.optimize_gate(x, y, 0);
-        let y = self.optimize_gate(y, x, 0);
-        if let Some(optimized) = self.optimize_and(x, y, 1, MAX_OPTIMIZATION_DEPTH) {
+        if let Some(optimized) = self.optimize_and(x, y) {
             self.gates_optimized += 1;
             optimized
         } else {

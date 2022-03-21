@@ -1226,10 +1226,10 @@ fn main(values: (u8, u8)) -> (u8, u8) {
         Type::Unsigned(UnsignedNumType::U8),
     ]);
     let input = Literal::parse(&checked, &tuple_ty, "(2u8, 3u8)")?;
-    eval.set_literal(&checked, input);
+    eval.set_literal(&checked, input)?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output
-        .into_literal(&checked, &tuple_ty)
+        .into_literal(&checked)
         .map_err(|e| pretty_print(e, prg))?;
     let expected = Literal::parse(&checked, &tuple_ty, "(3u8, 4u8)")?;
     assert_eq!(r, expected);
@@ -1264,10 +1264,10 @@ fn main(op: Op) -> OpResult {
     let ty_in = Type::Enum("Op".to_string());
     let ty_out = Type::Enum("OpResult".to_string());
     let input = Literal::parse(&checked, &ty_in, "Op::Div(10u8, 2u8)")?;
-    eval.set_literal(&checked, input);
+    eval.set_literal(&checked, input)?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output
-        .into_literal(&checked, &ty_out)
+        .into_literal(&checked)
         .map_err(|e| pretty_print(e, prg))?;
     let expected = Literal::parse(&checked, &ty_out, "OpResult::Ok(5)")?;
     assert_eq!(r, expected);
@@ -1311,10 +1311,10 @@ fn main(nums: [u8; 5]) -> [u8; 5] {
     let mut eval = Evaluator::from(&circuit);
     let array_ty = Type::Array(Box::new(Type::Unsigned(UnsignedNumType::U8)), 5);
     let input = Literal::parse(&checked, &array_ty, "[1u8, 2u8, 3u8, 4u8, 5u8]")?;
-    eval.set_literal(&checked, input);
+    eval.set_literal(&checked, input)?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output
-        .into_literal(&checked, &array_ty)
+        .into_literal(&checked)
         .map_err(|e| pretty_print(e, prg))?;
     let expected = Literal::parse(&checked, &array_ty, "[15u8, 15u8, 15u8, 15u8, 15u8]")?;
     assert_eq!(r, expected);
@@ -1359,4 +1359,27 @@ fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
     let pretty = e.prettify(prg);
     println!("{}", pretty);
     e
+}
+
+#[test]
+fn compile_lexically_scoped_block() -> Result<(), Error> {
+    let prg = "
+fn main(x: i32) -> i32 {
+    let y = x + 1;
+    let z = {
+        let y = x + 10;
+        y
+    };
+    y
+}
+";
+    let circuit = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    for x in 0..10 {
+        let mut eval = Evaluator::from(&circuit);
+        eval.set_i32(x);
+        let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+        let output = i32::try_from(output).map_err(|e| pretty_print(e, prg))?;
+        assert_eq!(output, x + 1);
+    }
+    Ok(())
 }

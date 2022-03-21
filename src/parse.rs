@@ -150,21 +150,22 @@ impl Parser {
             }
         }
         if let Some(main) = main_fn_def {
-            Ok(Program {
-                enum_defs,
-                fn_defs,
-                main,
-            })
-        } else {
-            if !has_main {
-                let meta = MetaInfo {
-                    start: (0, 0),
-                    end: (0, 0),
-                };
-                self.push_error(ParseErrorEnum::MissingMainFnDef, meta);
+            if self.errors.is_empty() {
+                return Ok(Program {
+                    enum_defs,
+                    fn_defs,
+                    main,
+                });
             }
-            Err(self.errors)
         }
+        if !has_main {
+            let meta = MetaInfo {
+                start: (0, 0),
+                end: (0, 0),
+            };
+            self.push_error(ParseErrorEnum::MissingMainFnDef, meta);
+        }
+        Err(self.errors)
     }
 
     fn parse_enum_def(&mut self, start: MetaInfo) -> Result<EnumDef, ()> {
@@ -177,9 +178,10 @@ impl Parser {
         let mut variants = vec![self.parse_variant()?];
 
         while self.next_matches(&TokenEnum::Comma).is_some() {
-            if let Some(Token(TokenEnum::Identifier(_), _)) = self.tokens.peek() {
-                variants.push(self.parse_variant()?);
+            if self.peek(&TokenEnum::RightBrace) {
+                break;
             }
+            variants.push(self.parse_variant()?);
         }
 
         let end = self.expect(&TokenEnum::RightBrace)?;
@@ -200,6 +202,9 @@ impl Parser {
                 fields.push(ty);
             }
             while self.next_matches(&TokenEnum::Comma).is_some() {
+                if self.peek(&TokenEnum::RightParen) {
+                    break;
+                }
                 let (ty, _) = self.parse_type()?;
                 fields.push(ty);
             }
@@ -245,7 +250,11 @@ impl Parser {
     fn parse_params(&mut self) -> Result<Vec<ParamDef>, ()> {
         let mut params = vec![self.parse_param()?];
         while self.next_matches(&TokenEnum::Comma).is_some() {
-            params.push(self.parse_param()?);
+            if self.peek(&TokenEnum::RightParen) {
+                break;
+            } else {
+                params.push(self.parse_param()?);
+            }
         }
         Ok(params)
     }
@@ -259,14 +268,20 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, ()> {
-        if let Some(meta) = self.next_matches(&TokenEnum::KeywordLet) {
+        if let Some(meta) = self.next_matches(&TokenEnum::LeftBrace) {
+            // { ... }
+            let expr = self.parse_expr()?;
+            let meta_end = self.expect(&TokenEnum::RightBrace)?;
+            let meta = join_meta(meta, meta_end);
+            Ok(Expr(ExprEnum::LexicallyScopedBlock(Box::new(expr)), meta))
+        } else if let Some(meta) = self.next_matches(&TokenEnum::KeywordLet) {
             // let <var> = <binding>; <body>
             let (var, _) = self.expect_identifier()?;
             self.expect(&TokenEnum::Eq)?;
             if let Ok(binding) = self.parse_expr() {
-                let meta_end = self.expect(&TokenEnum::Semicolon)?;
+                self.expect(&TokenEnum::Semicolon)?;
                 let body = self.parse_expr()?;
-                let meta = join_meta(meta, meta_end);
+                let meta = join_meta(meta, body.1);
                 Ok(Expr(
                     ExprEnum::Let(var, Box::new(binding), Box::new(body)),
                     meta,
@@ -500,13 +515,14 @@ impl Parser {
                 self.consume_until_one_of(&[TokenEnum::Comma, TokenEnum::RightBrace]);
             }
             while self.next_matches(&TokenEnum::Comma).is_some() {
-                if !self.peek(&TokenEnum::RightBrace) {
-                    if let Ok(clause) = self.parse_match_clause() {
-                        clauses.push(clause);
-                    } else {
-                        has_failed = true;
-                        self.consume_until_one_of(&[TokenEnum::Comma, TokenEnum::RightBrace]);
-                    }
+                if self.peek(&TokenEnum::RightBrace) {
+                    break;
+                }
+                if let Ok(clause) = self.parse_match_clause() {
+                    clauses.push(clause);
+                } else {
+                    has_failed = true;
+                    self.consume_until_one_of(&[TokenEnum::Comma, TokenEnum::RightBrace]);
                 }
             }
             if has_failed {
@@ -548,6 +564,9 @@ impl Parser {
                             if !self.peek(&TokenEnum::RightParen) {
                                 fields.push(self.parse_pattern()?);
                                 while self.next_matches(&TokenEnum::Comma).is_some() {
+                                    if self.peek(&TokenEnum::RightParen) {
+                                        break;
+                                    }
                                     fields.push(self.parse_pattern()?);
                                 }
                             }
@@ -652,6 +671,9 @@ impl Parser {
                     if !self.peek(&TokenEnum::RightParen) {
                         fields.push(self.parse_pattern()?);
                         while self.next_matches(&TokenEnum::Comma).is_some() {
+                            if self.peek(&TokenEnum::RightParen) {
+                                break;
+                            }
                             fields.push(self.parse_pattern()?);
                         }
                     }
@@ -702,6 +724,9 @@ impl Parser {
                             if !self.peek(&TokenEnum::RightParen) {
                                 args.push(self.parse_expr()?);
                                 while self.next_matches(&TokenEnum::Comma).is_some() {
+                                    if self.peek(&TokenEnum::RightParen) {
+                                        break;
+                                    }
                                     args.push(self.parse_expr()?);
                                 }
                             }
@@ -783,6 +808,9 @@ impl Parser {
                                 };
                                 fields.push(child);
                                 while self.next_matches(&TokenEnum::Comma).is_some() {
+                                    if self.peek(&TokenEnum::RightParen) {
+                                        break;
+                                    }
                                     let child = if only_literal_children {
                                         self.parse_literal_recusively()?
                                     } else {
@@ -840,6 +868,9 @@ impl Parser {
                     if self.peek(&TokenEnum::Comma) {
                         let mut fields = vec![expr];
                         while self.next_matches(&TokenEnum::Comma).is_some() {
+                            if self.peek(&TokenEnum::RightParen) {
+                                break;
+                            }
                             let child = if only_literal_children {
                                 self.parse_literal_recusively()?
                             } else {
@@ -888,6 +919,9 @@ impl Parser {
                 } else {
                     let mut elems = vec![elem];
                     while self.next_matches(&TokenEnum::Comma).is_some() {
+                        if self.peek(&TokenEnum::RightBracket) {
+                            break;
+                        }
                         let elem = if only_literal_children {
                             self.parse_literal_recusively()?
                         } else {
