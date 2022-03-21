@@ -296,7 +296,7 @@ impl Parser {
 
     fn parse_let_binding(&mut self) -> Result<Option<(String, Expr)>, ()> {
         // let <var> = <binding>; <body>
-        if let Some(meta) = self.next_matches(&TokenEnum::KeywordLet) {
+        if self.next_matches(&TokenEnum::KeywordLet).is_some() {
             let (var, _) = self.expect_identifier()?;
             self.expect(&TokenEnum::Eq)?;
             if let Ok(binding) = self.parse_expr() {
