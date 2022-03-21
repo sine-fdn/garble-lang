@@ -182,8 +182,8 @@ pub enum ExprEnum {
     Op(Op, Box<Expr>, Box<Expr>),
     /// A block that lexically scopes any bindings introduced within it.
     LexicallyScopedBlock(Box<Expr>),
-    /// Let expression, binds a variable to the expression and evaluates the body with it in scope.
-    Let(String, Box<Expr>, Box<Expr>),
+    /// Let expression, binds variables to expressions and evaluates the body with them in scope.
+    Let(Vec<(String, Expr)>, Box<Expr>),
     /// Call of the specified function with a list of arguments.
     FnCall(String, Vec<Expr>),
     /// If-else expression for the specified condition, if-expr and else-expr.

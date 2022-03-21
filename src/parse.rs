@@ -273,19 +273,35 @@ impl Parser {
             let expr = self.parse_expr()?;
             let meta_end = self.expect(&TokenEnum::RightBrace)?;
             let meta = join_meta(meta, meta_end);
-            Ok(Expr(ExprEnum::LexicallyScopedBlock(Box::new(expr)), meta))
-        } else if let Some(meta) = self.next_matches(&TokenEnum::KeywordLet) {
-            // let <var> = <binding>; <body>
+            return Ok(Expr(ExprEnum::LexicallyScopedBlock(Box::new(expr)), meta));
+        }
+        if let Some(token) = self.tokens.peek() {
+            let meta = token.1;
+            let mut bindings = vec![];
+            while let Some(binding) = self.parse_let_binding()? {
+                bindings.push(binding);
+            }
+            let body = self.parse_short_circuiting_or()?;
+            if bindings.is_empty() {
+                Ok(body)
+            } else {
+                let meta = join_meta(meta, body.1);
+                Ok(Expr(ExprEnum::Let(bindings, Box::new(body)), meta))
+            }
+        } else {
+            self.push_error_for_next(ParseErrorEnum::ExpectedExpr);
+            Err(())
+        }
+    }
+
+    fn parse_let_binding(&mut self) -> Result<Option<(String, Expr)>, ()> {
+        // let <var> = <binding>; <body>
+        if let Some(meta) = self.next_matches(&TokenEnum::KeywordLet) {
             let (var, _) = self.expect_identifier()?;
             self.expect(&TokenEnum::Eq)?;
             if let Ok(binding) = self.parse_expr() {
                 self.expect(&TokenEnum::Semicolon)?;
-                let body = self.parse_expr()?;
-                let meta = join_meta(meta, body.1);
-                Ok(Expr(
-                    ExprEnum::Let(var, Box::new(binding), Box::new(body)),
-                    meta,
-                ))
+                Ok(Some((var, binding)))
             } else {
                 self.consume_until_one_of(&[TokenEnum::Semicolon]);
                 self.tokens.next();
@@ -293,7 +309,7 @@ impl Parser {
                 Err(())
             }
         } else {
-            self.parse_short_circuiting_or()
+            Ok(None)
         }
     }
 
