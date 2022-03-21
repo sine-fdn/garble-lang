@@ -254,6 +254,7 @@ impl<'a> Scanner<'a> {
                             "else" => self.push_token(TokenEnum::KeywordElse),
                             "match" => self.push_token(TokenEnum::KeywordMatch),
                             "as" => self.push_token(TokenEnum::KeywordAs),
+                            "pub" => self.push_token(TokenEnum::KeywordPub),
                             _ => self.push_token(TokenEnum::Identifier(identifier)),
                         }
                     } else {

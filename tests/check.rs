@@ -14,7 +14,7 @@ fn inc(x: u16) -> u16 {
   x + 1
 }
 
-fn main(x: u16) -> u16 {
+pub fn main(x: u16) -> u16 {
   let f = inc;
   f(x)
 }
@@ -34,7 +34,7 @@ fn add(x: u16, x: u16) -> u16 {
   x + x
 }
 
-fn main(x: u16) -> u16 {
+pub fn main(x: u16) -> u16 {
   add(x, 1)
 }
 ";
@@ -49,7 +49,7 @@ fn main(x: u16) -> u16 {
 #[test]
 fn reject_duplicate_fn_params_in_main() -> Result<(), Error> {
     let prg = "
-fn main(x: u16, x: u16) -> u16 {
+pub fn main(x: u16, x: u16) -> u16 {
   x + x
 }
 ";
@@ -64,7 +64,7 @@ fn main(x: u16, x: u16) -> u16 {
 #[test]
 fn reject_unused_fn() -> Result<(), Error> {
     let prg = "
-  fn main(x: u8) -> u8 {
+  pub fn main(x: u8) -> u8 {
     x
   }
 
@@ -80,7 +80,7 @@ fn reject_unused_fn() -> Result<(), Error> {
 #[test]
 fn reject_recursive_fn() -> Result<(), Error> {
     let prg = "
-  fn main(x: u8) -> u8 {
+  pub fn main(x: u8) -> u8 {
     rec_fn(x)
   }
 
@@ -103,14 +103,14 @@ fn reject_recursive_fn() -> Result<(), Error> {
 #[test]
 fn reject_main_without_params() -> Result<(), Error> {
     let prg = "
-fn main() -> u8 {
+pub fn main() -> u8 {
   0
 }
 ";
     let e = scan(prg).unwrap().parse().unwrap().type_check();
     assert!(matches!(
         e,
-        Err(TypeError(TypeErrorEnum::NoMainFnParams, _))
+        Err(TypeError(TypeErrorEnum::PubFnWithoutParams(_), _))
     ));
     Ok(())
 }
@@ -118,7 +118,7 @@ fn main() -> u8 {
 #[test]
 fn reject_non_exhaustive_range_pattern() -> Result<(), Error> {
     let prg = "
-fn main(x: u8) -> i32 {
+pub fn main(x: u8) -> i32 {
   match x {
     0 => 0,
     1 => 1,
@@ -163,7 +163,7 @@ fn main(x: u8) -> i32 {
 #[test]
 fn reject_non_exhaustive_tuple_pattern() -> Result<(), Error> {
     let prg = "
-fn main(x: bool, y: bool, z: bool) -> i32 {
+pub fn main(x: bool, y: bool, z: bool) -> i32 {
   match (x, (y, z)) {
     (true, _) => 1,
     (_, (false, true)) => 2,
@@ -221,7 +221,7 @@ fn main(x: bool, y: bool, z: bool) -> i32 {
 #[test]
 fn reject_access_outside_lexical_scope() -> Result<(), Error> {
     let prg = "
-fn main(x: i32) -> i32 {
+pub fn main(x: i32) -> i32 {
   let y = {
     let z = 1;
     z

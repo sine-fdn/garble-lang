@@ -8,19 +8,27 @@ use crate::{
     compile::{signed_to_bits, unsigned_to_bits},
     literal::Literal,
     token::{SignedNumType, UnsignedNumType},
-    typed_ast::Program,
+    typed_ast::{FnDef, Program},
     CompileTimeError,
 };
 
 /// Evaluates a [`crate::circuit::Circuit`] with inputs supplied by different parties.
 pub struct Evaluator<'a> {
-    circuit: &'a Circuit,
+    /// The type-checked program.
+    pub program: &'a Program,
+    /// The function to be evaluated.
+    pub main_fn: &'a FnDef,
+    /// The compiled circuit.
+    pub circuit: &'a Circuit,
     inputs: Vec<Vec<bool>>,
 }
 
-impl<'a> From<&'a Circuit> for Evaluator<'a> {
-    fn from(circuit: &'a Circuit) -> Self {
+impl<'a> Evaluator<'a> {
+    /// Scans, parses, type-checks and then compiles a program for later evaluation.
+    pub fn new(program: &'a Program, main_fn: &'a FnDef, circuit: &'a Circuit) -> Self {
         Self {
+            program,
+            main_fn,
             circuit,
             inputs: vec![],
         }
@@ -85,7 +93,7 @@ impl From<EvalPanic> for EvalError {
 
 impl<'a> Evaluator<'a> {
     /// Evaluates a [`crate::circuit::Circuit`] with the previously set inputs.
-    pub fn run(self) -> Result<EvalOutput, EvalError> {
+    pub fn run(self) -> Result<EvalOutput<'a>, EvalError> {
         if self.inputs.len() != self.circuit.input_gates.len() {
             return Err(EvalError::UnexpectedNumberOfParties);
         }
@@ -95,7 +103,11 @@ impl<'a> Evaluator<'a> {
             }
         }
         let output = self.circuit.eval(&self.inputs);
-        Ok(EvalOutput(output))
+        Ok(EvalOutput {
+            program: self.program,
+            main_fn: self.main_fn,
+            output,
+        })
     }
 
     fn push_input(&mut self) -> &mut Vec<bool> {
@@ -176,15 +188,15 @@ impl<'a> Evaluator<'a> {
     }
 
     /// Encodes a literal (with enums looked up in the program) and sets it as the party's input.
-    pub fn set_literal(&mut self, checked: &Program, literal: Literal) -> Result<(), EvalError> {
-        if self.inputs.len() < checked.main.params.len() {
-            let ty = &checked.main.params[self.inputs.len()].1;
-            if literal.is_of_type(checked, ty) {
+    pub fn set_literal(&mut self, literal: Literal) -> Result<(), EvalError> {
+        if self.inputs.len() < self.main_fn.params.len() {
+            let ty = &self.main_fn.params[self.inputs.len()].1;
+            if literal.is_of_type(&self.program, ty) {
                 self.inputs.push(vec![]);
                 self.inputs
                     .last_mut()
                     .unwrap()
-                    .extend(literal.as_bits(checked));
+                    .extend(literal.as_bits(&self.program));
                 Ok(())
             } else {
                 Err(EvalError::InvalidLiteralType(literal, ty.clone()))
@@ -195,12 +207,12 @@ impl<'a> Evaluator<'a> {
     }
 
     /// Parses a literal (with enums looked up in the program) and sets it as the party's input.
-    pub fn parse_literal(&mut self, checked: &Program, literal: &str) -> Result<(), EvalError> {
-        if self.inputs.len() < checked.main.params.len() {
-            let ty = &checked.main.params[self.inputs.len()].1;
+    pub fn parse_literal(&mut self, literal: &str) -> Result<(), EvalError> {
+        if self.inputs.len() < self.main_fn.params.len() {
+            let ty = &self.main_fn.params[self.inputs.len()].1;
             let parsed =
-                Literal::parse(checked, ty, literal).map_err(EvalError::LiteralParseError)?;
-            self.set_literal(checked, parsed)?;
+                Literal::parse(&self.program, ty, literal).map_err(EvalError::LiteralParseError)?;
+            self.set_literal(parsed)?;
             Ok(())
         } else {
             Err(EvalError::UnexpectedNumberOfParties)
@@ -210,13 +222,17 @@ impl<'a> Evaluator<'a> {
 
 /// The encoded result of a circuit evaluation.
 #[derive(Debug, Clone)]
-pub struct EvalOutput(Vec<bool>);
+pub struct EvalOutput<'a> {
+    program: &'a Program,
+    main_fn: &'a FnDef,
+    output: Vec<bool>,
+}
 
-impl TryFrom<EvalOutput> for bool {
+impl<'a> TryFrom<EvalOutput<'a>> for bool {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
-        let output = EvalPanic::parse(&value.0)?;
+        let output = EvalPanic::parse(&value.output)?;
         if output.len() == 1 {
             Ok(output[0])
         } else {
@@ -228,7 +244,7 @@ impl TryFrom<EvalOutput> for bool {
     }
 }
 
-impl TryFrom<EvalOutput> for usize {
+impl<'a> TryFrom<EvalOutput<'a>> for usize {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -238,7 +254,7 @@ impl TryFrom<EvalOutput> for usize {
     }
 }
 
-impl TryFrom<EvalOutput> for u8 {
+impl<'a> TryFrom<EvalOutput<'a>> for u8 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -248,7 +264,7 @@ impl TryFrom<EvalOutput> for u8 {
     }
 }
 
-impl TryFrom<EvalOutput> for u16 {
+impl<'a> TryFrom<EvalOutput<'a>> for u16 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -258,7 +274,7 @@ impl TryFrom<EvalOutput> for u16 {
     }
 }
 
-impl TryFrom<EvalOutput> for u32 {
+impl<'a> TryFrom<EvalOutput<'a>> for u32 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -268,7 +284,7 @@ impl TryFrom<EvalOutput> for u32 {
     }
 }
 
-impl TryFrom<EvalOutput> for u64 {
+impl<'a> TryFrom<EvalOutput<'a>> for u64 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -278,7 +294,7 @@ impl TryFrom<EvalOutput> for u64 {
     }
 }
 
-impl TryFrom<EvalOutput> for u128 {
+impl<'a> TryFrom<EvalOutput<'a>> for u128 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -286,7 +302,7 @@ impl TryFrom<EvalOutput> for u128 {
     }
 }
 
-impl TryFrom<EvalOutput> for i8 {
+impl<'a> TryFrom<EvalOutput<'a>> for i8 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -296,7 +312,7 @@ impl TryFrom<EvalOutput> for i8 {
     }
 }
 
-impl TryFrom<EvalOutput> for i16 {
+impl<'a> TryFrom<EvalOutput<'a>> for i16 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -306,7 +322,7 @@ impl TryFrom<EvalOutput> for i16 {
     }
 }
 
-impl TryFrom<EvalOutput> for i32 {
+impl<'a> TryFrom<EvalOutput<'a>> for i32 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -316,7 +332,7 @@ impl TryFrom<EvalOutput> for i32 {
     }
 }
 
-impl TryFrom<EvalOutput> for i64 {
+impl<'a> TryFrom<EvalOutput<'a>> for i64 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -326,7 +342,7 @@ impl TryFrom<EvalOutput> for i64 {
     }
 }
 
-impl TryFrom<EvalOutput> for i128 {
+impl<'a> TryFrom<EvalOutput<'a>> for i128 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -334,20 +350,20 @@ impl TryFrom<EvalOutput> for i128 {
     }
 }
 
-impl TryFrom<EvalOutput> for Vec<bool> {
+impl<'a> TryFrom<EvalOutput<'a>> for Vec<bool> {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
-        match EvalPanic::parse(&value.0) {
+        match EvalPanic::parse(&value.output) {
             Ok(output) => Ok(output.to_vec()),
             Err(panic) => Err(EvalError::Panic(panic)),
         }
     }
 }
 
-impl EvalOutput {
+impl<'a> EvalOutput<'a> {
     fn into_unsigned(self, ty: Type) -> Result<u128, EvalError> {
-        let output = EvalPanic::parse(&self.0)?;
+        let output = EvalPanic::parse(&self.output)?;
         let size = ty.size_in_bits_for_defs(None);
         if output.len() == size {
             let mut n = 0;
@@ -364,7 +380,7 @@ impl EvalOutput {
     }
 
     fn into_signed(self, ty: Type) -> Result<i128, EvalError> {
-        let output = EvalPanic::parse(&self.0)?;
+        let output = EvalPanic::parse(&self.output)?;
         let size = ty.size_in_bits_for_defs(None);
         if output.len() == size {
             let mut n = 0;
@@ -381,7 +397,7 @@ impl EvalOutput {
     }
 
     /// Decodes the evaluated result as a literal (with enums looked up in the program).
-    pub fn into_literal(self, checked: &Program) -> Result<Literal, EvalError> {
-        Literal::from_result_bits(checked, &checked.main.body.1, &self.0)
+    pub fn into_literal(self) -> Result<Literal, EvalError> {
+        Literal::from_result_bits(&self.program, &self.main_fn.body.1, &self.output)
     }
 }
