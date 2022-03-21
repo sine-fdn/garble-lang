@@ -150,21 +150,22 @@ impl Parser {
             }
         }
         if let Some(main) = main_fn_def {
-            Ok(Program {
-                enum_defs,
-                fn_defs,
-                main,
-            })
-        } else {
-            if !has_main {
-                let meta = MetaInfo {
-                    start: (0, 0),
-                    end: (0, 0),
-                };
-                self.push_error(ParseErrorEnum::MissingMainFnDef, meta);
+            if self.errors.is_empty() {
+                return Ok(Program {
+                    enum_defs,
+                    fn_defs,
+                    main,
+                });
             }
-            Err(self.errors)
         }
+        if !has_main {
+            let meta = MetaInfo {
+                start: (0, 0),
+                end: (0, 0),
+            };
+            self.push_error(ParseErrorEnum::MissingMainFnDef, meta);
+        }
+        Err(self.errors)
     }
 
     fn parse_enum_def(&mut self, start: MetaInfo) -> Result<EnumDef, ()> {
