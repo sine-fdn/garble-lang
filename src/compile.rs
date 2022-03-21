@@ -4,7 +4,7 @@ use std::{cmp::max, collections::HashMap};
 
 use crate::{
     ast::{EnumDef, Op, ParamDef, Type, UnaryOp},
-    circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, PanicResult},
+    circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, PanicResult, USIZE_BITS},
     env::Env,
     token::{SignedNumType, UnsignedNumType},
     typed_ast::{
@@ -771,7 +771,7 @@ impl Type {
             (Type::Enum(name), Some(enums)) => enum_max_size(enums.get(name).unwrap(), enums),
             (ty, _) => match ty {
                 Type::Bool => 1,
-                Type::Unsigned(UnsignedNumType::Usize) => usize::BITS as usize,
+                Type::Unsigned(UnsignedNumType::Usize) => USIZE_BITS,
                 Type::Unsigned(UnsignedNumType::U8) | Type::Signed(SignedNumType::I8) => 8,
                 Type::Unsigned(UnsignedNumType::U16) | Type::Signed(SignedNumType::I16) => 16,
                 Type::Unsigned(UnsignedNumType::U32) | Type::Signed(SignedNumType::I32) => 32,
