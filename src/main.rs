@@ -26,7 +26,7 @@ fn main() -> Result<(), std::io::Error> {
         eprintln!("{e}");
         exit(65);
     });
-    let mut evaluator = Evaluator::new(&program, &main_fn, &circuit);
+    let mut evaluator = Evaluator::new(&program, main_fn, &circuit);
     let main_params = &evaluator.main_fn.params;
     if main_params.len() != fn_args.len() {
         eprintln!(
@@ -39,7 +39,7 @@ fn main() -> Result<(), std::io::Error> {
     }
     let mut params = Vec::with_capacity(main_params.len());
     for (i, (ParamDef(_, ty), arg)) in main_params.iter().zip(fn_args).enumerate() {
-        let param = Literal::parse(&evaluator.program, &ty, arg);
+        let param = Literal::parse(evaluator.program, ty, arg);
         match param {
             Ok(param) => params.push(param),
             Err(e) => {

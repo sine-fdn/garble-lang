@@ -13,7 +13,7 @@ use scan::{scan, ScanError};
 use token::MetaInfo;
 
 use circuit::Circuit;
-use typed_ast::{Program, FnDef};
+use typed_ast::{FnDef, Program};
 
 pub mod ast;
 pub mod check;
@@ -50,7 +50,7 @@ pub enum CompileTimeError {
     /// Errors originating in the type-checking phase.
     TypeError(TypeError),
     /// Errors originating in the compilation phase.
-    CompilerError(CompilerError)
+    CompilerError(CompilerError),
 }
 
 /// A generic error that combines compile-time and run-time errors.
@@ -133,7 +133,9 @@ impl Error {
     /// Returns a human-readable error description, showing where the error occurred in the source.
     pub fn prettify(&self, prg: &str) -> String {
         match self {
-            Error::FnNotFound(fn_name) => format!("Could not find any function with name '{fn_name}'"),
+            Error::FnNotFound(fn_name) => {
+                format!("Could not find any function with name '{fn_name}'")
+            }
             Error::CompileTimeError(e) => e.prettify(prg),
             Error::EvalError(e) => e.prettify(prg),
         }
@@ -159,7 +161,10 @@ impl CompileTimeError {
                 errs_for_display.push(("Type error", format!("{e}"), *meta));
             }
             CompileTimeError::CompilerError(e) => {
-                let meta = MetaInfo { start: (0, 0), end: (0, 0) };
+                let meta = MetaInfo {
+                    start: (0, 0),
+                    end: (0, 0),
+                };
                 errs_for_display.push(("Compiler error", format!("{e}"), meta))
             }
         }

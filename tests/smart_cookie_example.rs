@@ -31,7 +31,7 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
 
         let website_signing_key = Literal::NumUnsigned(0, UnsignedNumType::U128);
 
-        let mut init_eval = Evaluator::new(&program, &init_fn, &init_circuit);
+        let mut init_eval = Evaluator::new(&program, init_fn, &init_circuit);
         init_eval
             .parse_literal("()")
             .map_err(|e| pretty_print(e, &smart_cookie))?;
@@ -46,7 +46,7 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
 
         for interest in interests {
             let mut log_interest_eval =
-                Evaluator::new(&program, &log_interest_fn, &log_interest_circuit);
+                Evaluator::new(&program, log_interest_fn, &log_interest_circuit);
             log_interest_eval
                 .set_literal(user_state)
                 .map_err(|e| pretty_print(e, &smart_cookie))?;
@@ -71,7 +71,7 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
             ));
         }
 
-        let mut decide_ad_eval = Evaluator::new(&program, &decide_ad_fn, &decide_ad_circuit);
+        let mut decide_ad_eval = Evaluator::new(&program, decide_ad_fn, &decide_ad_circuit);
         decide_ad_eval
             .set_literal(user_state)
             .map_err(|e| pretty_print(e, &smart_cookie))?;

@@ -191,12 +191,12 @@ impl<'a> Evaluator<'a> {
     pub fn set_literal(&mut self, literal: Literal) -> Result<(), EvalError> {
         if self.inputs.len() < self.main_fn.params.len() {
             let ty = &self.main_fn.params[self.inputs.len()].1;
-            if literal.is_of_type(&self.program, ty) {
+            if literal.is_of_type(self.program, ty) {
                 self.inputs.push(vec![]);
                 self.inputs
                     .last_mut()
                     .unwrap()
-                    .extend(literal.as_bits(&self.program));
+                    .extend(literal.as_bits(self.program));
                 Ok(())
             } else {
                 Err(EvalError::InvalidLiteralType(literal, ty.clone()))
@@ -211,7 +211,7 @@ impl<'a> Evaluator<'a> {
         if self.inputs.len() < self.main_fn.params.len() {
             let ty = &self.main_fn.params[self.inputs.len()].1;
             let parsed =
-                Literal::parse(&self.program, ty, literal).map_err(EvalError::LiteralParseError)?;
+                Literal::parse(self.program, ty, literal).map_err(EvalError::LiteralParseError)?;
             self.set_literal(parsed)?;
             Ok(())
         } else {
@@ -398,6 +398,6 @@ impl<'a> EvalOutput<'a> {
 
     /// Decodes the evaluated result as a literal (with enums looked up in the program).
     pub fn into_literal(self) -> Result<Literal, EvalError> {
-        Literal::from_result_bits(&self.program, &self.main_fn.body.1, &self.output)
+        Literal::from_result_bits(self.program, &self.main_fn.body.1, &self.output)
     }
 }
