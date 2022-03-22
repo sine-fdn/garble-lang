@@ -3,13 +3,15 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{EnumDef, Op, ParamDef, Type, UnaryOp},
+    ast::{EnumDef, Op, ParamDef, StructDef, Type, UnaryOp},
     token::{MetaInfo, SignedNumType, UnsignedNumType},
 };
 
 /// A program, consisting of top level definitions (enums or functions).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Program {
+    /// Top level struct type definitions.
+    pub struct_defs: HashMap<String, StructDef>,
     /// Top level enum type definitions.
     pub enum_defs: HashMap<String, EnumDef>,
     /// Top level function definitions.
@@ -60,6 +62,10 @@ pub enum ExprEnum {
     TupleLiteral(Vec<Expr>),
     /// Access of a tuple at the specified position.
     TupleAccess(Box<Expr>, usize),
+    /// Access of a struct at the specified field.
+    StructAccess(Box<Expr>, String),
+    /// Struct literal with the specified fields.
+    StructLiteral(String, Vec<(String, Expr)>),
     /// Enum literal of the specified variant, possibly with fields.
     EnumLiteral(String, Box<VariantExpr>),
     /// Matching the specified expression with a list of clauses (pattern + expression).

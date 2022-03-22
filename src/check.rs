@@ -5,8 +5,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::{
-        EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, Program, Type, UnaryOp,
-        VariantExpr, VariantExprEnum,
+        EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, Program, StructDef,
+        Type, UnaryOp, VariantExpr, VariantExprEnum,
     },
     env::Env,
     token::{MetaInfo, SignedNumType, UnsignedNumType},
@@ -26,6 +26,12 @@ pub enum TypeErrorEnum {
     UnusedFn(String),
     /// A top-level function calls itself recursively.
     RecursiveFnDef(String),
+    /// No struct declaration with the specified name exists.
+    UnknownStruct(String),
+    /// The struct exists, but does not contain a field with the specified name.
+    UnknownStructField(String, String),
+    /// The struct constructor is missing the specified field.
+    MissingStructField(String, String),
     /// No enum declaration with the specified name exists.
     UnknownEnum(String),
     /// The enum exists, but no variant declaration with the specified name was found.
@@ -46,6 +52,8 @@ pub enum TypeErrorEnum {
     ExpectedArrayType(Type),
     /// A tuple type was expected.
     ExpectedTupleType(Type),
+    /// A struct type was expected.
+    ExpectedStructType(Type),
     /// An enum type was expected.
     ExpectedEnumType(Type),
     /// Expected an enum variant without fields, but found a tuple variant.
@@ -95,6 +103,15 @@ impl std::fmt::Display for TypeErrorEnum {
             TypeErrorEnum::RecursiveFnDef(name) => f.write_fmt(format_args!(
                 "Function '{name}' is declared recursively, which is not supported"
             )),
+            TypeErrorEnum::UnknownStruct(struct_name) => {
+                f.write_fmt(format_args!("Unknown struct '{struct_name}'"))
+            }
+            TypeErrorEnum::UnknownStructField(struct_name, struct_field) => f.write_fmt(
+                format_args!("Struct '{struct_name}' does not have a field '{struct_field}'"),
+            ),
+            TypeErrorEnum::MissingStructField(struct_name, struct_field) => f.write_fmt(
+                format_args!("Field '{struct_field}' is missing for struct '{struct_name}'"),
+            ),
             TypeErrorEnum::UnknownEnum(enum_name) => {
                 f.write_fmt(format_args!("Unknown enum '{enum_name}'"))
             }
@@ -124,6 +141,9 @@ impl std::fmt::Display for TypeErrorEnum {
             }
             TypeErrorEnum::ExpectedTupleType(ty) => {
                 f.write_fmt(format_args!("Expected a tuple type, but found {ty}"))
+            }
+            TypeErrorEnum::ExpectedStructType(ty) => {
+                f.write_fmt(format_args!("Expected a struct type, but found {ty}"))
             }
             TypeErrorEnum::ExpectedEnumType(ty) => {
                 f.write_fmt(format_args!("Expected an enum type, but found {ty}"))
@@ -177,16 +197,28 @@ impl std::fmt::Display for TypeErrorEnum {
 
 /// Static top-level definitions of enums and functions.
 pub struct Defs<'a> {
+    structs: HashMap<&'a str, HashMap<&'a str, Type>>,
     enums: HashMap<&'a str, HashMap<&'a str, Option<Vec<Type>>>>,
     fns: HashMap<&'a str, &'a FnDef>,
 }
 
 impl<'a> Defs<'a> {
-    pub(crate) fn new(enum_defs: &'a HashMap<String, EnumDef>) -> Self {
+    pub(crate) fn new(
+        struct_defs: &'a HashMap<String, StructDef>,
+        enum_defs: &'a HashMap<String, EnumDef>,
+    ) -> Self {
         let mut defs = Self {
+            structs: HashMap::new(),
             enums: HashMap::new(),
             fns: HashMap::new(),
         };
+        for (struct_name, struct_def) in struct_defs.iter() {
+            let mut field_types = HashMap::new();
+            for (field_name, field_type) in &struct_def.fields {
+                field_types.insert(field_name.as_str(), field_type.clone());
+            }
+            defs.structs.insert(struct_name, field_types);
+        }
         for (enum_name, enum_def) in enum_defs.iter() {
             let mut enum_variants = HashMap::new();
             for variant in &enum_def.variants {
@@ -215,7 +247,8 @@ impl TypedFns {
 impl Program {
     /// Type-checks the parsed program, returning either a typed AST or type errors.
     pub fn type_check(&self) -> Result<typed_ast::Program, TypeError> {
-        let mut defs = Defs::new(&self.enum_defs);
+        let mut defs = Defs::new(&self.struct_defs, &self.enum_defs);
+        let struct_defs = self.struct_defs.clone();
         let enum_defs = self.enum_defs.clone();
         let mut fn_defs = TypedFns::new();
         for (fn_name, fn_def) in self.fn_defs.iter() {
@@ -239,7 +272,11 @@ impl Program {
                 return Err(TypeError(e, fn_def.meta));
             }
         }
-        Ok(typed_ast::Program { enum_defs, fn_defs })
+        Ok(typed_ast::Program {
+            struct_defs,
+            enum_defs,
+            fn_defs,
+        })
     }
 }
 
@@ -736,6 +773,7 @@ impl Expr {
                     | Type::Unsigned(_)
                     | Type::Signed(_)
                     | Type::Tuple(_)
+                    | Type::Struct(_)
                     | Type::Enum(_) => {}
                     Type::Fn(_, _) | Type::Array(_, _) => {
                         let e = TypeErrorEnum::TypeDoesNotSupportPatternMatching(ty.clone());
@@ -775,6 +813,58 @@ impl Expr {
                     typed_ast::ExprEnum::Match(Box::new(expr), typed_clauses),
                     ret_ty,
                 )
+            }
+            ExprEnum::StructLiteral(name, fields) => {
+                if let Some(struct_def) = defs.structs.get(name.as_str()) {
+                    let mut typed_fields = Vec::with_capacity(fields.len());
+                    for (field_name, field_value) in fields {
+                        if let Some(expected_type) = struct_def.get(field_name.as_str()) {
+                            let mut typed_field = field_value.type_check(env, fns, defs)?;
+                            coerce_type(&mut typed_field, expected_type)?;
+                            typed_fields.push((field_name.clone(), typed_field));
+                        } else {
+                            let e =
+                                TypeErrorEnum::UnknownStructField(name.clone(), field_name.clone());
+                            return Err(TypeError(e, meta));
+                        }
+                    }
+                    if struct_def.len() > fields.len() {
+                        for expected_field_name in struct_def.keys() {
+                            if !fields.iter().any(|(f, _)| f == expected_field_name) {
+                                let e = TypeErrorEnum::MissingStructField(
+                                    name.clone(),
+                                    expected_field_name.to_string(),
+                                );
+                                return Err(TypeError(e, meta));
+                            }
+                        }
+                    }
+                    (
+                        typed_ast::ExprEnum::StructLiteral(name.clone(), typed_fields),
+                        Type::Struct(name.clone()),
+                    )
+                } else {
+                    let e = TypeErrorEnum::UnknownStruct(name.clone());
+                    return Err(TypeError(e, meta));
+                }
+            }
+            ExprEnum::StructAccess(struct_expr, field) => {
+                let struct_expr = struct_expr.type_check(env, fns, defs)?;
+                let name = expect_struct_type(&struct_expr.1, struct_expr.2)?;
+                if let Some(struct_def) = defs.structs.get(name.as_str()) {
+                    if let Some(field_ty) = struct_def.get(field.as_str()) {
+                        (
+                            typed_ast::ExprEnum::StructAccess(Box::new(struct_expr), field.clone()),
+                            field_ty.clone(),
+                        )
+                    } else {
+                        let e = TypeErrorEnum::UnknownStructField(name.clone(), field.clone());
+                        return Err(TypeError(e, meta));
+                    }
+                } else {
+                    let e = TypeErrorEnum::UnknownStruct(name.clone());
+                    return Err(TypeError(e, meta));
+                }
             }
         };
         Ok(typed_ast::Expr(expr, ty, meta))
@@ -1135,6 +1225,9 @@ fn split_ctor(patterns: &[PatternStack], q: &[typed_ast::Pattern], defs: &Defs) 
             }
             _ => panic!("cannot split {:?} for type {:?}", head_enum, ty),
         },
+        Type::Struct(_) => {
+            todo!()
+        }
         Type::Enum(enum_name) => {
             let variants = defs.enums.get(enum_name.as_str()).unwrap();
             variants
@@ -1248,6 +1341,16 @@ fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<(Type, usize), TypeErr
         Type::Array(elem, size) => Ok((*elem.clone(), *size)),
         _ => Err(TypeError(
             TypeErrorEnum::ExpectedArrayType(ty.clone()),
+            meta,
+        )),
+    }
+}
+
+fn expect_struct_type(ty: &Type, meta: MetaInfo) -> Result<String, TypeError> {
+    match ty {
+        Type::Struct(name) => Ok(name.clone()),
+        _ => Err(TypeError(
+            TypeErrorEnum::ExpectedStructType(ty.clone()),
             meta,
         )),
     }
@@ -1394,6 +1497,7 @@ fn is_coercible_signed(n: i128, ty: &Type) -> bool {
         Type::Fn(_, _) => false,
         Type::Array(_, _) => false,
         Type::Tuple(_) => false,
+        Type::Struct(_) => false,
         Type::Enum(_) => false,
     }
 }

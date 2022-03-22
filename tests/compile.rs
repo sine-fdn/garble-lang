@@ -2,6 +2,13 @@ use garble::{
     ast::Type, compile, eval::Evaluator, literal::Literal, token::UnsignedNumType, Error,
 };
 
+fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
+    let e: Error = e.into();
+    let pretty = e.prettify(prg);
+    println!("{}", pretty);
+    e
+}
+
 #[test]
 fn compile_xor() -> Result<(), Error> {
     for y in [true, false] {
@@ -1395,13 +1402,6 @@ pub fn main(x: i8) -> i8 {
     Ok(())
 }
 
-fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
-    let e: Error = e.into();
-    let pretty = e.prettify(prg);
-    println!("{}", pretty);
-    e
-}
-
 #[test]
 fn compile_lexically_scoped_block() -> Result<(), Error> {
     let prg = "
@@ -1422,5 +1422,28 @@ pub fn main(x: i32) -> i32 {
         let output = i32::try_from(output).map_err(|e| pretty_print(e, prg))?;
         assert_eq!(output, x + 1);
     }
+    Ok(())
+}
+
+#[test]
+fn compile_struct_type() -> Result<(), Error> {
+    let prg = "
+struct FooBar {
+    foo: i32,
+    bar: i32,
+}
+
+pub fn main(x: i32) -> i32 {
+    let foobar = FooBar { foo: x, bar: 2 };
+    foobar.bar
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    eval.set_i32(5);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    let output = i32::try_from(output).map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(output, 2);
+
     Ok(())
 }

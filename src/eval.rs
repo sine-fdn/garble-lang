@@ -364,7 +364,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for Vec<bool> {
 impl<'a> EvalOutput<'a> {
     fn into_unsigned(self, ty: Type) -> Result<u128, EvalError> {
         let output = EvalPanic::parse(&self.output)?;
-        let size = ty.size_in_bits_for_defs(None);
+        let size = ty.size_in_bits_for_defs(self.program);
         if output.len() == size {
             let mut n = 0;
             for (i, output) in output.iter().copied().take(size).enumerate() {
@@ -381,7 +381,7 @@ impl<'a> EvalOutput<'a> {
 
     fn into_signed(self, ty: Type) -> Result<i128, EvalError> {
         let output = EvalPanic::parse(&self.output)?;
-        let size = ty.size_in_bits_for_defs(None);
+        let size = ty.size_in_bits_for_defs(self.program);
         if output.len() == size {
             let mut n = 0;
             for (i, output) in output.iter().copied().enumerate().take(size) {

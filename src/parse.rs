@@ -4,8 +4,8 @@ use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        Closure, EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, Program, Type,
-        UnaryOp, Variant, VariantExpr, VariantExprEnum,
+        Closure, EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, Program,
+        StructDef, Type, UnaryOp, Variant, VariantExpr, VariantExprEnum,
     },
     scan::Tokens,
     token::{MetaInfo, SignedNumType, Token, TokenEnum, UnsignedNumType},
@@ -99,6 +99,7 @@ impl Tokens {
 struct Parser {
     tokens: Peekable<IntoIter<Token>>,
     errors: Vec<ParseError>,
+    struct_literals_allowed: bool,
 }
 
 impl Parser {
@@ -106,11 +107,13 @@ impl Parser {
         Self {
             tokens: tokens.into_iter().peekable(),
             errors: vec![],
+            struct_literals_allowed: true,
         }
     }
 
     fn parse(mut self) -> Result<Program, Vec<ParseError>> {
         let top_level_keywords = [TokenEnum::KeywordFn];
+        let mut struct_defs = HashMap::new();
         let mut enum_defs = HashMap::new();
         let mut fn_defs = HashMap::new();
         let mut is_pub = None;
@@ -119,9 +122,17 @@ impl Parser {
                 TokenEnum::KeywordPub if is_pub == None => {
                     is_pub = Some(meta);
                 }
+                TokenEnum::KeywordStruct => {
+                    if let Ok((struct_name, struct_def)) = self.parse_struct_def(meta) {
+                        struct_defs.insert(struct_name, struct_def);
+                    } else {
+                        self.consume_until_one_of(&top_level_keywords);
+                    }
+                    is_pub = None;
+                }
                 TokenEnum::KeywordEnum => {
-                    if let Ok(enum_def) = self.parse_enum_def(meta) {
-                        enum_defs.insert(enum_def.identifier.clone(), enum_def);
+                    if let Ok((enum_name, enum_def)) = self.parse_enum_def(meta) {
+                        enum_defs.insert(enum_name, enum_def);
                     } else {
                         self.consume_until_one_of(&top_level_keywords);
                     }
@@ -143,12 +154,43 @@ impl Parser {
             }
         }
         if self.errors.is_empty() {
-            return Ok(Program { enum_defs, fn_defs });
+            return Ok(Program {
+                struct_defs,
+                enum_defs,
+                fn_defs,
+            });
         }
         Err(self.errors)
     }
 
-    fn parse_enum_def(&mut self, start: MetaInfo) -> Result<EnumDef, ()> {
+    fn parse_struct_def(&mut self, start: MetaInfo) -> Result<(String, StructDef), ()> {
+        // struct keyword was already consumed by the top-level parser
+        let (identifier, _) = self.expect_identifier()?;
+
+        self.expect(&TokenEnum::LeftBrace)?;
+
+        let mut fields = vec![];
+        if !self.peek(&TokenEnum::RightBrace) {
+            let (name, _) = self.expect_identifier()?;
+            self.expect(&TokenEnum::Colon)?;
+            let (ty, _) = self.parse_type()?;
+            fields.push((name, ty));
+            while self.next_matches(&TokenEnum::Comma).is_some() {
+                if self.peek(&TokenEnum::RightBrace) {
+                    break;
+                }
+                let (name, _) = self.expect_identifier()?;
+                self.expect(&TokenEnum::Colon)?;
+                let (ty, _) = self.parse_type()?;
+                fields.push((name, ty));
+            }
+        }
+        let end = self.expect(&TokenEnum::RightBrace)?;
+        let meta = join_meta(start, end);
+        Ok((identifier, StructDef { fields, meta }))
+    }
+
+    fn parse_enum_def(&mut self, start: MetaInfo) -> Result<(String, EnumDef), ()> {
         // enum keyword was already consumed by the top-level parser
 
         let (identifier, _) = self.expect_identifier()?;
@@ -166,11 +208,7 @@ impl Parser {
 
         let end = self.expect(&TokenEnum::RightBrace)?;
         let meta = join_meta(start, end);
-        Ok(EnumDef {
-            identifier,
-            variants,
-            meta,
-        })
+        Ok((identifier, EnumDef { variants, meta }))
     }
 
     fn parse_variant(&mut self) -> Result<Variant, ()> {
@@ -454,7 +492,9 @@ impl Parser {
     fn parse_if_or_match(&mut self) -> Result<Expr, ()> {
         if let Some(meta) = self.next_matches(&TokenEnum::KeywordIf) {
             // if <cond> { <then> } else [if { <else-if> } else]* { <else> }
+            self.struct_literals_allowed = false;
             let cond_expr = self.parse_expr()?;
+            self.struct_literals_allowed = true;
             self.expect(&TokenEnum::LeftBrace)?;
 
             if let Ok(then_expr) = self.parse_expr() {
@@ -500,7 +540,9 @@ impl Parser {
             }
         } else if let Some(meta) = self.next_matches(&TokenEnum::KeywordMatch) {
             // match <match_expr> { <clause> * }
+            self.struct_literals_allowed = false;
             let match_expr = self.parse_expr()?;
+            self.struct_literals_allowed = true;
             self.expect(&TokenEnum::LeftBrace)?;
 
             let mut has_failed = false;
@@ -730,6 +772,9 @@ impl Parser {
                             let end = self.expect(&TokenEnum::RightParen)?;
                             let meta = join_meta(meta, end);
                             Expr(ExprEnum::FnCall(identifier.to_string(), args), meta)
+                        } else if self.peek(&TokenEnum::LeftBrace) && self.struct_literals_allowed {
+                            // Struct literal:
+                            self.parse_literal(Token(token_enum, meta), false)?
                         } else {
                             Expr(ExprEnum::Identifier(identifier.to_string()), meta)
                         }
@@ -750,7 +795,7 @@ impl Parser {
         while self.next_matches(&TokenEnum::Dot).is_some() {
             let peeked = self.tokens.peek();
             if let Some(Token(TokenEnum::Identifier(_), _)) = peeked {
-                expr = self.parse_method_call(expr)?;
+                expr = self.parse_method_call_or_struct_access(expr)?;
             } else if let Some(Token(
                 TokenEnum::UnsignedNum(i, Some(UnsignedNumType::Usize) | None),
                 meta_index,
@@ -823,6 +868,27 @@ impl Parser {
                             VariantExpr(variant_name, VariantExprEnum::Unit, variant_meta)
                         };
                         Expr(ExprEnum::EnumLiteral(identifier, Box::new(variant)), meta)
+                    } else if self.next_matches(&TokenEnum::LeftBrace).is_some()
+                        && self.struct_literals_allowed
+                    {
+                        let mut fields = vec![];
+                        if !self.peek(&TokenEnum::RightBrace) {
+                            let (name, _) = self.expect_identifier()?;
+                            self.expect(&TokenEnum::Colon)?;
+                            let value = self.parse_expr()?;
+                            fields.push((name, value));
+                            while self.next_matches(&TokenEnum::Comma).is_some() {
+                                if self.peek(&TokenEnum::RightBrace) {
+                                    break;
+                                }
+                                let (name, _) = self.expect_identifier()?;
+                                self.expect(&TokenEnum::Colon)?;
+                                let value = self.parse_expr()?;
+                                fields.push((name, value));
+                            }
+                        }
+                        self.expect(&TokenEnum::RightBrace)?;
+                        Expr(ExprEnum::StructLiteral(identifier, fields), meta)
                     } else {
                         self.push_error(ParseErrorEnum::InvalidLiteral, meta);
                         return Err(());
@@ -938,7 +1004,7 @@ impl Parser {
         })
     }
 
-    fn parse_method_call(&mut self, recv: Expr) -> Result<Expr, ()> {
+    fn parse_method_call_or_struct_access(&mut self, recv: Expr) -> Result<Expr, ()> {
         let (method_name, call_start) = self.expect_identifier()?;
         match method_name.as_str() {
             "map" => {
@@ -1032,10 +1098,10 @@ impl Parser {
                     meta,
                 ))
             }
-            _ => {
-                self.push_error(ParseErrorEnum::InvalidMethodName, call_start);
-                Err(())
-            }
+            field => Ok(Expr(
+                ExprEnum::StructAccess(Box::new(recv), field.to_string()),
+                call_start,
+            )),
         }
     }
 

@@ -7,17 +7,26 @@ use crate::token::{MetaInfo, SignedNumType, UnsignedNumType};
 /// A program, consisting of top level definitions (enums or functions).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Program {
+    /// Top level struct type definitions.
+    pub struct_defs: HashMap<String, StructDef>,
     /// Top level enum type definitions.
     pub enum_defs: HashMap<String, EnumDef>,
     /// Top level function definitions.
     pub fn_defs: HashMap<String, FnDef>,
 }
 
+/// A top level struct type definition.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct StructDef {
+    /// The variants of the enum type.
+    pub fields: Vec<(String, Type)>,
+    /// The location in the source code.
+    pub meta: MetaInfo,
+}
+
 /// A top level enum type definition.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct EnumDef {
-    /// The name of the enum type.
-    pub identifier: String,
     /// The variants of the enum type.
     pub variants: Vec<Variant>,
     /// The location in the source code.
@@ -92,6 +101,8 @@ pub enum Type {
     Array(Box<Type>, usize),
     /// Tuple type containing fields of the specified types.
     Tuple(Vec<Type>),
+    /// Struct type of the specified name, needs to be looked up in struct defs for its field types.
+    Struct(String),
     /// Enum type of the specified name, needs to be looked up in enum defs for its variant types.
     Enum(String),
 }
@@ -134,6 +145,7 @@ impl std::fmt::Display for Type {
                 }
                 f.write_str(")")
             }
+            Type::Struct(name) => f.write_str(name),
             Type::Enum(name) => f.write_str(name),
         }
     }
@@ -172,6 +184,10 @@ pub enum ExprEnum {
     TupleLiteral(Vec<Expr>),
     /// Access of a tuple at the specified position.
     TupleAccess(Box<Expr>, usize),
+    /// Access of a struct at the specified field.
+    StructAccess(Box<Expr>, String),
+    /// Struct literal with the specified fields.
+    StructLiteral(String, Vec<(String, Expr)>),
     /// Enum literal of the specified variant, possibly with fields.
     EnumLiteral(String, Box<VariantExpr>),
     /// Matching the specified expression with a list of clauses (pattern + expression).

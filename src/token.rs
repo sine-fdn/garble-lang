@@ -15,6 +15,8 @@ pub enum TokenEnum {
     SignedNum(i128, Option<SignedNumType>),
     /// `enum` keyword.
     KeywordEnum,
+    /// `struct` keyword.
+    KeywordStruct,
     /// `fn` keyword.
     KeywordFn,
     /// `let` keyword.
@@ -111,6 +113,7 @@ impl std::fmt::Display for TokenEnum {
                     f.write_fmt(format_args!("{num}"))
                 }
             }
+            TokenEnum::KeywordStruct => f.write_str("struct"),
             TokenEnum::KeywordEnum => f.write_str("enum"),
             TokenEnum::KeywordFn => f.write_str("fn"),
             TokenEnum::KeywordLet => f.write_str("let"),

@@ -34,6 +34,8 @@ pub enum Literal {
     Array(Vec<Literal>),
     /// Tuple literal containing the specified fields.
     Tuple(Vec<Literal>),
+    /// Struct literal with the specified fields.
+    Struct(String, Vec<(String, Literal)>),
     /// Enum literal of the specified variant, possibly with fields.
     Enum(String, String, VariantLiteral),
     /// Range of numbers from the specified min (inclusive) to the specified max (exclusive).
@@ -54,7 +56,7 @@ impl Literal {
     pub fn parse(checked: &Program, ty: &Type, literal: &str) -> Result<Self, CompileTimeError> {
         let mut env = Env::new();
         let mut fns = TypedFns::new();
-        let defs = Defs::new(&checked.enum_defs);
+        let defs = Defs::new(&checked.struct_defs, &checked.enum_defs);
         let mut expr = scan(literal)?
             .parse_literal()?
             .type_check(&mut env, &mut fns, &defs)?;
@@ -153,7 +155,7 @@ impl Literal {
                 }
             }
             Type::Unsigned(unsigned_ty) => {
-                let size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
+                let size = ty.size_in_bits_for_defs(checked);
                 if bits.len() == size {
                     let mut n = 0;
                     for (i, output) in bits.iter().copied().take(size).enumerate() {
@@ -168,7 +170,7 @@ impl Literal {
                 }
             }
             Type::Signed(signed_ty) => {
-                let size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
+                let size = ty.size_in_bits_for_defs(checked);
                 if bits.len() == size {
                     let mut n = 0;
                     for (i, output) in bits.iter().copied().take(size).enumerate() {
@@ -183,7 +185,7 @@ impl Literal {
                 }
             }
             Type::Array(ty, size) => {
-                let ty_size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
+                let ty_size = ty.size_in_bits_for_defs(checked);
                 let mut elems = vec![];
                 let mut i = 0;
                 for _ in 0..*size {
@@ -197,12 +199,15 @@ impl Literal {
                 let mut fields = vec![];
                 let mut i = 0;
                 for ty in field_types {
-                    let ty_size = ty.size_in_bits_for_defs(Some(&checked.enum_defs));
+                    let ty_size = ty.size_in_bits_for_defs(checked);
                     let bits = &bits[i..i + ty_size];
                     fields.push(Literal::from_unwrapped_bits(checked, ty, bits)?);
                     i += ty_size;
                 }
                 Ok(Literal::Tuple(fields))
+            }
+            Type::Struct(_) => {
+                todo!()
             }
             Type::Enum(enum_name) => {
                 let enum_def = checked.enum_defs.get(enum_name).unwrap();
@@ -225,10 +230,10 @@ impl Literal {
                             let field = Literal::from_unwrapped_bits(
                                 checked,
                                 ty,
-                                &bits[i..i + ty.size_in_bits_for_defs(Some(&checked.enum_defs))],
+                                &bits[i..i + ty.size_in_bits_for_defs(checked)],
                             )?;
                             fields.push(field);
-                            i += ty.size_in_bits_for_defs(Some(&checked.enum_defs));
+                            i += ty.size_in_bits_for_defs(checked);
                         }
                         let variant = VariantLiteral::Tuple(fields);
                         Ok(Literal::Enum(
@@ -249,13 +254,13 @@ impl Literal {
             Literal::True => vec![true],
             Literal::False => vec![false],
             Literal::NumUnsigned(n, ty) => {
-                let size = Type::Unsigned(*ty).size_in_bits_for_defs(Some(&checked.enum_defs));
+                let size = Type::Unsigned(*ty).size_in_bits_for_defs(checked);
                 let mut bits = vec![];
                 unsigned_to_bits(*n, size, &mut bits);
                 bits
             }
             Literal::NumSigned(n, ty) => {
-                let size = Type::Signed(*ty).size_in_bits_for_defs(Some(&checked.enum_defs));
+                let size = Type::Signed(*ty).size_in_bits_for_defs(checked);
                 let mut bits = vec![];
                 signed_to_bits(*n, size, &mut bits);
                 bits
@@ -283,10 +288,13 @@ impl Literal {
                 }
                 bits
             }
+            Literal::Struct(_, _) => {
+                todo!()
+            }
             Literal::Enum(enum_name, variant_name, variant) => {
                 let enum_def = checked.enum_defs.get(enum_name).unwrap();
                 let tag_size = enum_tag_size(enum_def);
-                let max_size = enum_max_size(enum_def, &checked.enum_defs);
+                let max_size = enum_max_size(enum_def, checked);
                 let mut wires = vec![false; max_size];
                 let tag_number = enum_tag_number(enum_def, variant_name);
                 for (i, wire) in wires.iter_mut().enumerate().take(tag_size) {
@@ -307,8 +315,8 @@ impl Literal {
             }
             Literal::Range(min, max) => {
                 let elems: Vec<usize> = (*min..*max).into_iter().collect();
-                let elem_size = Type::Unsigned(UnsignedNumType::Usize)
-                    .size_in_bits_for_defs(Some(&checked.enum_defs));
+                let elem_size =
+                    Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(checked);
                 let mut bits = Vec::with_capacity(elems.len() * elem_size);
                 for elem in elems {
                     unsigned_to_bits(elem as u128, elem_size, &mut bits);
@@ -348,6 +356,9 @@ impl Display for Literal {
                     write!(f, ", {}", field)?;
                 }
                 write!(f, ")")
+            }
+            Literal::Struct(_, _) => {
+                todo!()
             }
             Literal::Enum(enum_name, variant_name, variant) => match variant {
                 VariantLiteral::Unit => write!(f, "{}::{}", enum_name, variant_name),
