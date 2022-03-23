@@ -255,7 +255,7 @@ impl Expr {
                 vec![circuit.push_or(x[0], y[0])]
             }
             ExprEnum::Op(op @ (Op::ShiftLeft | Op::ShiftRight), x, y) => {
-                let x_is_signed = matches!(x.1, Type::Signed(_));
+                let x_is_signed = is_signed(&x.1);
                 let x = x.compile(enums, fns, env, circuit);
                 let y = y.compile(enums, fns, env, circuit);
                 assert_eq!(y.len(), 8);
