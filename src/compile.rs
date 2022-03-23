@@ -474,24 +474,30 @@ impl Expr {
                 env.pop();
                 expr
             }
-            ExprEnum::Let(var, binding, body) => {
-                let binding = binding.compile(enums, fns, env, circuit);
+            ExprEnum::Let(bindings, body) => {
                 env.push();
-                env.set(var.clone(), binding);
+                for (var, binding) in bindings {
+                    let binding = binding.compile(enums, fns, env, circuit);
+                    env.set(var.clone(), binding);
+                }
                 let body = body.compile(enums, fns, env, circuit);
                 env.pop();
                 body
             }
             ExprEnum::FnCall(identifier, args) => {
                 let fn_def = fns.get(identifier).unwrap();
-                let mut body = fn_def.body.clone();
-                for (ParamDef(identifier, ty), arg) in fn_def.params.iter().zip(args) {
-                    let let_expr =
-                        ExprEnum::Let(identifier.clone(), Box::new(arg.clone()), Box::new(body));
-                    body = Expr(let_expr, ty.clone(), *meta)
+                let mut bindings = Vec::with_capacity(fn_def.params.len());
+                for (ParamDef(identifier, _), arg) in fn_def.params.iter().zip(args) {
+                    env.push();
+                    let arg = arg.compile(enums, fns, env, circuit);
+                    bindings.push((identifier, arg));
+                    env.pop();
                 }
                 env.push();
-                let body = body.compile(enums, fns, env, circuit);
+                for (var, binding) in bindings {
+                    env.set(var.clone(), binding);
+                }
+                let body = fn_def.body.compile(enums, fns, env, circuit);
                 env.pop();
                 body
             }

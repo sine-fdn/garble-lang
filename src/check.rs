@@ -504,14 +504,20 @@ impl Expr {
                 env.pop();
                 (expr, ty)
             }
-            ExprEnum::Let(var, binding, body) => {
-                let binding = binding.type_check(env, fns, defs)?;
-                env.push();
-                env.set(var.clone(), binding.1.clone());
+            ExprEnum::Let(bindings, body) => {
+                let mut typed_bindings = Vec::with_capacity(bindings.len());
+                for (var, binding) in bindings {
+                    env.push();
+                    let binding = binding.type_check(env, fns, defs)?;
+                    env.set(var.clone(), binding.1.clone());
+                    typed_bindings.push((var.clone(), binding));
+                }
                 let body = body.type_check(env, fns, defs)?;
-                env.pop();
+                for _ in bindings {
+                    env.pop();
+                }
                 let ty = body.1.clone();
-                let expr = typed_ast::ExprEnum::Let(var.clone(), Box::new(binding), Box::new(body));
+                let expr = typed_ast::ExprEnum::Let(typed_bindings, Box::new(body));
                 (expr, ty)
             }
             ExprEnum::FnCall(identifier, args) => {
