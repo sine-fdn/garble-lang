@@ -449,8 +449,11 @@ fn main(mode: bool, x: i16, y: u8) -> i16 {
 }
 ";
     let circuit = compile(prg).map_err(|e| pretty_print(e, prg))?;
-    for mode in [true, false] {
-        for x in -20..20 {
+    let test_values = (-20..20)
+        .into_iter()
+        .chain(vec![i16::MAX, i16::MIN].into_iter());
+    for x in test_values {
+        for mode in [true, false] {
             for y in 0..20 {
                 let mut eval = Evaluator::from(&circuit);
                 eval.set_bool(mode);
