@@ -174,6 +174,20 @@ pub enum UnsignedNumType {
     U128,
 }
 
+impl UnsignedNumType {
+    /// Returns the max value representable by this type.
+    pub fn max(&self) -> u128 {
+        match self {
+            UnsignedNumType::Usize => u32::MAX as u128,
+            UnsignedNumType::U8 => u8::MAX as u128,
+            UnsignedNumType::U16 => u16::MAX as u128,
+            UnsignedNumType::U32 => u32::MAX as u128,
+            UnsignedNumType::U64 => u64::MAX as u128,
+            UnsignedNumType::U128 => u128::MAX as u128,
+        }
+    }
+}
+
 impl std::fmt::Display for UnsignedNumType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
@@ -200,6 +214,30 @@ pub enum SignedNumType {
     I64,
     /// 128-bit signed integer type.
     I128,
+}
+
+impl SignedNumType {
+    /// Returns the minimum value representable by this type.
+    pub fn min(&self) -> i128 {
+        match self {
+            SignedNumType::I8 => i8::MIN as i128,
+            SignedNumType::I16 => i16::MIN as i128,
+            SignedNumType::I32 => i32::MIN as i128,
+            SignedNumType::I64 => i64::MIN as i128,
+            SignedNumType::I128 => i128::MIN as i128,
+        }
+    }
+
+    /// Returns the maximum value representable by this type.
+    pub fn max(&self) -> i128 {
+        match self {
+            SignedNumType::I8 => i8::MAX as i128,
+            SignedNumType::I16 => i16::MAX as i128,
+            SignedNumType::I32 => i32::MAX as i128,
+            SignedNumType::I64 => i64::MAX as i128,
+            SignedNumType::I128 => i128::MAX as i128,
+        }
+    }
 }
 
 impl std::fmt::Display for SignedNumType {

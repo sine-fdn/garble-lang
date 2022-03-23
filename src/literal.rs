@@ -1,18 +1,20 @@
 //! A subset of [`crate::typed_ast::Expr`] that is used as input / output by an
 //! [`crate::eval::Evaluator`].
 
-use std::fmt::Display;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
 use crate::{
-    ast::{Type, Variant},
-    check::{coerce_type, Defs, TypedFns},
+    check::{coerce_type, Defs, TopLevelTypes, TypedFns},
     circuit::EvalPanic,
     compile::{enum_max_size, enum_tag_number, enum_tag_size, signed_to_bits, unsigned_to_bits},
     env::Env,
     eval::EvalError,
     scan::scan,
     token::{SignedNumType, UnsignedNumType},
-    typed_ast::{Expr, ExprEnum, Program, VariantExpr, VariantExprEnum},
+    typed_ast::{Expr, ExprEnum, Program, Type, Variant, VariantExpr, VariantExprEnum},
     CompileTimeError,
 };
 
@@ -54,12 +56,23 @@ pub enum VariantLiteral {
 impl Literal {
     /// Parses the str as a literal of the specified type, looking up enum defs in the program.
     pub fn parse(checked: &Program, ty: &Type, literal: &str) -> Result<Self, CompileTimeError> {
+        let mut struct_names = HashSet::with_capacity(checked.struct_defs.len());
+        let mut enum_names = HashSet::with_capacity(checked.enum_defs.len());
+        struct_names.extend(checked.struct_defs.keys());
+        enum_names.extend(checked.enum_defs.keys());
+        let top_level_defs = TopLevelTypes {
+            struct_names,
+            enum_names,
+        };
         let mut env = Env::new();
         let mut fns = TypedFns::new();
         let defs = Defs::new(&checked.struct_defs, &checked.enum_defs);
-        let mut expr = scan(literal)?
-            .parse_literal()?
-            .type_check(&mut env, &mut fns, &defs)?;
+        let mut expr = scan(literal)?.parse_literal()?.type_check(
+            &top_level_defs,
+            &mut env,
+            &mut fns,
+            &defs,
+        )?;
         coerce_type(&mut expr, ty)?;
         expr.1 = ty.clone();
         Ok(expr.into_literal())
@@ -77,6 +90,29 @@ impl Literal {
             }
             (Literal::Array(elems), Type::Array(elem_ty, size)) if elems.len() == *size => {
                 elems.iter().all(|elem| elem.is_of_type(checked, elem_ty))
+            }
+            (Literal::Struct(struct_name1, fields), Type::Struct(struct_name2))
+                if struct_name1 == struct_name2 =>
+            {
+                if let Some(struct_def) = checked.struct_defs.get(struct_name1) {
+                    if struct_def.fields.len() == fields.len() {
+                        let mut struct_def_fields = HashMap::with_capacity(fields.len());
+                        for (field_name, field_type) in struct_def.fields.iter() {
+                            struct_def_fields.insert(field_name, field_type);
+                        }
+                        for (field_name, field_literal) in fields.iter() {
+                            if let Some(expected_type) = struct_def_fields.get(field_name) {
+                                if !field_literal.is_of_type(checked, expected_type) {
+                                    return false;
+                                }
+                            } else {
+                                return false;
+                            }
+                        }
+                        return true;
+                    }
+                }
+                false
             }
             (Literal::Tuple(fields1), Type::Tuple(fields2)) if fields1.len() == fields2.len() => {
                 fields1
@@ -206,8 +242,18 @@ impl Literal {
                 }
                 Ok(Literal::Tuple(fields))
             }
-            Type::Struct(_) => {
-                todo!()
+            Type::Struct(struct_name) => {
+                let mut fields = vec![];
+                let mut i = 0;
+                let struct_def = checked.struct_defs.get(struct_name).unwrap();
+                for (field_name, ty) in struct_def.fields.iter() {
+                    let ty_size = ty.size_in_bits_for_defs(checked);
+                    let bits = &bits[i..i + ty_size];
+                    let value = Literal::from_unwrapped_bits(checked, ty, bits)?;
+                    fields.push((field_name.clone(), value));
+                    i += ty_size;
+                }
+                Ok(Literal::Struct(struct_name.clone(), fields))
             }
             Type::Enum(enum_name) => {
                 let enum_def = checked.enum_defs.get(enum_name).unwrap();
@@ -288,8 +334,12 @@ impl Literal {
                 }
                 bits
             }
-            Literal::Struct(_, _) => {
-                todo!()
+            Literal::Struct(_, fields) => {
+                let mut bits = vec![];
+                for (_, f) in fields {
+                    bits.extend(f.as_bits(checked))
+                }
+                bits
             }
             Literal::Enum(enum_name, variant_name, variant) => {
                 let enum_def = checked.enum_defs.get(enum_name).unwrap();
@@ -332,17 +382,17 @@ impl Display for Literal {
         match self {
             Literal::True => write!(f, "true"),
             Literal::False => write!(f, "false"),
-            Literal::NumUnsigned(n, _) => write!(f, "{}", n),
-            Literal::NumSigned(n, _) => write!(f, "{}", n),
-            Literal::ArrayRepeat(elem, size) => write!(f, "[{}; {}]", elem, size),
+            Literal::NumUnsigned(n, _) => write!(f, "{n}"),
+            Literal::NumSigned(n, _) => write!(f, "{n}"),
+            Literal::ArrayRepeat(elem, size) => write!(f, "[{elem}; {size}]"),
             Literal::Array(elems) => {
                 write!(f, "[")?;
                 let mut elems = elems.iter();
                 if let Some(first_elem) = elems.next() {
-                    write!(f, "{}", first_elem)?;
+                    write!(f, "{first_elem}")?;
                 }
                 for elem in elems {
-                    write!(f, ", {}", elem)?;
+                    write!(f, ", {elem}")?;
                 }
                 write!(f, "]")
             }
@@ -350,27 +400,35 @@ impl Display for Literal {
                 write!(f, "(")?;
                 let mut fields = fields.iter();
                 if let Some(first_field) = fields.next() {
-                    write!(f, "{}", first_field)?;
+                    write!(f, "{first_field}")?;
                 }
                 for field in fields {
-                    write!(f, ", {}", field)?;
+                    write!(f, ", {field}")?;
                 }
                 write!(f, ")")
             }
-            Literal::Struct(_, _) => {
-                todo!()
+            Literal::Struct(struct_name, fields) => {
+                write!(f, "{struct_name} {{")?;
+                let mut fields = fields.iter();
+                if let Some((first_field_name, first_field_value)) = fields.next() {
+                    write!(f, "{first_field_name}: {first_field_value}")?;
+                }
+                for (field_name, field_value) in fields {
+                    write!(f, ", {field_name}: {field_value}")?;
+                }
+                write!(f, "}}")
             }
             Literal::Enum(enum_name, variant_name, variant) => match variant {
-                VariantLiteral::Unit => write!(f, "{}::{}", enum_name, variant_name),
+                VariantLiteral::Unit => write!(f, "{enum_name}::{variant_name}"),
                 VariantLiteral::Tuple(fields) => {
-                    write!(f, "{}::{}", enum_name, variant_name)?;
+                    write!(f, "{enum_name}::{variant_name}")?;
                     write!(f, "(")?;
                     let mut fields = fields.iter();
                     if let Some(first_field) = fields.next() {
-                        write!(f, "{}", first_field)?;
+                        write!(f, "{first_field}")?;
                     }
                     for field in fields {
-                        write!(f, ", {}", field)?;
+                        write!(f, ", {field}")?;
                     }
                     write!(f, ")")
                 }
@@ -413,6 +471,13 @@ impl Expr {
             ExprEnum::TupleLiteral(fields) => {
                 Literal::Tuple(fields.into_iter().map(|f| f.into_literal()).collect())
             }
+            ExprEnum::StructLiteral(struct_name, fields) => Literal::Struct(
+                struct_name,
+                fields
+                    .into_iter()
+                    .map(|(name, value)| (name, value.into_literal()))
+                    .collect(),
+            ),
             ExprEnum::EnumLiteral(name, variant) => {
                 let VariantExpr(variant_name, _, _) = &variant.as_ref();
                 Literal::Enum(name, variant_name.clone(), variant.into_literal())

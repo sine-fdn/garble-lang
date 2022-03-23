@@ -4,8 +4,8 @@ use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        Closure, EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, Program,
-        StructDef, Type, UnaryOp, Variant, VariantExpr, VariantExprEnum,
+        Closure, EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum,
+        PreliminaryType, Program, StructDef, UnaryOp, Variant, VariantExpr, VariantExprEnum,
     },
     scan::Tokens,
     token::{MetaInfo, SignedNumType, Token, TokenEnum, UnsignedNumType},
@@ -187,6 +187,7 @@ impl Parser {
         }
         let end = self.expect(&TokenEnum::RightBrace)?;
         let meta = join_meta(start, end);
+        fields.sort_by(|(f1, _), (f2, _)| f1.cmp(f2));
         Ok((identifier, StructDef { fields, meta }))
     }
 
@@ -622,6 +623,26 @@ impl Parser {
                                 meta,
                             ))
                         }
+                    } else if self.next_matches(&TokenEnum::LeftBrace).is_some() {
+                        let mut fields = vec![];
+                        if !self.peek(&TokenEnum::RightBrace) {
+                            let (field_name, _) = self.expect_identifier()?;
+                            self.expect(&TokenEnum::Colon)?;
+                            let field_pattern = self.parse_pattern()?;
+                            fields.push((field_name, field_pattern));
+                            while self.next_matches(&TokenEnum::Comma).is_some() {
+                                if self.peek(&TokenEnum::RightBrace) {
+                                    break;
+                                }
+                                let (field_name, _) = self.expect_identifier()?;
+                                self.expect(&TokenEnum::Colon)?;
+                                let field_pattern = self.parse_pattern()?;
+                                fields.push((field_name, field_pattern));
+                            }
+                        }
+                        self.expect(&TokenEnum::RightBrace)?;
+                        fields.sort_by(|(f1, _), (f2, _)| f1.cmp(f2));
+                        Ok(Pattern(PatternEnum::Struct(identifier, fields), meta))
                     } else {
                         Ok(Pattern(PatternEnum::Identifier(identifier), meta))
                     }
@@ -888,6 +909,7 @@ impl Parser {
                             }
                         }
                         self.expect(&TokenEnum::RightBrace)?;
+                        fields.sort_by(|(f1, _), (f2, _)| f1.cmp(f2));
                         Expr(ExprEnum::StructLiteral(identifier, fields), meta)
                     } else {
                         self.push_error(ParseErrorEnum::InvalidLiteral, meta);
@@ -1105,7 +1127,7 @@ impl Parser {
         }
     }
 
-    fn parse_type(&mut self) -> Result<(Type, MetaInfo), ()> {
+    fn parse_type(&mut self) -> Result<(PreliminaryType, MetaInfo), ()> {
         if let Some(meta) = self.next_matches(&TokenEnum::LeftParen) {
             let mut fields = vec![];
             if !self.peek(&TokenEnum::RightParen) {
@@ -1118,7 +1140,7 @@ impl Parser {
             }
             let meta_end = self.expect(&TokenEnum::RightParen)?;
             let meta = join_meta(meta, meta_end);
-            Ok((Type::Tuple(fields), meta))
+            Ok((PreliminaryType::Tuple(fields), meta))
         } else if let Some(meta) = self.next_matches(&TokenEnum::LeftBracket) {
             let (ty, _) = self.parse_type()?;
             self.expect(&TokenEnum::Semicolon)?;
@@ -1137,23 +1159,23 @@ impl Parser {
             };
             let meta_end = self.expect(&TokenEnum::RightBracket)?;
             let meta = join_meta(meta, meta_end);
-            Ok((Type::Array(Box::new(ty), size), meta))
+            Ok((PreliminaryType::Array(Box::new(ty), size), meta))
         } else {
             let (ty, meta) = self.expect_identifier()?;
             let ty = match ty.as_str() {
-                "bool" => Type::Bool,
-                "usize" => Type::Unsigned(UnsignedNumType::Usize),
-                "u8" => Type::Unsigned(UnsignedNumType::U8),
-                "u16" => Type::Unsigned(UnsignedNumType::U16),
-                "u32" => Type::Unsigned(UnsignedNumType::U32),
-                "u64" => Type::Unsigned(UnsignedNumType::U64),
-                "u128" => Type::Unsigned(UnsignedNumType::U128),
-                "i8" => Type::Signed(SignedNumType::I8),
-                "i16" => Type::Signed(SignedNumType::I16),
-                "i32" => Type::Signed(SignedNumType::I32),
-                "i64" => Type::Signed(SignedNumType::I64),
-                "i128" => Type::Signed(SignedNumType::I128),
-                identifier => Type::Enum(identifier.to_string()),
+                "bool" => PreliminaryType::Bool,
+                "usize" => PreliminaryType::Unsigned(UnsignedNumType::Usize),
+                "u8" => PreliminaryType::Unsigned(UnsignedNumType::U8),
+                "u16" => PreliminaryType::Unsigned(UnsignedNumType::U16),
+                "u32" => PreliminaryType::Unsigned(UnsignedNumType::U32),
+                "u64" => PreliminaryType::Unsigned(UnsignedNumType::U64),
+                "u128" => PreliminaryType::Unsigned(UnsignedNumType::U128),
+                "i8" => PreliminaryType::Signed(SignedNumType::I8),
+                "i16" => PreliminaryType::Signed(SignedNumType::I16),
+                "i32" => PreliminaryType::Signed(SignedNumType::I32),
+                "i64" => PreliminaryType::Signed(SignedNumType::I64),
+                "i128" => PreliminaryType::Signed(SignedNumType::I128),
+                identifier => PreliminaryType::StructOrEnum(identifier.to_string(), meta),
             };
             Ok((ty, meta))
         }

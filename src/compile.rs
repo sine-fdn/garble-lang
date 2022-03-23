@@ -1,14 +1,15 @@
 //! Compiles a [`crate::typed_ast::Program`] to a [`crate::circuit::Circuit`].
 
-use std::cmp::max;
+use std::{cmp::max, collections::HashMap};
 
 use crate::{
-    ast::{EnumDef, Op, ParamDef, StructDef, Type, UnaryOp},
+    ast::{Op, UnaryOp},
     circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, PanicResult, USIZE_BITS},
     env::Env,
     token::{SignedNumType, UnsignedNumType},
     typed_ast::{
-        Expr, ExprEnum, FnDef, Pattern, PatternEnum, Program, VariantExpr, VariantExprEnum,
+        EnumDef, Expr, ExprEnum, FnDef, ParamDef, Pattern, PatternEnum, Program, StructDef, Type,
+        VariantExpr, VariantExprEnum,
     },
 };
 
@@ -662,12 +663,10 @@ impl Expr {
                 if let Type::Struct(name) = &struct_expr.1 {
                     let struct_expr = struct_expr.compile(prg, env, circuit);
                     let struct_def = prg.struct_defs.get(name.as_str()).unwrap();
-                    let mut fields = struct_def.fields.clone();
-                    fields.sort_by(|(f1, _), (f2, _)| f1.cmp(f2));
                     let mut bits = 0;
-                    for (field_name, field_ty) in fields {
+                    for (field_name, field_ty) in struct_def.fields.iter() {
                         let bits_of_field = field_ty.size_in_bits_for_defs(prg);
-                        if &field_name == field {
+                        if field_name == field {
                             return struct_expr[bits..bits + bits_of_field].to_vec();
                         }
                         bits += bits_of_field;
@@ -677,11 +676,12 @@ impl Expr {
                     panic!("Expected {struct_expr:?} to have a struct type, but found {ty:?}");
                 }
             }
-            ExprEnum::StructLiteral(_, fields) => {
+            ExprEnum::StructLiteral(struct_name, fields) => {
+                let fields: HashMap<_, _> = fields.iter().cloned().collect();
+                let struct_def = prg.struct_defs.get(struct_name.as_str()).unwrap();
                 let mut wires = Vec::with_capacity(ty.size_in_bits_for_defs(prg));
-                let mut fields = fields.clone();
-                fields.sort_by(|(f1, _), (f2, _)| f1.cmp(f2));
-                for (_, value) in fields {
+                for (field_name, _) in struct_def.fields.iter() {
+                    let value = fields.get(field_name).unwrap();
                     wires.extend(value.compile(prg, env, circuit));
                 }
                 wires
@@ -766,6 +766,21 @@ impl Pattern {
                     let field_bits = field_type.size_in_bits_for_defs(prg);
                     let match_expr = &match_expr[w..w + field_bits];
                     let is_field_match = field.compile(match_expr, prg, env, circuit);
+                    is_match = circuit.push_and(is_match, is_field_match);
+                    w += field_bits;
+                }
+                is_match
+            }
+            PatternEnum::Struct(struct_name, fields) => {
+                let fields: HashMap<_, _> = fields.iter().cloned().collect();
+                let struct_def = prg.struct_defs.get(struct_name.as_str()).unwrap();
+                let mut is_match = 1;
+                let mut w = 0;
+                for (field_name, field_type) in struct_def.fields.iter() {
+                    let field_pattern = fields.get(field_name).unwrap();
+                    let field_bits = field_type.size_in_bits_for_defs(prg);
+                    let match_expr = &match_expr[w..w + field_bits];
+                    let is_field_match = field_pattern.compile(match_expr, prg, env, circuit);
                     is_match = circuit.push_and(is_match, is_field_match);
                     w += field_bits;
                 }

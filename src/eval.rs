@@ -3,12 +3,11 @@
 use std::fmt::Debug;
 
 use crate::{
-    ast::Type,
     circuit::{Circuit, EvalPanic, USIZE_BITS},
     compile::{signed_to_bits, unsigned_to_bits},
     literal::Literal,
     token::{SignedNumType, UnsignedNumType},
-    typed_ast::{FnDef, Program},
+    typed_ast::{FnDef, Program, Type},
     CompileTimeError,
 };
 
