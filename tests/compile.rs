@@ -310,6 +310,43 @@ fn main(mode: bool, x: u16, y: u8) -> u16 {
 }
 
 #[test]
+fn compile_bit_shifts_u16() -> Result<(), Error> {
+    let prg = "
+    fn main(mode: bool, x: u16, y: u8) -> u16 {
+        if mode { (x << y) } else { (x >> y) }
+    }
+    ";
+
+    let circuit = compile(prg).map_err(|e| pretty_print(e, prg))?;
+
+    let eval = |x: u16, y: u8| -> Result<(u16, u16), Error> {
+        let mut eval = Evaluator::from(&circuit);
+        eval.set_bool(true);
+        eval.set_u16(x);
+        eval.set_u8(y);
+        let result = eval.run().map_err(|e| pretty_print(e, prg))?;
+        let result1 = u16::try_from(result)?;
+
+        let mut eval = Evaluator::from(&circuit);
+        eval.set_bool(false);
+        eval.set_u16(x);
+        eval.set_u8(y);
+        let result = eval.run().map_err(|e| pretty_print(e, prg))?;
+        let result2 = u16::try_from(result)?;
+
+        Ok((result1, result2))
+    };
+
+    for x in [u16::MAX, u16::MAX >> 1, 1, 0] {
+        for shifts in 0u8..(u16::BITS as u8 - 1) {
+            assert_eq!(((x << shifts), (x >> shifts)), eval(x, shifts)?);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn compile_signed_nums() -> Result<(), Error> {
     let prg = "
 fn main(x: i8) -> i8 {
@@ -412,8 +449,11 @@ fn main(mode: bool, x: i16, y: u8) -> i16 {
 }
 ";
     let circuit = compile(prg).map_err(|e| pretty_print(e, prg))?;
-    for mode in [true, false] {
-        for x in -20..20 {
+    let test_values = (-20..20)
+        .into_iter()
+        .chain(vec![i16::MAX, i16::MIN].into_iter());
+    for x in test_values {
+        for mode in [true, false] {
             for y in 0..20 {
                 let mut eval = Evaluator::from(&circuit);
                 eval.set_bool(mode);

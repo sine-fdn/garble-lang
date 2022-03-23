@@ -255,11 +255,16 @@ impl Expr {
                 vec![circuit.push_or(x[0], y[0])]
             }
             ExprEnum::Op(op @ (Op::ShiftLeft | Op::ShiftRight), x, y) => {
+                let x_is_signed = is_signed(&x.1);
                 let x = x.compile(enums, fns, env, circuit);
                 let y = y.compile(enums, fns, env, circuit);
                 assert_eq!(y.len(), 8);
                 let bits = x.len();
-                let bit_to_shift_in = x[0];
+                let bit_to_shift_in = if x_is_signed && op == &Op::ShiftRight {
+                    x[0]
+                } else {
+                    0
+                };
                 let mut shift = 1;
                 let mut bits_unshifted = x;
                 for layer in (0..8).rev() {
