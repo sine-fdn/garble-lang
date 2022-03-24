@@ -1,9 +1,6 @@
 pub fn init(state: (), website_key: SigningKey) -> UserState {
     let logged_interest_counter = 0u8;
-    let interests = InterestBuffer {
-        index: 0u8,
-        buffer: [UserInterest::None; 16],
-    };
+    let interests = [UserInterest::None; 16];
     let signed = sign(interests, website_key);
     UserState {
         signature: signed,
@@ -13,12 +10,15 @@ pub fn init(state: (), website_key: SigningKey) -> UserState {
 
 pub fn log_interest(state: UserState, website_visit: WebsiteVisit) -> LogResult {
     if is_signature_ok(state, website_visit.key) {
-        let index = state.interests.index;
+        let interests = state.interests;
         let user_interest = website_visit.interest;
-        let updated_interests = InterestBuffer {
-            index: (index + 1) % 16,
-            buffer: state.interests.buffer.update(index as usize, user_interest),
-        };
+        let updated_interests = 0..16.map(|i: usize| -> UserInterest {
+            if i == 0 {
+                user_interest
+            } else {
+                interests[i - 1]
+            }
+        });
         let updated_signature = sign(updated_interests, website_visit.key);
         let updated_state = UserState {
             signature: updated_signature,
@@ -33,7 +33,7 @@ pub fn log_interest(state: UserState, website_visit: WebsiteVisit) -> LogResult 
 pub fn decide_ad(state: UserState, website_key: SigningKey) -> AdDecisionResult {
     if is_signature_ok(state, website_key) {
         let sums = [0u8; 6]; // for the 6 user interests
-        let interests = state.interests.buffer;
+        let interests = state.interests;
         let sums = interests.fold(sums, |sums: [u8; 6], interest: UserInterest| -> [u8; 6] {
             match interest {
                 UserInterest::None => sums,
@@ -74,39 +74,33 @@ pub fn decide_ad(state: UserState, website_key: SigningKey) -> AdDecisionResult 
     }
 }
 
+fn interest_as_u8(interest: UserInterest) -> u8 {
+    match interest {
+        UserInterest::None => 0u8,
+        UserInterest::Luxury => 1u8,
+        UserInterest::Cars => 2u8,
+        UserInterest::Politics => 3u8,
+        UserInterest::Sports => 4u8,
+        UserInterest::Arts => 5u8,
+        UserInterest::None => 6u8,
+    }
+}
+
 fn is_signature_ok(state: UserState, website_key: SigningKey) -> bool {
-    let bytes = state.interests.buffer.map(|interest: UserInterest| -> u8 {
-        match interest {
-            UserInterest::None => 0u8,
-            UserInterest::Luxury => 1u8,
-            UserInterest::Cars => 2u8,
-            UserInterest::Politics => 3u8,
-            UserInterest::Sports => 4u8,
-            UserInterest::Arts => 5u8,
-            UserInterest::None => 6u8,
-        }
+    let bytes = state.interests.map(|interest: UserInterest| -> u8 {
+        interest_as_u8(interest)
     });
     let st = absorb(bytes);
-    let st = absorb_cont(st, [0u8; 16].update(0, state.interests.index));
     let st = absorb_cont(st, website_key.key);
     let hash = squeeze(st);
     hash == state.signature
 }
 
-fn sign(interests: InterestBuffer, website_key: SigningKey) -> [u8; 16] {
-    let bytes = interests.buffer.map(|interest: UserInterest| -> u8 {
-        match interest {
-            UserInterest::None => 0u8,
-            UserInterest::Luxury => 1u8,
-            UserInterest::Cars => 2u8,
-            UserInterest::Politics => 3u8,
-            UserInterest::Sports => 4u8,
-            UserInterest::Arts => 5u8,
-            UserInterest::None => 6u8,
-        }
+fn sign(interests: [UserInterest; 16], website_key: SigningKey) -> [u8; 16] {
+    let bytes = interests.map(|interest: UserInterest| -> u8 {
+        interest_as_u8(interest)
     });
     let st = absorb(bytes);
-    let st = absorb_cont(st, [0u8; 16].update(0, interests.index));
     let st = absorb_cont(st, website_key.key);
     let hash = squeeze(st);
     hash
@@ -307,12 +301,7 @@ fn add_bytes(st: [u8; 48], chunk: [u8; 16]) -> [u8; 48] {
 
 struct UserState {
     signature: [u8; 16],
-    interests: InterestBuffer,
-}
-
-struct InterestBuffer {
-    index: u8,
-    buffer: [UserInterest; 16],
+    interests: [UserInterest; 16],
 }
 
 struct WebsiteVisit {
