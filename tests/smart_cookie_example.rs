@@ -29,7 +29,13 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
         let (log_interest_circuit, log_interest_fn) = program.compile("log_interest")?;
         let (decide_ad_circuit, decide_ad_fn) = program.compile("decide_ad")?;
 
-        let website_signing_key = Literal::NumUnsigned(0, UnsignedNumType::U128);
+        let website_signing_key = Literal::Struct(
+            "SigningKey".to_string(),
+            vec![(
+                "key".to_string(),
+                Literal::NumUnsigned(0, UnsignedNumType::U128),
+            )],
+        );
 
         let mut init_eval = Evaluator::new(&program, init_fn, &init_circuit);
         init_eval
@@ -56,19 +62,22 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
                 VariantLiteral::Unit,
             );
             log_interest_eval
-                .set_literal(Literal::Tuple(vec![interest, website_signing_key.clone()]))
+                .set_literal(Literal::Struct(
+                    "WebsiteVisit".to_string(),
+                    vec![
+                        ("interest".to_string(), interest),
+                        ("key".to_string(), website_signing_key.clone()),
+                    ],
+                ))
                 .map_err(|e| pretty_print(e, &smart_cookie))?;
             let log_interest_result = log_interest_eval
                 .run()
                 .map_err(|e| pretty_print(e, &smart_cookie))?
                 .into_literal()
                 .map_err(|e| pretty_print(e, &smart_cookie))?;
-            user_state = Literal::Tuple(expect_enum(
-                &log_interest_result,
-                "LogInterestResult",
-                "Ok",
-                Some(2),
-            ));
+            user_state = expect_enum(&log_interest_result, "LogResult", "Ok", Some(1))
+                .pop()
+                .unwrap();
         }
 
         let mut decide_ad_eval = Evaluator::new(&program, decide_ad_fn, &decide_ad_circuit);
