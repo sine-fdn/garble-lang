@@ -599,8 +599,7 @@ impl Expr {
                 Op::Eq | Op::NotEq => {
                     let mut x = x.type_check(top_level_defs, env, fns, defs)?;
                     let mut y = y.type_check(top_level_defs, env, fns, defs)?;
-                    let ty = unify(&mut x, &mut y, meta)?;
-                    expect_bool_or_num_type(&ty, meta)?;
+                    unify(&mut x, &mut y, meta)?;
                     let expr = typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y));
                     (expr, Type::Bool)
                 }

@@ -18,22 +18,39 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
         "Luxury",
         ["Politics"; 20]
             .into_iter()
-            .chain(["Luxury"; 500].into_iter())
+            .chain(["Luxury"; 40].into_iter())
             .collect::<Vec<_>>(),
     );
 
     for (expected_ad_decision, interests) in [interests1, interests2] {
         let smart_cookie = read_source_code("smart_cookie.garble.rs");
+        println!("Parsing and type-checking...");
         let program = check(&smart_cookie).map_err(|e| pretty_print(e, &smart_cookie))?;
+        println!("Compiling...");
+
         let (init_circuit, init_fn) = program.compile("init")?;
+        println!(">> 'init' has {}", init_circuit.report_gates());
+
         let (log_interest_circuit, log_interest_fn) = program.compile("log_interest")?;
+        println!(
+            ">> 'log_interest' has {}",
+            log_interest_circuit.report_gates()
+        );
+
         let (decide_ad_circuit, decide_ad_fn) = program.compile("decide_ad")?;
+        println!(">> 'decide_ad' has {}", decide_ad_circuit.report_gates());
+
+        let key: [u8; 16] = [7, 3, 4, 3, 2, 7, 3, 4, 9, 0, 2, 0, 0, 4, 2, 8];
 
         let website_signing_key = Literal::Struct(
             "SigningKey".to_string(),
             vec![(
                 "key".to_string(),
-                Literal::NumUnsigned(0, UnsignedNumType::U128),
+                Literal::Array(
+                    key.iter()
+                        .map(|byte| Literal::NumUnsigned(*byte as u128, UnsignedNumType::U8))
+                        .collect(),
+                ),
             )],
         );
 
@@ -50,7 +67,8 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
             .into_literal()
             .map_err(|e| pretty_print(e, &smart_cookie))?;
 
-        for interest in interests {
+        for (i, interest) in interests.iter().enumerate() {
+            println!("  {i}: logging '{interest}'");
             let mut log_interest_eval =
                 Evaluator::new(&program, log_interest_fn, &log_interest_circuit);
             log_interest_eval
