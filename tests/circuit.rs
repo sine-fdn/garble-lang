@@ -3,17 +3,17 @@ use garble::compile;
 #[test]
 fn optimize_or() -> Result<(), String> {
     let unoptimized = "
-fn main(x: bool) -> bool {
+pub fn main(x: bool) -> bool {
     x | true
 }
 ";
     let optimized = "
-fn main(_x: bool) -> bool {
+pub fn main(_x: bool) -> bool {
     true
 }
 ";
-    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
-    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+    let (_, _, unoptimized) = compile(unoptimized, "main").map_err(|e| e.prettify(unoptimized))?;
+    let (_, _, optimized) = compile(optimized, "main").map_err(|e| e.prettify(optimized))?;
 
     assert_eq!(unoptimized.gates.len(), optimized.gates.len());
     Ok(())
@@ -22,17 +22,17 @@ fn main(_x: bool) -> bool {
 #[test]
 fn optimize_const_add() -> Result<(), String> {
     let unoptimized = "
-fn main(_x: i32) -> i32 {
+pub fn main(_x: i32) -> i32 {
     1 + 2 + 3 + 4
 }
 ";
     let optimized = "
-fn main(_x: i32) -> i32 {
+pub fn main(_x: i32) -> i32 {
     10
 }
 ";
-    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
-    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+    let (_, _, unoptimized) = compile(unoptimized, "main").map_err(|e| e.prettify(unoptimized))?;
+    let (_, _, optimized) = compile(optimized, "main").map_err(|e| e.prettify(optimized))?;
 
     assert_eq!(unoptimized.gates.len(), optimized.gates.len());
     Ok(())
@@ -41,18 +41,18 @@ fn main(_x: i32) -> i32 {
 #[test]
 fn optimize_same_expr() -> Result<(), String> {
     let unoptimized = "
-fn main(b: bool, x: i32) -> i32 {
+pub fn main(b: bool, x: i32) -> i32 {
     if b { x % x } else { x % x }
 }
 ";
     let optimized = "
-fn main(b: bool, x: i32) -> i32 {
+pub fn main(b: bool, x: i32) -> i32 {
     let y = x % x;
     if b { y } else { y }
 }
 ";
-    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
-    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+    let (_, _, unoptimized) = compile(unoptimized, "main").map_err(|e| e.prettify(unoptimized))?;
+    let (_, _, optimized) = compile(optimized, "main").map_err(|e| e.prettify(optimized))?;
     assert_eq!(unoptimized.gates.len(), optimized.gates.len());
     Ok(())
 }
@@ -60,17 +60,17 @@ fn main(b: bool, x: i32) -> i32 {
 #[test]
 fn optimize_not_equivalence() -> Result<(), String> {
     let unoptimized = "
-fn main(b: bool) -> bool {
+pub fn main(b: bool) -> bool {
     !!b
 }
 ";
     let optimized = "
-fn main(b: bool) -> bool {
+pub fn main(b: bool) -> bool {
     b
 }
 ";
-    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
-    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+    let (_, _, unoptimized) = compile(unoptimized, "main").map_err(|e| e.prettify(unoptimized))?;
+    let (_, _, optimized) = compile(optimized, "main").map_err(|e| e.prettify(optimized))?;
     assert_eq!(unoptimized.gates.len(), optimized.gates.len());
     Ok(())
 }

@@ -12,31 +12,52 @@ use crate::{
     },
 };
 
+/// An error that occurred during compilation.
+#[derive(Debug, Clone)]
+pub enum CompilerError {
+    /// The specified function could not be compiled, as it was not found in the program.
+    FnNotFound(String),
+}
+
+impl std::fmt::Display for CompilerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CompilerError::FnNotFound(fn_name) => f.write_fmt(format_args!(
+                "Could not find any function with name '{fn_name}'"
+            )),
+        }
+    }
+}
+
 impl Program {
     /// Compiles the (type-checked) program, producing a circuit of gates.
     ///
     /// Assumes that the input program has been correctly type-checked and **panics** if
     /// incompatible types are found that should have been caught by the type-checker.
-    pub fn compile(&self) -> Circuit {
+    pub fn compile(&self, fn_name: &str) -> Result<(Circuit, &FnDef), CompilerError> {
         let mut env = Env::new();
         let mut input_gates = vec![];
         let mut wire = 2;
-        for ParamDef(identifier, ty) in self.main.params.iter() {
-            let type_size = ty.size_in_bits_for_defs(Some(&self.enum_defs));
-            let mut wires = Vec::with_capacity(type_size);
-            for _ in 0..type_size {
-                wires.push(wire);
-                wire += 1;
+        if let Some(fn_def) = self.fn_defs.get(fn_name) {
+            for ParamDef(identifier, ty) in fn_def.params.iter() {
+                let type_size = ty.size_in_bits_for_defs(Some(&self.enum_defs));
+                let mut wires = Vec::with_capacity(type_size);
+                for _ in 0..type_size {
+                    wires.push(wire);
+                    wire += 1;
+                }
+                input_gates.push(type_size);
+                env.set(identifier.clone(), wires);
             }
-            input_gates.push(type_size);
-            env.set(identifier.clone(), wires);
+            let mut circuit = CircuitBuilder::new(input_gates);
+            let output_gates =
+                fn_def
+                    .body
+                    .compile(&self.enum_defs, &self.fn_defs, &mut env, &mut circuit);
+            Ok((circuit.build(output_gates), fn_def))
+        } else {
+            Err(CompilerError::FnNotFound(fn_name.to_string()))
         }
-        let mut circuit = CircuitBuilder::new(input_gates);
-        let output_gates =
-            self.main
-                .body
-                .compile(&self.enum_defs, &self.fn_defs, &mut env, &mut circuit);
-        circuit.build(output_gates)
     }
 }
 

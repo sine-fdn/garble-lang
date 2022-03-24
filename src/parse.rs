@@ -19,8 +19,6 @@ pub struct ParseError(pub ParseErrorEnum, pub MetaInfo);
 
 /// The different kinds of errors found during parsing.
 pub enum ParseErrorEnum {
-    /// No `main` function exists in the source code.
-    MissingMainFnDef,
     /// The top level definition is not a valid enum or function declaration.
     InvalidTopLevelDef,
     /// Arrays of the specified size are not supported.
@@ -50,7 +48,6 @@ pub enum ParseErrorEnum {
 impl std::fmt::Display for ParseErrorEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ParseErrorEnum::MissingMainFnDef => f.write_str("Missing 'main' function definition"),
             ParseErrorEnum::InvalidTopLevelDef => {
                 f.write_str("Not a valid function or enum definition")
             }
@@ -116,32 +113,28 @@ impl Parser {
         let top_level_keywords = [TokenEnum::KeywordFn];
         let mut enum_defs = HashMap::new();
         let mut fn_defs = HashMap::new();
-        let mut main_fn_def = None;
-        let mut has_main = false;
+        let mut is_pub = None;
         while let Some(Token(token_enum, meta)) = self.tokens.next() {
             match token_enum {
+                TokenEnum::KeywordPub if is_pub == None => {
+                    is_pub = Some(meta);
+                }
                 TokenEnum::KeywordEnum => {
                     if let Ok(enum_def) = self.parse_enum_def(meta) {
                         enum_defs.insert(enum_def.identifier.clone(), enum_def);
                     } else {
                         self.consume_until_one_of(&top_level_keywords);
                     }
+                    is_pub = None;
                 }
                 TokenEnum::KeywordFn => {
-                    if let Some(Token(TokenEnum::Identifier(fn_name), _)) = self.tokens.peek() {
-                        if fn_name.as_str() == "main" {
-                            has_main = true;
-                            if let Ok(main_def) = self.parse_fn_def(meta) {
-                                main_fn_def = Some(main_def);
-                            } else {
-                                self.consume_until_one_of(&top_level_keywords);
-                            }
-                        } else if let Ok(fn_def) = self.parse_fn_def(meta) {
-                            fn_defs.insert(fn_def.identifier.clone(), fn_def);
-                        } else {
-                            self.consume_until_one_of(&top_level_keywords);
-                        }
+                    if let Ok(fn_def) = self.parse_fn_def(is_pub.is_some(), is_pub.unwrap_or(meta))
+                    {
+                        fn_defs.insert(fn_def.identifier.clone(), fn_def);
+                    } else {
+                        self.consume_until_one_of(&top_level_keywords);
                     }
+                    is_pub = None;
                 }
                 _ => {
                     self.push_error(ParseErrorEnum::InvalidTopLevelDef, meta);
@@ -149,21 +142,8 @@ impl Parser {
                 }
             }
         }
-        if let Some(main) = main_fn_def {
-            if self.errors.is_empty() {
-                return Ok(Program {
-                    enum_defs,
-                    fn_defs,
-                    main,
-                });
-            }
-        }
-        if !has_main {
-            let meta = MetaInfo {
-                start: (0, 0),
-                end: (0, 0),
-            };
-            self.push_error(ParseErrorEnum::MissingMainFnDef, meta);
+        if self.errors.is_empty() {
+            return Ok(Program { enum_defs, fn_defs });
         }
         Err(self.errors)
     }
@@ -215,7 +195,7 @@ impl Parser {
         }
     }
 
-    fn parse_fn_def(&mut self, start: MetaInfo) -> Result<FnDef, ()> {
+    fn parse_fn_def(&mut self, is_pub: bool, start: MetaInfo) -> Result<FnDef, ()> {
         // fn keyword was already consumed by the top-level parser
 
         let (identifier, _) = self.expect_identifier()?;
@@ -239,6 +219,7 @@ impl Parser {
 
         let meta = join_meta(start, end);
         Ok(FnDef {
+            is_pub,
             ty,
             identifier,
             params,

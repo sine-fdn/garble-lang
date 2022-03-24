@@ -14,13 +14,13 @@ pub struct Program {
     pub enum_defs: HashMap<String, EnumDef>,
     /// Top level function definitions.
     pub fn_defs: HashMap<String, FnDef>,
-    /// The main function that will be compiled and evaluated as a circuit.
-    pub main: FnDef,
 }
 
 /// A top level function definition.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct FnDef {
+    /// Whether or not the function is public.
+    pub is_pub: bool,
     /// The name of the function.
     pub identifier: String,
     /// The parameters of the function.

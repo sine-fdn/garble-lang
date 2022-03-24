@@ -20,8 +20,8 @@ pub struct TypeError(pub TypeErrorEnum, pub MetaInfo);
 /// The different kinds of errors found during type-checking.
 #[derive(Debug, Clone)]
 pub enum TypeErrorEnum {
-    /// The `main` function does not have any input parameters.
-    NoMainFnParams,
+    /// The specified function does not have any input parameters.
+    PubFnWithoutParams(String),
     /// A top-level function is declared but never used.
     UnusedFn(String),
     /// A top-level function calls itself recursively.
@@ -88,9 +88,9 @@ pub enum TypeErrorEnum {
 impl std::fmt::Display for TypeErrorEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TypeErrorEnum::NoMainFnParams => f.write_str("The main function must have parameters"),
+            TypeErrorEnum::PubFnWithoutParams(fn_name) => f.write_fmt(format_args!("The function '{fn_name}' is declared pub, but has no parameters")),
             TypeErrorEnum::UnusedFn(name) => f.write_fmt(format_args!(
-                "Function '{name}' is declared, but never used"
+                "Function '{name}' is declared but never used"
             )),
             TypeErrorEnum::RecursiveFnDef(name) => f.write_fmt(format_args!(
                 "Function '{name}' is declared recursively, which is not supported"
@@ -217,37 +217,21 @@ impl Program {
     pub fn type_check(&self) -> Result<typed_ast::Program, TypeError> {
         let mut defs = Defs::new(&self.enum_defs);
         let enum_defs = self.enum_defs.clone();
-
-        let mut env = Env::new();
+        let mut fn_defs = TypedFns::new();
         for (fn_name, fn_def) in self.fn_defs.iter() {
             defs.fns.insert(fn_name, fn_def);
         }
-        if self.main.params.is_empty() {
-            let e = TypeErrorEnum::NoMainFnParams;
-            return Err(TypeError(e, self.main.meta));
-        }
-        let mut params = Vec::with_capacity(self.main.params.len());
-        let mut param_identifiers = HashSet::new();
-        for param in self.main.params.iter() {
-            let ParamDef(identifier, ty) = param;
-            if param_identifiers.contains(identifier) {
-                let e = TypeErrorEnum::DuplicateFnParam(identifier.clone());
-                return Err(TypeError(e, self.main.meta));
-            } else {
-                param_identifiers.insert(identifier);
+        for (fn_name, fn_def) in self.fn_defs.iter() {
+            if fn_def.is_pub {
+                if fn_def.params.is_empty() {
+                    let e = TypeErrorEnum::PubFnWithoutParams(fn_name.clone());
+                    return Err(TypeError(e, fn_def.meta));
+                } else {
+                    let typed = fn_def.type_check(&mut fn_defs, &defs)?;
+                    fn_defs.typed.insert(fn_name.clone(), typed);
+                }
             }
-            env.set(identifier.clone(), ty.clone());
-            params.push(param.clone());
         }
-        let mut fn_defs = TypedFns::new();
-        let mut body = self.main.body.type_check(&mut env, &mut fn_defs, &defs)?;
-        coerce_type(&mut body, &self.main.ty)?;
-        let main = typed_ast::FnDef {
-            identifier: "main".to_string(),
-            params,
-            body,
-            meta: self.main.meta,
-        };
         let fn_defs = fn_defs.typed;
         for (fn_name, fn_def) in self.fn_defs.iter() {
             if !fn_defs.contains_key(fn_name.as_str()) {
@@ -255,11 +239,7 @@ impl Program {
                 return Err(TypeError(e, fn_def.meta));
             }
         }
-        Ok(typed_ast::Program {
-            enum_defs,
-            fn_defs,
-            main,
-        })
+        Ok(typed_ast::Program { enum_defs, fn_defs })
     }
 }
 
@@ -296,6 +276,7 @@ impl FnDef {
         fns.currently_being_checked.remove(&self.identifier);
 
         Ok(typed_ast::FnDef {
+            is_pub: self.is_pub,
             identifier: self.identifier.clone(),
             params,
             body,
