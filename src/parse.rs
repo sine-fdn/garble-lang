@@ -1052,6 +1052,10 @@ impl Parser {
                     meta: closure_meta,
                 };
 
+                if self.next_matches(&TokenEnum::Comma).is_some() {
+                    // ignore the trailing comma
+                }
+
                 let call_end = self.expect(&TokenEnum::RightParen)?;
                 let meta = join_meta(call_start, call_end);
                 Ok(Expr(ExprEnum::Map(Box::new(recv), Box::new(closure)), meta))
@@ -1093,6 +1097,10 @@ impl Parser {
                     meta: closure_meta,
                 };
 
+                if self.next_matches(&TokenEnum::Comma).is_some() {
+                    // ignore the trailing comma
+                }
+
                 let call_end = self.expect(&TokenEnum::RightParen)?;
                 let meta = join_meta(call_start, call_end);
                 Ok(Expr(
@@ -1108,6 +1116,10 @@ impl Parser {
                 self.expect(&TokenEnum::Comma)?;
 
                 let replacement = self.parse_expr()?;
+
+                if self.next_matches(&TokenEnum::Comma).is_some() {
+                    // ignore the trailing comma
+                }
 
                 let end = self.expect(&TokenEnum::RightParen)?;
                 let meta = join_meta(call_start, end);
