@@ -378,7 +378,7 @@ impl Program {
                     checked_fn_defs.typed.insert(fn_name.clone(), typed_fn);
                 }
             }
-        }        
+        }
         for (fn_name, fn_def) in self.fn_defs.iter() {
             if !fn_def.is_pub && !checked_fn_defs.typed.contains_key(fn_name.as_str()) {
                 let e = TypeErrorEnum::UnusedFn(fn_name.to_string());
