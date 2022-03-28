@@ -67,12 +67,13 @@ impl Literal {
         let mut env = Env::new();
         let mut fns = TypedFns::new();
         let defs = Defs::new(&checked.struct_defs, &checked.enum_defs);
-        let mut expr = scan(literal)?.parse_literal()?.type_check(
-            &top_level_defs,
-            &mut env,
-            &mut fns,
-            &defs,
-        )?;
+        let mut expr = scan(literal)?
+            .parse_literal()?
+            .type_check(&top_level_defs, &mut env, &mut fns, &defs)
+            .map_err(|mut errs| {
+                errs.sort();
+                errs
+            })?;
         coerce_type(&mut expr, ty)?;
         expr.1 = ty.clone();
         Ok(expr.into_literal())

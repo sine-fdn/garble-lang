@@ -14,11 +14,23 @@ use crate::{
 };
 
 /// An error found during type-checking, with its location in the source code.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeError(pub TypeErrorEnum, pub MetaInfo);
 
+impl PartialOrd for TypeError {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.1.partial_cmp(&other.1)
+    }
+}
+
+impl Ord for TypeError {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.1.cmp(&other.1)
+    }
+}
+
 /// The different kinds of errors found during type-checking.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeErrorEnum {
     /// The identifier is not a top level function.
     NoTopLevelFn(String),
@@ -386,6 +398,7 @@ impl Program {
                 fn_defs,
             })
         } else {
+            errors.sort();
             Err(errors)
         }
     }
