@@ -48,7 +48,7 @@ pub enum CompileTimeError {
     /// Errors originating in the parsing phase.
     ParseError(Vec<ParseError>),
     /// Errors originating in the type-checking phase.
-    TypeError(TypeError),
+    TypeError(Vec<TypeError>),
     /// Errors originating in the compilation phase.
     CompilerError(CompilerError),
 }
@@ -76,8 +76,8 @@ impl From<Vec<ParseError>> for CompileTimeError {
     }
 }
 
-impl From<TypeError> for CompileTimeError {
-    fn from(e: TypeError) -> Self {
+impl From<Vec<TypeError>> for CompileTimeError {
+    fn from(e: Vec<TypeError>) -> Self {
         Self::TypeError(e)
     }
 }
@@ -97,14 +97,6 @@ impl<E: Into<CompileTimeError>> From<E> for Error {
 impl From<EvalError> for Error {
     fn from(e: EvalError) -> Self {
         Self::EvalError(e)
-    }
-}
-
-impl TypeError {
-    /// Returns a human-readable error description, showing where the error occurred in the source.
-    pub fn prettify(&self, prg: &str) -> String {
-        let e = CompileTimeError::TypeError(self.clone());
-        e.prettify(prg)
     }
 }
 
@@ -157,8 +149,10 @@ impl CompileTimeError {
                     errs_for_display.push(("Parse error", format!("{e}"), *meta));
                 }
             }
-            CompileTimeError::TypeError(TypeError(e, meta)) => {
-                errs_for_display.push(("Type error", format!("{e}"), *meta));
+            CompileTimeError::TypeError(errs) => {
+                for TypeError(e, meta) in errs {
+                    errs_for_display.push(("Type error", format!("{e}"), *meta));
+                }
             }
             CompileTimeError::CompilerError(e) => {
                 let meta = MetaInfo {

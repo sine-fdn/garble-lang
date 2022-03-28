@@ -2,7 +2,7 @@ use garble::{
     check::{TypeError, TypeErrorEnum},
     scan::scan,
     token::{MetaInfo, UnsignedNumType},
-    typed_ast::{Pattern, PatternEnum, Type},
+    typed_ast::{Pattern, PatternEnum, Program, Type},
     Error,
 };
 
@@ -19,10 +19,11 @@ pub fn main(x: u16) -> u16 {
 }
 ";
     let e = scan(prg)?.parse()?.type_check();
-    assert!(matches!(
-        e,
-        Err(TypeError(TypeErrorEnum::UnknownIdentifier(_), _))
-    ));
+    assert!(e.is_err());
+    assert!(e
+        .unwrap_err()
+        .iter()
+        .any(|TypeError(e, _)| matches!(e, TypeErrorEnum::UnknownIdentifier(_))));
     Ok(())
 }
 
@@ -38,10 +39,8 @@ pub fn main(x: u16) -> u16 {
 }
 ";
     let e = scan(prg)?.parse()?.type_check();
-    assert!(matches!(
-        e,
-        Err(TypeError(TypeErrorEnum::DuplicateFnParam(_), _))
-    ));
+    let e = assert_single_type_error(e);
+    assert!(matches!(e, TypeErrorEnum::DuplicateFnParam(_)));
     Ok(())
 }
 
@@ -53,10 +52,8 @@ pub fn main(x: u16, x: u16) -> u16 {
 }
 ";
     let e = scan(prg).unwrap().parse().unwrap().type_check();
-    assert!(matches!(
-        e,
-        Err(TypeError(TypeErrorEnum::DuplicateFnParam(_), _))
-    ));
+    let e = assert_single_type_error(e);
+    assert!(matches!(e, TypeErrorEnum::DuplicateFnParam(_)));
     Ok(())
 }
 
@@ -72,7 +69,8 @@ fn reject_unused_fn() -> Result<(), Error> {
   }
   ";
     let e = scan(prg).unwrap().parse().unwrap().type_check();
-    assert!(matches!(e, Err(TypeError(TypeErrorEnum::UnusedFn(_), _))));
+    let e = assert_single_type_error(e);
+    assert!(matches!(e, TypeErrorEnum::UnusedFn(_)));
     Ok(())
 }
 
@@ -92,10 +90,8 @@ fn reject_recursive_fn() -> Result<(), Error> {
   }
   ";
     let e = scan(prg).unwrap().parse().unwrap().type_check();
-    assert!(matches!(
-        e,
-        Err(TypeError(TypeErrorEnum::RecursiveFnDef(_), _))
-    ));
+    let e = assert_single_type_error(e);
+    assert!(matches!(e, TypeErrorEnum::RecursiveFnDef(_)));
     Ok(())
 }
 
@@ -107,10 +103,8 @@ pub fn main() -> u8 {
 }
 ";
     let e = scan(prg).unwrap().parse().unwrap().type_check();
-    assert!(matches!(
-        e,
-        Err(TypeError(TypeErrorEnum::PubFnWithoutParams(_), _))
-    ));
+    let e = assert_single_type_error(e);
+    assert!(matches!(e, TypeErrorEnum::PubFnWithoutParams(_)));
     Ok(())
 }
 
@@ -128,7 +122,8 @@ pub fn main(x: u8) -> i32 {
 }
   ";
     let e = scan(prg).unwrap().parse().unwrap().type_check();
-    if let Err(TypeError(TypeErrorEnum::PatternsAreNotExhaustive(missing), _)) = e {
+    let e = assert_single_type_error(e);
+    if let TypeErrorEnum::PatternsAreNotExhaustive(missing) = e {
         let meta = MetaInfo {
             start: (0, 0),
             end: (0, 0),
@@ -171,7 +166,8 @@ pub fn main(x: bool, y: bool, z: bool) -> i32 {
 }
   ";
     let e = scan(prg).unwrap().parse().unwrap().type_check();
-    if let Err(TypeError(TypeErrorEnum::PatternsAreNotExhaustive(missing), _)) = e {
+    let e = assert_single_type_error(e);
+    if let TypeErrorEnum::PatternsAreNotExhaustive(missing) = e {
         let meta = MetaInfo {
             start: (0, 0),
             end: (0, 0),
@@ -229,9 +225,19 @@ pub fn main(x: i32) -> i32 {
 }
 ";
     let e = scan(prg)?.parse()?.type_check();
-    assert!(matches!(
-        e,
-        Err(TypeError(TypeErrorEnum::UnknownIdentifier(_), _))
-    ));
+    let e = assert_single_type_error(e);
+    assert!(matches!(e, TypeErrorEnum::UnknownIdentifier(_)));
     Ok(())
+}
+
+fn assert_single_type_error(e: Result<Program, Vec<TypeError>>) -> TypeErrorEnum {
+    if let Err(mut e) = e {
+        if e.len() == 1 {
+            return e.pop().unwrap().0;
+        } else {
+            panic!("Expected a single type error, but found {e:?}");
+        }
+    } else {
+        panic!("Expected an error, but found {e:?}");
+    }
 }

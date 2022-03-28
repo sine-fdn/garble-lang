@@ -20,6 +20,8 @@ pub struct TypeError(pub TypeErrorEnum, pub MetaInfo);
 /// The different kinds of errors found during type-checking.
 #[derive(Debug, Clone)]
 pub enum TypeErrorEnum {
+    /// The identifier is not a top level function.
+    NoTopLevelFn(String),
     /// The specified function does not have any input parameters.
     PubFnWithoutParams(String),
     /// A top-level function is declared but never used.
@@ -98,6 +100,7 @@ pub enum TypeErrorEnum {
 impl std::fmt::Display for TypeErrorEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            TypeErrorEnum::NoTopLevelFn(fn_name) => f.write_fmt(format_args!("'{fn_name}' is not a top level function")),
             TypeErrorEnum::PubFnWithoutParams(fn_name) => f.write_fmt(format_args!("The function '{fn_name}' is declared pub, but has no parameters")),
             TypeErrorEnum::UnusedFn(name) => f.write_fmt(format_args!(
                 "Function '{name}' is declared but never used"
@@ -284,7 +287,7 @@ impl<'a> Defs<'a> {
 
 pub(crate) struct TypedFns {
     currently_being_checked: HashSet<String>,
-    typed: HashMap<String, typed_ast::FnDef>,
+    typed: HashMap<String, Result<typed_ast::FnDef, Vec<TypeError>>>,
 }
 
 impl TypedFns {
@@ -298,7 +301,8 @@ impl TypedFns {
 
 impl Program {
     /// Type-checks the parsed program, returning either a typed AST or type errors.
-    pub fn type_check(&self) -> Result<typed_ast::Program, TypeError> {
+    pub fn type_check(&self) -> Result<typed_ast::Program, Vec<TypeError>> {
+        let mut errors = vec![];
         let mut struct_names = HashSet::with_capacity(self.struct_defs.len());
         let mut enum_names = HashSet::with_capacity(self.enum_defs.len());
         struct_names.extend(self.struct_defs.keys());
@@ -312,7 +316,10 @@ impl Program {
             let meta = struct_def.meta;
             let mut fields = Vec::with_capacity(struct_def.fields.len());
             for (name, ty) in struct_def.fields.iter() {
-                fields.push((name.clone(), ty.as_concrete_type(&top_level_defs)?));
+                match ty.as_concrete_type(&top_level_defs) {
+                    Ok(ty) => fields.push((name.clone(), ty)),
+                    Err(e) => errors.push(e),
+                }
             }
             struct_defs.insert(struct_name.clone(), typed_ast::StructDef { fields, meta });
         }
@@ -328,7 +335,10 @@ impl Program {
                     ast::Variant::Tuple(variant_name, variant_fields) => {
                         let mut fields = Vec::with_capacity(variant_fields.len());
                         for field in variant_fields.iter() {
-                            fields.push(field.as_concrete_type(&top_level_defs)?);
+                            match field.as_concrete_type(&top_level_defs) {
+                                Ok(field) => fields.push(field),
+                                Err(e) => errors.push(e),
+                            }
                         }
                         typed_ast::Variant::Tuple(variant_name.clone(), fields)
                     }
@@ -339,7 +349,7 @@ impl Program {
 
         let mut defs = Defs::new(&struct_defs, &enum_defs);
 
-        let mut fn_defs = TypedFns::new();
+        let mut checked_fn_defs = TypedFns::new();
         for (fn_name, fn_def) in self.fn_defs.iter() {
             defs.fns.insert(fn_name, fn_def);
         }
@@ -347,25 +357,37 @@ impl Program {
             if fn_def.is_pub {
                 if fn_def.params.is_empty() {
                     let e = TypeErrorEnum::PubFnWithoutParams(fn_name.clone());
-                    return Err(TypeError(e, fn_def.meta));
+                    errors.push(TypeError(e, fn_def.meta));
                 } else {
-                    let typed = fn_def.type_check(&top_level_defs, &mut fn_defs, &defs)?;
-                    fn_defs.typed.insert(fn_name.clone(), typed);
+                    let typed_fn = fn_def.type_check(&top_level_defs, &mut checked_fn_defs, &defs);
+                    if let Err(e) = typed_fn.clone() {
+                        errors.extend(e);
+                    }
+                    checked_fn_defs.typed.insert(fn_name.clone(), typed_fn);
                 }
             }
-        }
-        let fn_defs = fn_defs.typed;
+        }        
         for (fn_name, fn_def) in self.fn_defs.iter() {
-            if !fn_defs.contains_key(fn_name.as_str()) {
+            if !fn_def.is_pub && !checked_fn_defs.typed.contains_key(fn_name.as_str()) {
                 let e = TypeErrorEnum::UnusedFn(fn_name.to_string());
-                return Err(TypeError(e, fn_def.meta));
+                errors.push(TypeError(e, fn_def.meta));
             }
         }
-        Ok(typed_ast::Program {
-            struct_defs,
-            enum_defs,
-            fn_defs,
-        })
+        let mut fn_defs = HashMap::new();
+        for (fn_name, fn_def) in checked_fn_defs.typed.into_iter() {
+            if let Ok(fn_def) = fn_def {
+                fn_defs.insert(fn_name, fn_def);
+            }
+        }
+        if errors.is_empty() {
+            Ok(typed_ast::Program {
+                struct_defs,
+                enum_defs,
+                fn_defs,
+            })
+        } else {
+            Err(errors)
+        }
     }
 }
 
@@ -375,13 +397,14 @@ impl FnDef {
         top_level_defs: &TopLevelTypes,
         fns: &mut TypedFns,
         defs: &Defs,
-    ) -> Result<typed_ast::FnDef, TypeError> {
+    ) -> Result<typed_ast::FnDef, Vec<TypeError>> {
         if fns.currently_being_checked.contains(&self.identifier) {
             let e = TypeErrorEnum::RecursiveFnDef(self.identifier.clone());
-            return Err(TypeError(e, self.meta));
+            return Err(vec![TypeError(e, self.meta)]);
         } else {
             fns.currently_being_checked.insert(self.identifier.clone());
         }
+        let mut errors = vec![];
         let mut env = Env::new();
         env.push();
         let mut params = Vec::with_capacity(self.params.len());
@@ -390,27 +413,44 @@ impl FnDef {
             let ParamDef(identifier, ty) = param;
             if param_identifiers.contains(identifier) {
                 let e = TypeErrorEnum::DuplicateFnParam(identifier.clone());
-                return Err(TypeError(e, self.meta));
+                errors.push(TypeError(e, self.meta));
             } else {
                 param_identifiers.insert(identifier);
             }
-            let ty = ty.as_concrete_type(top_level_defs)?;
-            env.set(identifier.clone(), ty.clone());
-            params.push(typed_ast::ParamDef(identifier.clone(), ty));
+            match ty.as_concrete_type(top_level_defs) {
+                Ok(ty) => {
+                    env.set(identifier.clone(), ty.clone());
+                    params.push(typed_ast::ParamDef(identifier.clone(), ty));
+                }
+                Err(e) => {
+                    errors.push(e);
+                }
+            }
         }
         let mut body = self.body.type_check(top_level_defs, &mut env, fns, defs)?;
-        coerce_type(&mut body, &self.ty.as_concrete_type(top_level_defs)?)?;
+        match self.ty.as_concrete_type(top_level_defs) {
+            Ok(ret_ty) => {
+                if let Err(e) = coerce_type(&mut body, &ret_ty) {
+                    errors.extend(e);
+                }
+            }
+            Err(e) => errors.push(e),
+        }
         env.pop();
 
         fns.currently_being_checked.remove(&self.identifier);
 
-        Ok(typed_ast::FnDef {
-            is_pub: self.is_pub,
-            identifier: self.identifier.clone(),
-            params,
-            body,
-            meta: self.meta,
-        })
+        if errors.is_empty() {
+            Ok(typed_ast::FnDef {
+                is_pub: self.is_pub,
+                identifier: self.identifier.clone(),
+                params,
+                body,
+                meta: self.meta,
+            })
+        } else {
+            Err(errors)
+        }
     }
 }
 
@@ -421,7 +461,7 @@ impl Expr {
         env: &mut Env<Type>,
         fns: &mut TypedFns,
         defs: &Defs,
-    ) -> Result<typed_ast::Expr, TypeError> {
+    ) -> Result<typed_ast::Expr, Vec<TypeError>> {
         let Expr(expr, meta) = self;
         let meta = *meta;
         let (expr, ty) = match expr {
@@ -448,10 +488,14 @@ impl Expr {
                 if let Some(ty) = env.get(s) {
                     (typed_ast::ExprEnum::Identifier(s.clone()), ty)
                 } else {
-                    return Err(TypeError(TypeErrorEnum::UnknownIdentifier(s.clone()), meta));
+                    return Err(vec![TypeError(
+                        TypeErrorEnum::UnknownIdentifier(s.clone()),
+                        meta,
+                    )]);
                 }
             }
             ExprEnum::ArrayLiteral(fields) => {
+                let mut errors = vec![];
                 let array_size = fields.len();
                 let mut fields = fields.iter();
                 let first_field =
@@ -463,16 +507,26 @@ impl Expr {
                 let first_meta = first_field.2;
                 let mut typed_fields = vec![first_field];
                 for field in fields {
-                    let field = field.type_check(top_level_defs, env, fns, defs)?;
-                    if field.1 != first_ty {
-                        let e =
-                            TypeErrorEnum::TypeMismatch((first_ty, first_meta), (field.1, field.2));
-                        return Err(TypeError(e, field.2));
+                    match field.type_check(top_level_defs, env, fns, defs) {
+                        Ok(field) => {
+                            if field.1 != first_ty {
+                                let e = TypeErrorEnum::TypeMismatch(
+                                    (first_ty.clone(), first_meta),
+                                    (field.1.clone(), field.2),
+                                );
+                                errors.push(TypeError(e, field.2));
+                            }
+                            typed_fields.push(field);
+                        }
+                        Err(e) => errors.extend(e),
                     }
-                    typed_fields.push(field);
                 }
-                let ty = Type::Array(Box::new(first_ty), array_size);
-                (typed_ast::ExprEnum::ArrayLiteral(typed_fields), ty)
+                if errors.is_empty() {
+                    let ty = Type::Array(Box::new(first_ty), array_size);
+                    (typed_ast::ExprEnum::ArrayLiteral(typed_fields), ty)
+                } else {
+                    return Err(errors);
+                }
             }
             ExprEnum::ArrayRepeatLiteral(value, size) => {
                 let value = value.type_check(top_level_defs, env, fns, defs)?;
@@ -512,15 +566,26 @@ impl Expr {
                 )
             }
             ExprEnum::TupleLiteral(values) => {
+                let mut errors = vec![];
                 let mut typed_values = Vec::with_capacity(values.len());
                 let mut types = Vec::with_capacity(values.len());
                 for v in values {
-                    let typed = v.type_check(top_level_defs, env, fns, defs)?;
-                    types.push(typed.1.clone());
-                    typed_values.push(typed);
+                    match v.type_check(top_level_defs, env, fns, defs) {
+                        Ok(typed) => {
+                            types.push(typed.1.clone());
+                            typed_values.push(typed);
+                        }
+                        Err(e) => {
+                            errors.extend(e);
+                        }
+                    }
                 }
-                let ty = Type::Tuple(types);
-                (typed_ast::ExprEnum::TupleLiteral(typed_values), ty)
+                if errors.is_empty() {
+                    let ty = Type::Tuple(types);
+                    (typed_ast::ExprEnum::TupleLiteral(typed_values), ty)
+                } else {
+                    return Err(errors);
+                }
             }
             ExprEnum::TupleAccess(tuple, index) => {
                 let tuple = tuple.type_check(top_level_defs, env, fns, defs)?;
@@ -534,7 +599,7 @@ impl Expr {
                     )
                 } else {
                     let e = TypeErrorEnum::TupleAccessOutOfBounds(value_types.len());
-                    return Err(TypeError(e, *meta));
+                    return Err(vec![TypeError(e, *meta)]);
                 }
             }
             ExprEnum::UnaryOp(UnaryOp::Neg, x) => {
@@ -564,13 +629,13 @@ impl Expr {
                         match ty {
                             Type::Bool => {}
                             ty => {
-                                return Err(TypeError(
+                                return Err(vec![TypeError(
                                     TypeErrorEnum::UnexpectedType {
                                         expected: Type::Bool,
                                         actual: ty.clone(),
                                     },
                                     *meta,
-                                ))
+                                )])
                             }
                         }
                     }
@@ -620,79 +685,138 @@ impl Expr {
                 (expr, ty)
             }
             ExprEnum::Let(bindings, body) => {
+                let mut errors = vec![];
                 let mut typed_bindings = Vec::with_capacity(bindings.len());
                 for (var, binding) in bindings {
                     env.push();
-                    let binding = binding.type_check(top_level_defs, env, fns, defs)?;
-                    env.set(var.clone(), binding.1.clone());
-                    typed_bindings.push((var.clone(), binding));
+                    match binding.type_check(top_level_defs, env, fns, defs) {
+                        Ok(binding) => {
+                            env.set(var.clone(), binding.1.clone());
+                            typed_bindings.push((var.clone(), binding));
+                        }
+                        Err(e) => {
+                            errors.extend(e);
+                        }
+                    }
                 }
-                let body = body.type_check(top_level_defs, env, fns, defs)?;
-                for _ in bindings {
-                    env.pop();
+                match body.type_check(top_level_defs, env, fns, defs) {
+                    Ok(body) => {
+                        if errors.is_empty() {
+                            for _ in bindings {
+                                env.pop();
+                            }
+                            let ty = body.1.clone();
+                            let expr = typed_ast::ExprEnum::Let(typed_bindings, Box::new(body));
+                            (expr, ty)
+                        } else {
+                            return Err(errors);
+                        }
+                    }
+                    Err(e) => {
+                        errors.extend(e);
+                        return Err(errors);
+                    }
                 }
-                let ty = body.1.clone();
-                let expr = typed_ast::ExprEnum::Let(typed_bindings, Box::new(body));
-                (expr, ty)
             }
             ExprEnum::FnCall(identifier, args) => {
                 if !fns.typed.contains_key(identifier) {
                     if let Some(fn_def) = defs.fns.get(identifier.as_str()) {
-                        let fn_def = fn_def.type_check(top_level_defs, fns, defs)?;
-                        fns.typed.insert(fn_def.identifier.clone(), fn_def);
+                        let fn_def = fn_def.type_check(top_level_defs, fns, defs);
+                        fns.typed.insert(identifier.clone(), fn_def.clone());
+                        if let Err(e) = fn_def {
+                            return Err(e);
+                        }
                     }
                 }
-                if let (Some(fn_def), None) = (fns.typed.get(identifier), env.get(identifier)) {
-                    let typed_ast::Expr(_, ret_ty, _) = &fn_def.body;
-                    let mut fn_arg_types = Vec::with_capacity(fn_def.params.len());
-                    for typed_ast::ParamDef(_, ty) in fn_def.params.iter() {
-                        fn_arg_types.push(ty.clone());
-                    }
-                    let ret_ty = ret_ty.clone();
-
-                    let mut arg_types = Vec::with_capacity(args.len());
-                    let mut arg_meta = Vec::with_capacity(args.len());
-                    let mut arg_exprs = Vec::with_capacity(args.len());
-                    for arg in args.iter() {
-                        let arg = arg.type_check(top_level_defs, env, fns, defs)?;
-                        let typed_ast::Expr(_, ty, meta) = &arg;
-                        arg_types.push(ty.clone());
-                        arg_meta.push(*meta);
-                        arg_exprs.push(arg);
-                    }
-                    if fn_arg_types.len() == arg_types.len() {
-                        for (expected, actual) in fn_arg_types.into_iter().zip(&mut arg_exprs) {
-                            coerce_type(actual, &expected)?;
+                match (fns.typed.get(identifier), env.get(identifier)) {
+                    (Some(Ok(fn_def)), None) => {
+                        let typed_ast::Expr(_, ret_ty, _) = &fn_def.body;
+                        let mut fn_arg_types = Vec::with_capacity(fn_def.params.len());
+                        for typed_ast::ParamDef(_, ty) in fn_def.params.iter() {
+                            fn_arg_types.push(ty.clone());
                         }
-                        let expr = typed_ast::ExprEnum::FnCall(identifier.clone(), arg_exprs);
-                        (expr, ret_ty)
-                    } else {
-                        let e = TypeErrorEnum::WrongNumberOfArgs {
-                            expected: fn_arg_types.len(),
-                            actual: arg_types.len(),
-                        };
-                        return Err(TypeError(e, meta));
+                        let ret_ty = ret_ty.clone();
+
+                        let mut errors = vec![];
+                        let mut arg_types = Vec::with_capacity(args.len());
+                        let mut arg_meta = Vec::with_capacity(args.len());
+                        let mut arg_exprs = Vec::with_capacity(args.len());
+                        for arg in args.iter() {
+                            match arg.type_check(top_level_defs, env, fns, defs) {
+                                Ok(arg) => {
+                                    let typed_ast::Expr(_, ty, meta) = &arg;
+                                    arg_types.push(ty.clone());
+                                    arg_meta.push(*meta);
+                                    arg_exprs.push(arg);
+                                }
+                                Err(e) => errors.extend(e),
+                            }
+                        }
+                        if fn_arg_types.len() != arg_types.len() {
+                            let e = TypeErrorEnum::WrongNumberOfArgs {
+                                expected: fn_arg_types.len(),
+                                actual: arg_types.len(),
+                            };
+                            errors.push(TypeError(e, meta));
+                        }
+                        for (expected, actual) in fn_arg_types.into_iter().zip(&mut arg_exprs) {
+                            if let Err(e) = coerce_type(actual, &expected) {
+                                errors.extend(e);
+                            }
+                        }
+                        if errors.is_empty() {
+                            let expr = typed_ast::ExprEnum::FnCall(identifier.clone(), arg_exprs);
+                            (expr, ret_ty)
+                        } else {
+                            return Err(errors);
+                        }
                     }
-                } else {
-                    let e = TypeErrorEnum::UnknownIdentifier(identifier.clone());
-                    return Err(TypeError(e, meta));
+                    (Some(Err(_)), None) => {
+                        // error was added during typechecking of fn, no need to add error here
+                        return Err(vec![]);
+                    }
+                    (None, _) => {
+                        let e = TypeErrorEnum::UnknownIdentifier(identifier.clone());
+                        return Err(vec![TypeError(e, meta)]);
+                    }
+                    (_, Some(_)) => {
+                        let e = TypeErrorEnum::NoTopLevelFn(identifier.clone());
+                        return Err(vec![TypeError(e, meta)]);
+                    }
                 }
             }
             ExprEnum::If(condition, case_true, case_false) => {
-                let mut condition = condition.type_check(top_level_defs, env, fns, defs)?;
-                let mut case_true = case_true.type_check(top_level_defs, env, fns, defs)?;
-                let mut case_false = case_false.type_check(top_level_defs, env, fns, defs)?;
-                coerce_type(&mut condition, &Type::Bool)?;
-                let ty = unify(&mut case_true, &mut case_false, meta)?;
-                let expr = typed_ast::ExprEnum::If(
-                    Box::new(condition),
-                    Box::new(case_true),
-                    Box::new(case_false),
-                );
-                (expr, ty)
+                let condition = condition.type_check(top_level_defs, env, fns, defs);
+                let case_true = case_true.type_check(top_level_defs, env, fns, defs);
+                let case_false = case_false.type_check(top_level_defs, env, fns, defs);
+                match (condition, case_true, case_false) {
+                    (Ok(mut condition), Ok(mut case_true), Ok(mut case_false)) => {
+                        coerce_type(&mut condition, &Type::Bool)?;
+                        let ty = unify(&mut case_true, &mut case_false, meta)?;
+                        let expr = typed_ast::ExprEnum::If(
+                            Box::new(condition),
+                            Box::new(case_true),
+                            Box::new(case_false),
+                        );
+                        (expr, ty)
+                    }
+                    (condition, case_true, case_false) => {
+                        let mut errors = vec![];
+                        if let Err(e) = condition {
+                            errors.extend(e);
+                        }
+                        if let Err(e) = case_true {
+                            errors.extend(e);
+                        }
+                        if let Err(e) = case_false {
+                            errors.extend(e);
+                        }
+                        return Err(errors);
+                    }
+                }
             }
             ExprEnum::Cast(ty, expr) => {
-                let ty = ty.as_concrete_type(top_level_defs)?;
+                let ty = ty.as_concrete_type(top_level_defs).map_err(|e| vec![e])?;
                 let expr = expr.type_check(top_level_defs, env, fns, defs)?;
                 let typed_ast::Expr(_, expr_ty, _) = &expr;
                 expect_bool_or_num_type(expr_ty, meta)?;
@@ -704,11 +828,14 @@ impl Expr {
                 let mut init = init.type_check(top_level_defs, env, fns, defs)?;
                 let typed_ast::Expr(_, array_ty, array_meta) = &arr;
                 let (elem_ty, _) = expect_array_type(array_ty, *array_meta)?;
-                let closure_ty = closure.ty.as_concrete_type(top_level_defs)?;
+                let closure_ty = closure
+                    .ty
+                    .as_concrete_type(top_level_defs)
+                    .map_err(|e| vec![e])?;
                 let mut params = Vec::with_capacity(closure.params.len());
                 let mut param_types = Vec::with_capacity(closure.params.len());
                 for ParamDef(name, ty) in closure.params.iter() {
-                    let ty = ty.as_concrete_type(top_level_defs)?;
+                    let ty = ty.as_concrete_type(top_level_defs).map_err(|e| vec![e])?;
                     params.push(typed_ast::ParamDef(name.clone(), ty.clone()));
                     param_types.push(ty);
                 }
@@ -716,7 +843,7 @@ impl Expr {
                     let expected = Type::Fn(vec![init.1, elem_ty], Box::new(closure_ty.clone()));
                     let actual = Type::Fn(param_types, Box::new(closure_ty));
                     let e = TypeErrorEnum::UnexpectedType { expected, actual };
-                    return Err(TypeError(e, closure.meta));
+                    return Err(vec![TypeError(e, closure.meta)]);
                 }
                 let typed_ast::ParamDef(acc_identifier, acc_param_ty) = &params[0];
                 let typed_ast::ParamDef(elem_identifier, elem_param_ty) = &params[1];
@@ -725,7 +852,7 @@ impl Expr {
                     let expected = elem_param_ty.clone();
                     let actual = elem_ty;
                     let e = TypeErrorEnum::UnexpectedType { expected, actual };
-                    return Err(TypeError(e, closure.meta));
+                    return Err(vec![TypeError(e, closure.meta)]);
                 }
 
                 env.push();
@@ -753,11 +880,14 @@ impl Expr {
                 let arr = arr.type_check(top_level_defs, env, fns, defs)?;
                 let typed_ast::Expr(_, array_ty, array_meta) = &arr;
                 let (elem_ty, size) = expect_array_type(array_ty, *array_meta)?;
-                let closure_ty = closure.ty.as_concrete_type(top_level_defs)?;
+                let closure_ty = closure
+                    .ty
+                    .as_concrete_type(top_level_defs)
+                    .map_err(|e| vec![e])?;
                 let mut params = Vec::with_capacity(closure.params.len());
                 let mut param_types = Vec::with_capacity(closure.params.len());
                 for ParamDef(name, ty) in closure.params.iter() {
-                    let ty = ty.as_concrete_type(top_level_defs)?;
+                    let ty = ty.as_concrete_type(top_level_defs).map_err(|e| vec![e])?;
                     params.push(typed_ast::ParamDef(name.clone(), ty.clone()));
                     param_types.push(ty);
                 }
@@ -765,14 +895,14 @@ impl Expr {
                     let expected = Type::Fn(vec![elem_ty], Box::new(closure_ty.clone()));
                     let actual = Type::Fn(param_types, Box::new(closure_ty));
                     let e = TypeErrorEnum::UnexpectedType { expected, actual };
-                    return Err(TypeError(e, closure.meta));
+                    return Err(vec![TypeError(e, closure.meta)]);
                 }
                 let typed_ast::ParamDef(elem_identifier, elem_param_ty) = &params[0];
                 if &elem_ty != elem_param_ty {
                     let expected = elem_param_ty.clone();
                     let actual = elem_ty;
                     let e = TypeErrorEnum::UnexpectedType { expected, actual };
-                    return Err(TypeError(e, closure.meta));
+                    return Err(vec![TypeError(e, closure.meta)]);
                 }
 
                 env.push();
@@ -798,7 +928,7 @@ impl Expr {
             ExprEnum::Range(from, to) => {
                 if from >= to {
                     let e = TypeErrorEnum::InvalidRange(*from, *to);
-                    return Err(TypeError(e, meta));
+                    return Err(vec![TypeError(e, meta)]);
                 }
                 let ty = Type::Array(Box::new(Type::Unsigned(UnsignedNumType::Usize)), to - from);
                 (typed_ast::ExprEnum::Range(*from, *to), ty)
@@ -830,13 +960,20 @@ impl Expr {
                                         expected: types.len(),
                                         actual: values.len(),
                                     };
-                                    return Err(TypeError(e, meta));
+                                    return Err(vec![TypeError(e, meta)]);
                                 }
+                                let mut errors = vec![];
                                 let mut exprs = Vec::with_capacity(values.len());
                                 for (v, ty) in values.iter().zip(types) {
-                                    let mut expr = v.type_check(top_level_defs, env, fns, defs)?;
-                                    coerce_type(&mut expr, ty)?;
-                                    exprs.push(expr);
+                                    match v.type_check(top_level_defs, env, fns, defs) {
+                                        Ok(mut expr) => {
+                                            if let Err(e) = coerce_type(&mut expr, ty) {
+                                                errors.extend(e);
+                                            }
+                                            exprs.push(expr);
+                                        }
+                                        Err(e) => errors.extend(e),
+                                    }
                                 }
                                 let variant = typed_ast::VariantExpr(
                                     variant_name.to_string(),
@@ -844,21 +981,25 @@ impl Expr {
                                     meta,
                                 );
                                 let ty = Type::Enum(identifier.clone());
-                                (
-                                    typed_ast::ExprEnum::EnumLiteral(
-                                        identifier.clone(),
-                                        Box::new(variant),
-                                    ),
-                                    ty,
-                                )
+                                if errors.is_empty() {
+                                    (
+                                        typed_ast::ExprEnum::EnumLiteral(
+                                            identifier.clone(),
+                                            Box::new(variant),
+                                        ),
+                                        ty,
+                                    )
+                                } else {
+                                    return Err(errors);
+                                }
                             }
                             (VariantExprEnum::Unit, Some(_)) => {
                                 let e = TypeErrorEnum::ExpectedTupleVariantFoundUnitVariant;
-                                return Err(TypeError(e, meta));
+                                return Err(vec![TypeError(e, meta)]);
                             }
                             (VariantExprEnum::Tuple(_), None) => {
                                 let e = TypeErrorEnum::ExpectedUnitVariantFoundTupleVariant;
-                                return Err(TypeError(e, meta));
+                                return Err(vec![TypeError(e, meta)]);
                             }
                         }
                     } else {
@@ -866,11 +1007,11 @@ impl Expr {
                             identifier.clone(),
                             variant_name.to_string(),
                         );
-                        return Err(TypeError(e, meta));
+                        return Err(vec![TypeError(e, meta)]);
                     }
                 } else {
                     let e = TypeErrorEnum::UnknownEnum(identifier.clone());
-                    return Err(TypeError(e, meta));
+                    return Err(vec![TypeError(e, meta)]);
                 }
             }
             ExprEnum::Match(expr, clauses) => {
@@ -886,18 +1027,27 @@ impl Expr {
                     | Type::Enum(_) => {}
                     Type::Fn(_, _) | Type::Array(_, _) => {
                         let e = TypeErrorEnum::TypeDoesNotSupportPatternMatching(ty.clone());
-                        return Err(TypeError(e, meta));
+                        return Err(vec![TypeError(e, meta)]);
                     }
                 }
 
+                let mut errors = vec![];
                 let mut typed_clauses = Vec::with_capacity(clauses.len());
 
                 for (pattern, expr) in clauses {
                     env.push();
-                    let pattern = pattern.type_check(env, fns, defs, ty.clone())?;
-                    let expr = expr.type_check(top_level_defs, env, fns, defs)?;
+                    let pattern = pattern.type_check(env, fns, defs, ty.clone());
+                    let expr = expr.type_check(top_level_defs, env, fns, defs);
                     env.pop();
-                    typed_clauses.push((pattern, expr));
+                    match (pattern, expr) {
+                        (Ok(pattern), Ok(expr)) => typed_clauses.push((pattern, expr)),
+                        (Ok(_), Err(e)) => errors.extend(e),
+                        (Err(e), Ok(_)) => errors.extend(e),
+                        (Err(e1), Err(e2)) => {
+                            errors.extend(e1);
+                            errors.extend(e2);
+                        }
+                    }
                 }
 
                 let ret_ty = {
@@ -910,32 +1060,44 @@ impl Expr {
                                 expected: ret_ty.clone(),
                                 actual: ty.clone(),
                             };
-                            return Err(TypeError(e, *meta));
+                            errors.push(TypeError(e, *meta));
                         }
                     }
                     ret_ty.clone()
                 };
 
-                check_exhaustiveness(&typed_clauses, ty, defs, meta)?;
+                if let Err(e) = check_exhaustiveness(&typed_clauses, ty, defs, meta) {
+                    errors.push(e);
+                }
 
-                (
-                    typed_ast::ExprEnum::Match(Box::new(expr), typed_clauses),
-                    ret_ty,
-                )
+                if errors.is_empty() {
+                    (
+                        typed_ast::ExprEnum::Match(Box::new(expr), typed_clauses),
+                        ret_ty,
+                    )
+                } else {
+                    return Err(errors);
+                }
             }
             ExprEnum::StructLiteral(name, fields) => {
                 if let Some((_, struct_def)) = defs.structs.get(name.as_str()) {
+                    let mut errors = vec![];
                     let mut typed_fields = Vec::with_capacity(fields.len());
                     for (field_name, field_value) in fields {
                         if let Some(expected_type) = struct_def.get(field_name.as_str()) {
-                            let mut typed_field =
-                                field_value.type_check(top_level_defs, env, fns, defs)?;
-                            coerce_type(&mut typed_field, expected_type)?;
-                            typed_fields.push((field_name.clone(), typed_field));
+                            match field_value.type_check(top_level_defs, env, fns, defs) {
+                                Ok(mut typed_field) => {
+                                    if let Err(e) = coerce_type(&mut typed_field, expected_type) {
+                                        errors.extend(e);
+                                    }
+                                    typed_fields.push((field_name.clone(), typed_field));
+                                }
+                                Err(e) => errors.extend(e),
+                            }
                         } else {
                             let e =
                                 TypeErrorEnum::UnknownStructField(name.clone(), field_name.clone());
-                            return Err(TypeError(e, meta));
+                            errors.push(TypeError(e, meta));
                         }
                     }
                     if struct_def.len() > fields.len() {
@@ -945,17 +1107,21 @@ impl Expr {
                                     name.clone(),
                                     expected_field_name.to_string(),
                                 );
-                                return Err(TypeError(e, meta));
+                                errors.push(TypeError(e, meta));
                             }
                         }
                     }
-                    (
-                        typed_ast::ExprEnum::StructLiteral(name.clone(), typed_fields),
-                        Type::Struct(name.clone()),
-                    )
+                    if errors.is_empty() {
+                        (
+                            typed_ast::ExprEnum::StructLiteral(name.clone(), typed_fields),
+                            Type::Struct(name.clone()),
+                        )
+                    } else {
+                        return Err(errors);
+                    }
                 } else {
                     let e = TypeErrorEnum::UnknownStruct(name.clone());
-                    return Err(TypeError(e, meta));
+                    return Err(vec![TypeError(e, meta)]);
                 }
             }
             ExprEnum::StructAccess(struct_expr, field) => {
@@ -969,11 +1135,11 @@ impl Expr {
                         )
                     } else {
                         let e = TypeErrorEnum::UnknownStructField(name.clone(), field.clone());
-                        return Err(TypeError(e, meta));
+                        return Err(vec![TypeError(e, meta)]);
                     }
                 } else {
                     let e = TypeErrorEnum::UnknownStruct(name.clone());
-                    return Err(TypeError(e, meta));
+                    return Err(vec![TypeError(e, meta)]);
                 }
             }
         };
@@ -988,7 +1154,7 @@ impl Pattern {
         fns: &mut TypedFns,
         defs: &Defs,
         ty: Type,
-    ) -> Result<typed_ast::Pattern, TypeError> {
+    ) -> Result<typed_ast::Pattern, Vec<TypeError>> {
         let Pattern(pattern, meta) = self;
         let meta = *meta;
         let pattern = match pattern {
@@ -1004,7 +1170,7 @@ impl Pattern {
                         expected: Type::Bool,
                         actual: ty,
                     };
-                    return Err(TypeError(e, meta));
+                    return Err(vec![TypeError(e, meta)]);
                 }
             }
             PatternEnum::False => {
@@ -1015,7 +1181,7 @@ impl Pattern {
                         expected: Type::Bool,
                         actual: ty,
                     };
-                    return Err(TypeError(e, meta));
+                    return Err(vec![TypeError(e, meta)]);
                 }
             }
             PatternEnum::NumUnsigned(n, _) => {
@@ -1045,13 +1211,21 @@ impl Pattern {
                         expected: field_types.len(),
                         actual: fields.len(),
                     };
-                    return Err(TypeError(e, meta));
+                    return Err(vec![TypeError(e, meta)]);
                 }
+                let mut errors = vec![];
                 let mut typed_fields = Vec::with_capacity(fields.len());
                 for (field, ty) in fields.iter().zip(field_types) {
-                    typed_fields.push(field.type_check(env, fns, defs, ty)?);
+                    match field.type_check(env, fns, defs, ty) {
+                        Ok(typed_field) => typed_fields.push(typed_field),
+                        Err(e) => errors.extend(e),
+                    }
                 }
-                typed_ast::PatternEnum::Tuple(typed_fields)
+                if errors.is_empty() {
+                    typed_ast::PatternEnum::Tuple(typed_fields)
+                } else {
+                    return Err(errors);
+                }
             }
             PatternEnum::Struct(struct_name, fields) => {
                 let struct_def_name = expect_struct_type(&ty, meta)?;
@@ -1060,35 +1234,47 @@ impl Pattern {
                         expected: ty,
                         actual: Type::Struct(struct_name.clone()),
                     };
-                    return Err(TypeError(e, meta));
+                    return Err(vec![TypeError(e, meta)]);
                 }
-                let (_, struct_def) = defs.structs.get(struct_def_name.as_str()).unwrap();
-                let mut typed_fields = Vec::with_capacity(fields.len());
-                for (field_name, field_value) in fields {
-                    if let Some(field_type) = struct_def.get(field_name.as_str()) {
-                        let typed_field =
-                            field_value.type_check(env, fns, defs, field_type.clone())?;
-                        typed_fields.push((field_name.clone(), typed_field));
-                    } else {
-                        let e = TypeErrorEnum::UnknownStructField(
-                            struct_name.clone(),
-                            field_name.clone(),
-                        );
-                        return Err(TypeError(e, meta));
-                    }
-                }
-                if struct_def.len() > fields.len() {
-                    for expected_field_name in struct_def.keys() {
-                        if !fields.iter().any(|(f, _)| f == expected_field_name) {
-                            let e = TypeErrorEnum::MissingStructField(
+                if let Some((_, struct_def)) = defs.structs.get(struct_def_name.as_str()) {
+                    let mut errors = vec![];
+                    let mut typed_fields = Vec::with_capacity(fields.len());
+                    for (field_name, field_value) in fields {
+                        if let Some(field_type) = struct_def.get(field_name.as_str()) {
+                            match field_value.type_check(env, fns, defs, field_type.clone()) {
+                                Ok(typed_field) => {
+                                    typed_fields.push((field_name.clone(), typed_field))
+                                }
+                                Err(e) => errors.extend(e),
+                            }
+                        } else {
+                            let e = TypeErrorEnum::UnknownStructField(
                                 struct_name.clone(),
-                                expected_field_name.to_string(),
+                                field_name.clone(),
                             );
-                            return Err(TypeError(e, meta));
+                            errors.push(TypeError(e, meta));
                         }
                     }
+                    if struct_def.len() > fields.len() {
+                        for expected_field_name in struct_def.keys() {
+                            if !fields.iter().any(|(f, _)| f == expected_field_name) {
+                                let e = TypeErrorEnum::MissingStructField(
+                                    struct_name.clone(),
+                                    expected_field_name.to_string(),
+                                );
+                                errors.push(TypeError(e, meta));
+                            }
+                        }
+                    }
+                    if errors.is_empty() {
+                        typed_ast::PatternEnum::Struct(struct_def_name, typed_fields)
+                    } else {
+                        return Err(errors);
+                    }
+                } else {
+                    let e = TypeErrorEnum::UnknownStruct(struct_def_name.to_string());
+                    return Err(vec![TypeError(e, meta)]);
                 }
-                typed_ast::PatternEnum::Struct(struct_def_name, typed_fields)
             }
             PatternEnum::EnumUnit(enum_name, variant_name)
             | PatternEnum::EnumTuple(enum_name, variant_name, _) => {
@@ -1099,7 +1285,7 @@ impl Pattern {
                             expected: Type::Enum(enum_name.clone()),
                             actual: ty.clone(),
                         };
-                        return Err(TypeError(e, meta));
+                        return Err(vec![TypeError(e, meta)]);
                     }
                 }
                 if let Some(enum_def) = defs.enums.get(enum_name.as_str()) {
@@ -1117,30 +1303,33 @@ impl Pattern {
                                         expected: field_types.len(),
                                         actual: fields.len(),
                                     };
-                                    return Err(TypeError(e, meta));
+                                    return Err(vec![TypeError(e, meta)]);
                                 }
+                                let mut errors = vec![];
                                 let mut typed_fields = Vec::with_capacity(fields.len());
                                 for (field, ty) in fields.iter().zip(field_types) {
-                                    typed_fields.push(field.type_check(
-                                        env,
-                                        fns,
-                                        defs,
-                                        ty.clone(),
-                                    )?);
+                                    match field.type_check(env, fns, defs, ty.clone()) {
+                                        Ok(typed_field) => typed_fields.push(typed_field),
+                                        Err(e) => errors.extend(e),
+                                    }
                                 }
-                                typed_ast::PatternEnum::EnumTuple(
-                                    enum_name.clone(),
-                                    variant_name.clone(),
-                                    typed_fields,
-                                )
+                                if errors.is_empty() {
+                                    typed_ast::PatternEnum::EnumTuple(
+                                        enum_name.clone(),
+                                        variant_name.clone(),
+                                        typed_fields,
+                                    )
+                                } else {
+                                    return Err(errors);
+                                }
                             }
                             (PatternEnum::EnumUnit(_, _), Some(_)) => {
                                 let e = TypeErrorEnum::ExpectedTupleVariantFoundUnitVariant;
-                                return Err(TypeError(e, meta));
+                                return Err(vec![TypeError(e, meta)]);
                             }
                             (PatternEnum::EnumTuple(_, _, _), None) => {
                                 let e = TypeErrorEnum::ExpectedUnitVariantFoundTupleVariant;
-                                return Err(TypeError(e, meta));
+                                return Err(vec![TypeError(e, meta)]);
                             }
                             _ => unreachable!(),
                         }
@@ -1149,11 +1338,11 @@ impl Pattern {
                             enum_name.clone(),
                             variant_name.to_string(),
                         );
-                        return Err(TypeError(e, meta));
+                        return Err(vec![TypeError(e, meta)]);
                     }
                 } else {
                     let e = TypeErrorEnum::UnknownEnum(enum_name.clone());
-                    return Err(TypeError(e, meta));
+                    return Err(vec![TypeError(e, meta)]);
                 }
             }
         };
@@ -1559,70 +1748,73 @@ fn usefulness(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> Vec<
     }
 }
 
-fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<(Type, usize), TypeError> {
+fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<(Type, usize), Vec<TypeError>> {
     match ty {
         Type::Array(elem, size) => Ok((*elem.clone(), *size)),
-        _ => Err(TypeError(
+        _ => Err(vec![TypeError(
             TypeErrorEnum::ExpectedArrayType(ty.clone()),
             meta,
-        )),
+        )]),
     }
 }
 
-fn expect_struct_type(ty: &Type, meta: MetaInfo) -> Result<String, TypeError> {
+fn expect_struct_type(ty: &Type, meta: MetaInfo) -> Result<String, Vec<TypeError>> {
     match ty {
         Type::Struct(name) => Ok(name.clone()),
-        _ => Err(TypeError(
+        _ => Err(vec![TypeError(
             TypeErrorEnum::ExpectedStructType(ty.clone()),
             meta,
-        )),
+        )]),
     }
 }
 
-fn expect_tuple_type(ty: &Type, meta: MetaInfo) -> Result<Vec<Type>, TypeError> {
+fn expect_tuple_type(ty: &Type, meta: MetaInfo) -> Result<Vec<Type>, Vec<TypeError>> {
     match ty {
         Type::Tuple(types) => Ok(types.clone()),
-        _ => Err(TypeError(
+        _ => Err(vec![TypeError(
             TypeErrorEnum::ExpectedTupleType(ty.clone()),
             meta,
-        )),
+        )]),
     }
 }
 
-fn expect_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
+fn expect_num_type(ty: &Type, meta: MetaInfo) -> Result<(), Vec<TypeError>> {
     match ty {
         Type::Unsigned(_) | Type::Signed(_) => Ok(()),
-        _ => Err(TypeError(
+        _ => Err(vec![TypeError(
             TypeErrorEnum::ExpectedNumberType(ty.clone()),
             meta,
-        )),
+        )]),
     }
 }
 
-fn expect_signed_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
+fn expect_signed_num_type(ty: &Type, meta: MetaInfo) -> Result<(), Vec<TypeError>> {
     match ty {
         Type::Signed(_) => Ok(()),
-        _ => Err(TypeError(
+        _ => Err(vec![TypeError(
             TypeErrorEnum::ExpectedSignedNumberType(ty.clone()),
             meta,
-        )),
+        )]),
     }
 }
 
-fn expect_bool_or_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeError> {
+fn expect_bool_or_num_type(ty: &Type, meta: MetaInfo) -> Result<(), Vec<TypeError>> {
     if let Type::Bool = ty {
         return Ok(());
     };
     if let Ok(()) = expect_num_type(ty, meta) {
         return Ok(());
     }
-    Err(TypeError(
+    Err(vec![TypeError(
         TypeErrorEnum::ExpectedBoolOrNumberType(ty.clone()),
         meta,
-    ))
+    )])
 }
 
-pub(crate) fn coerce_type(expr: &mut typed_ast::Expr, expected: &Type) -> Result<(), TypeError> {
+pub(crate) fn coerce_type(
+    expr: &mut typed_ast::Expr,
+    expected: &Type,
+) -> Result<(), Vec<TypeError>> {
     let typed_ast::Expr(expr_enum, actual, meta) = &expr;
     let actual = actual.clone();
     if let typed_ast::ExprEnum::NumUnsigned(n, None) = expr_enum {
@@ -1642,7 +1834,7 @@ pub(crate) fn coerce_type(expr: &mut typed_ast::Expr, expected: &Type) -> Result
     } else {
         let expected = expected.clone();
         let e = TypeErrorEnum::UnexpectedType { expected, actual };
-        Err(TypeError(e, *meta))
+        Err(vec![TypeError(e, *meta)])
     }
 }
 
@@ -1650,7 +1842,7 @@ fn unify(
     e1: &mut typed_ast::Expr,
     e2: &mut typed_ast::Expr,
     m: MetaInfo,
-) -> Result<Type, TypeError> {
+) -> Result<Type, Vec<TypeError>> {
     let typed_ast::Expr(expr1, ty1, meta1) = e1;
     let typed_ast::Expr(expr2, ty2, meta2) = e2;
     let ty = match (expr1, expr2) {
@@ -1669,7 +1861,7 @@ fn unify(
         _ if *ty1 == *ty2 => Ok(ty1.clone()),
         _ => {
             let e = TypeErrorEnum::TypeMismatch((ty1.clone(), *meta1), (ty2.clone(), *meta2));
-            Err(TypeError(e, m))
+            Err(vec![TypeError(e, m)])
         }
     };
     if let Ok(ty) = &ty {
