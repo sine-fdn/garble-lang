@@ -1478,3 +1478,25 @@ pub fn main(x: FooBarBaz) -> FooBarBaz {
     assert_eq!(r, expected);
     Ok(())
 }
+
+#[test]
+fn compile_comments() -> Result<(), Error> {
+    let prg = "
+/*
+fn unused_fn(x: ...) -> ... {
+    /* nested block comment */
+    // normal comment within block comment
+}
+ */
+pub fn main(x: u16) -> u16 {
+    // comment including '/*'
+    x + /* ... */ 1
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    eval.set_u16(1);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(u16::try_from(output).map_err(|e| pretty_print(e, prg))?, 2);
+    Ok(())
+}

@@ -138,6 +138,20 @@ impl<'a> Scanner<'a> {
                         while !(self.peek('\n') || self.is_empty()) {
                             self.advance();
                         }
+                    } else if self.next_matches('*') {
+                        let mut level = 1;
+                        loop {
+                            if self.next_matches('/') && self.next_matches('*') {
+                                level += 1;
+                            } else if self.next_matches('*') && self.next_matches('/') {
+                                level -= 1;
+                            } else if !self.peek('*') && !self.peek('/') {
+                                self.advance();
+                            }
+                            if level == 0 {
+                                break;
+                            }
+                        }
                     } else {
                         self.push_token(TokenEnum::Slash);
                     }
