@@ -1,6 +1,6 @@
 use std::{env::args, fs::File, io::Read, process::exit};
 
-use garble::{ast::ParamDef, check, eval::Evaluator, literal::Literal};
+use garble::{check, eval::Evaluator, literal::Literal, typed_ast::ParamDef};
 
 fn main() -> Result<(), std::io::Error> {
     let args: Vec<String> = args().collect();

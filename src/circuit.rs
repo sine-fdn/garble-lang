@@ -85,6 +85,29 @@ impl Circuit {
         }
         output_packed
     }
+
+    /// Returns the number of gates in the circuit as a formatted string.
+    ///
+    /// E.g. "79k gates (XOR: 44k, NOT: 13k, AND: 21k)"
+    pub fn report_gates(&self) -> String {
+        let mut num_xor = 0;
+        let mut num_and = 0;
+        let mut num_not = 0;
+        for gate in self.gates.iter() {
+            match gate {
+                Gate::Xor(_, _) => num_xor += 1,
+                Gate::And(_, _) => num_and += 1,
+                Gate::Not(_) => num_not += 1,
+            }
+        }
+        num_xor /= 1000;
+        num_and /= 1000;
+        num_not /= 1000;
+        format!(
+            "{}k gates (XOR: {num_xor}k, NOT: {num_not}k, AND: {num_and}k)",
+            self.gates.len() / 1000
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -7,32 +7,30 @@ use crate::token::{MetaInfo, SignedNumType, UnsignedNumType};
 /// A program, consisting of top level definitions (enums or functions).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Program {
+    /// Top level struct type definitions.
+    pub struct_defs: HashMap<String, StructDef>,
     /// Top level enum type definitions.
     pub enum_defs: HashMap<String, EnumDef>,
     /// Top level function definitions.
     pub fn_defs: HashMap<String, FnDef>,
 }
 
-/// A top level enum type definition.
+/// A top level struct type definition.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct EnumDef {
-    /// The name of the enum type.
-    pub identifier: String,
+pub struct StructDef {
     /// The variants of the enum type.
-    pub variants: Vec<Variant>,
+    pub fields: Vec<(String, PreliminaryType)>,
     /// The location in the source code.
     pub meta: MetaInfo,
 }
 
-impl EnumDef {
-    pub(crate) fn get_variant(&self, variant_name: &str) -> Option<&Variant> {
-        for variant in self.variants.iter() {
-            if variant.variant_name() == variant_name {
-                return Some(variant);
-            }
-        }
-        None
-    }
+/// A top level enum type definition.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct EnumDef {
+    /// The variants of the enum type.
+    pub variants: Vec<Variant>,
+    /// The location in the source code.
+    pub meta: MetaInfo,
 }
 
 /// An enum variant.
@@ -41,23 +39,7 @@ pub enum Variant {
     /// A unit variant with the specified name, but containing no fields.
     Unit(String),
     /// A tuple variant with the specified name, containing positional fields.
-    Tuple(String, Vec<Type>),
-}
-
-impl Variant {
-    pub(crate) fn variant_name(&self) -> &str {
-        match self {
-            Variant::Unit(name) => name.as_str(),
-            Variant::Tuple(name, _) => name.as_str(),
-        }
-    }
-
-    pub(crate) fn types(&self) -> Option<Vec<Type>> {
-        match self {
-            Variant::Unit(_) => None,
-            Variant::Tuple(_, types) => Some(types.clone()),
-        }
-    }
+    Tuple(String, Vec<PreliminaryType>),
 }
 
 /// A top level function definition.
@@ -68,7 +50,7 @@ pub struct FnDef {
     /// The name of the function.
     pub identifier: String,
     /// The return type of the function.
-    pub ty: Type,
+    pub ty: PreliminaryType,
     /// The parameters of the function.
     pub params: Vec<ParamDef>,
     /// The body expression that the function evaluates to.
@@ -77,9 +59,13 @@ pub struct FnDef {
     pub meta: MetaInfo,
 }
 
-/// A type, can be either explicitly specified or inferred by the type checker.
+/// A parameter definition (parameter name and type).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum Type {
+pub struct ParamDef(pub String, pub PreliminaryType);
+
+/// Either a concrete type or a struct/enum that needs to be looked up in the definitions.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum PreliminaryType {
     /// Boolean type with the values true and false.
     Bool,
     /// Unsigned number types
@@ -87,61 +73,14 @@ pub enum Type {
     /// Signed number types
     Signed(SignedNumType),
     /// Function type with the specified parameters and the specified return type.
-    Fn(Vec<Type>, Box<Type>),
+    Fn(Vec<PreliminaryType>, Box<PreliminaryType>),
     /// Array type of a fixed size, containing elements of the specified type.
-    Array(Box<Type>, usize),
+    Array(Box<PreliminaryType>, usize),
     /// Tuple type containing fields of the specified types.
-    Tuple(Vec<Type>),
-    /// Enum type of the specified name, needs to be looked up in enum defs for its variant types.
-    Enum(String),
+    Tuple(Vec<PreliminaryType>),
+    /// A struct or an enum, depending on the top level definitions.
+    StructOrEnum(String, MetaInfo),
 }
-
-impl std::fmt::Display for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Type::Bool => f.write_str("bool"),
-            Type::Unsigned(n) => n.fmt(f),
-            Type::Signed(n) => n.fmt(f),
-            Type::Fn(params, ret_ty) => {
-                f.write_str("(")?;
-                let mut params = params.iter();
-                if let Some(param) = params.next() {
-                    param.fmt(f)?;
-                }
-                for param in params {
-                    f.write_str(", ")?;
-                    param.fmt(f)?;
-                }
-                f.write_str(") -> ")?;
-                ret_ty.fmt(f)
-            }
-            Type::Array(ty, size) => {
-                f.write_str("[")?;
-                ty.fmt(f)?;
-                f.write_str("; ")?;
-                size.fmt(f)?;
-                f.write_str("]")
-            }
-            Type::Tuple(fields) => {
-                f.write_str("(")?;
-                let mut fields = fields.iter();
-                if let Some(field) = fields.next() {
-                    field.fmt(f)?;
-                }
-                for field in fields {
-                    f.write_str(", ")?;
-                    field.fmt(f)?;
-                }
-                f.write_str(")")
-            }
-            Type::Enum(name) => f.write_str(name),
-        }
-    }
-}
-
-/// A parameter definition (parameter name and type).
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct ParamDef(pub String, pub Type);
 
 /// An expression and its location in the source code.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -172,6 +111,10 @@ pub enum ExprEnum {
     TupleLiteral(Vec<Expr>),
     /// Access of a tuple at the specified position.
     TupleAccess(Box<Expr>, usize),
+    /// Access of a struct at the specified field.
+    StructAccess(Box<Expr>, String),
+    /// Struct literal with the specified fields.
+    StructLiteral(String, Vec<(String, Expr)>),
     /// Enum literal of the specified variant, possibly with fields.
     EnumLiteral(String, Box<VariantExpr>),
     /// Matching the specified expression with a list of clauses (pattern + expression).
@@ -189,7 +132,7 @@ pub enum ExprEnum {
     /// If-else expression for the specified condition, if-expr and else-expr.
     If(Box<Expr>, Box<Expr>, Box<Expr>),
     /// Explicit cast of an expression to the specified type.
-    Cast(Type, Box<Expr>),
+    Cast(PreliminaryType, Box<Expr>),
     /// `fold`s the specified array, with the specified initial value and a 2-param closure.
     Fold(Box<Expr>, Box<Expr>, Box<Closure>),
     /// `map`s the specified array with the specified 1-param closure.
@@ -230,6 +173,8 @@ pub enum PatternEnum {
     NumSigned(i128, Option<SignedNumType>),
     /// Matches a tuple if all of its fields match their respective patterns.
     Tuple(Vec<Pattern>),
+    /// Matches a struct if all of its fields math their respective patterns.
+    Struct(String, Vec<(String, Pattern)>),
     /// Matches an enum with the specified name and variant.
     EnumUnit(String, String),
     /// Matches an enum with the specified name and variant, if all fields match.
@@ -244,7 +189,7 @@ pub enum PatternEnum {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Closure {
     /// The return type of the closure.
-    pub ty: Type,
+    pub ty: PreliminaryType,
     /// The parameters (name and type) of the closure.
     pub params: Vec<ParamDef>,
     /// The expression that the closures evaluates to.

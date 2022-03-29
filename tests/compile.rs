@@ -1,6 +1,13 @@
 use garble::{
-    ast::Type, compile, eval::Evaluator, literal::Literal, token::UnsignedNumType, Error,
+    compile, eval::Evaluator, literal::Literal, token::UnsignedNumType, typed_ast::Type, Error,
 };
+
+fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
+    let e: Error = e.into();
+    let pretty = e.prettify(prg);
+    println!("{}", pretty);
+    e
+}
 
 #[test]
 fn compile_xor() -> Result<(), Error> {
@@ -1395,13 +1402,6 @@ pub fn main(x: i8) -> i8 {
     Ok(())
 }
 
-fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
-    let e: Error = e.into();
-    let pretty = e.prettify(prg);
-    println!("{}", pretty);
-    e
-}
-
 #[test]
 fn compile_lexically_scoped_block() -> Result<(), Error> {
     let prg = "
@@ -1422,5 +1422,59 @@ pub fn main(x: i32) -> i32 {
         let output = i32::try_from(output).map_err(|e| pretty_print(e, prg))?;
         assert_eq!(output, x + 1);
     }
+    Ok(())
+}
+
+#[test]
+fn compile_struct_type() -> Result<(), Error> {
+    let prg = "
+struct FooBar {
+    foo: i32,
+    bar: i32,
+}
+
+pub fn main(x: i32) -> i32 {
+    let foobar = FooBar { foo: x, bar: 2 };
+    foobar.bar
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    eval.set_i32(5);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    let output = i32::try_from(output).map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(output, 2);
+
+    Ok(())
+}
+
+#[test]
+fn compile_struct_pattern() -> Result<(), Error> {
+    let prg = "
+struct FooBarBaz {
+    foo: i32,
+    bar: u8,
+    baz: bool,
+}
+
+pub fn main(x: FooBarBaz) -> FooBarBaz {
+    match x {
+        FooBarBaz { foo: 1, bar: 0, baz: false } => FooBarBaz { baz: true, foo: 1, bar: 1 },
+        FooBarBaz { foo: 1, baz: baz, bar: 0 } => FooBarBaz { foo: 1, bar: 1, baz: baz },
+        FooBarBaz { bar: bar, baz: false, foo: foo } => FooBarBaz { foo: foo, bar: bar, baz: true },
+        FooBarBaz { foo: foo, bar: bar, baz: baz } => FooBarBaz { foo: foo, bar: 1, baz: baz },
+    }
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+
+    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let ty = Type::Struct("FooBarBaz".to_string());
+    let input = Literal::parse(&typed_prg, &ty, "FooBarBaz { foo: 1, bar: 0u8, baz: true }")?;
+    eval.set_literal(input)?;
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
+    let expected = Literal::parse(&typed_prg, &ty, "FooBarBaz { foo: 1, bar: 1u8, baz: true }")?;
+    assert_eq!(r, expected);
     Ok(())
 }

@@ -3,17 +3,73 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{EnumDef, Op, ParamDef, Type, UnaryOp},
+    ast::{Op, UnaryOp},
     token::{MetaInfo, SignedNumType, UnsignedNumType},
 };
 
 /// A program, consisting of top level definitions (enums or functions).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Program {
+    /// Top level struct type definitions.
+    pub struct_defs: HashMap<String, StructDef>,
     /// Top level enum type definitions.
     pub enum_defs: HashMap<String, EnumDef>,
     /// Top level function definitions.
     pub fn_defs: HashMap<String, FnDef>,
+}
+
+/// A top level struct type definition.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct StructDef {
+    /// The variants of the enum type.
+    pub fields: Vec<(String, Type)>,
+    /// The location in the source code.
+    pub meta: MetaInfo,
+}
+
+/// A top level enum type definition.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct EnumDef {
+    /// The variants of the enum type.
+    pub variants: Vec<Variant>,
+    /// The location in the source code.
+    pub meta: MetaInfo,
+}
+
+impl EnumDef {
+    pub(crate) fn get_variant(&self, variant_name: &str) -> Option<&Variant> {
+        for variant in self.variants.iter() {
+            if variant.variant_name() == variant_name {
+                return Some(variant);
+            }
+        }
+        None
+    }
+}
+
+/// An enum variant.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum Variant {
+    /// A unit variant with the specified name, but containing no fields.
+    Unit(String),
+    /// A tuple variant with the specified name, containing positional fields.
+    Tuple(String, Vec<Type>),
+}
+
+impl Variant {
+    pub(crate) fn variant_name(&self) -> &str {
+        match self {
+            Variant::Unit(name) => name.as_str(),
+            Variant::Tuple(name, _) => name.as_str(),
+        }
+    }
+
+    pub(crate) fn types(&self) -> Option<Vec<Type>> {
+        match self {
+            Variant::Unit(_) => None,
+            Variant::Tuple(_, types) => Some(types.clone()),
+        }
+    }
 }
 
 /// A top level function definition.
@@ -29,6 +85,75 @@ pub struct FnDef {
     pub body: Expr,
     /// The location in the source code.
     pub meta: MetaInfo,
+}
+
+/// A parameter definition (parameter name and type).
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct ParamDef(pub String, pub Type);
+
+/// A type, can be either explicitly specified or inferred by the type checker.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum Type {
+    /// Boolean type with the values true and false.
+    Bool,
+    /// Unsigned number types
+    Unsigned(UnsignedNumType),
+    /// Signed number types
+    Signed(SignedNumType),
+    /// Function type with the specified parameters and the specified return type.
+    Fn(Vec<Type>, Box<Type>),
+    /// Array type of a fixed size, containing elements of the specified type.
+    Array(Box<Type>, usize),
+    /// Tuple type containing fields of the specified types.
+    Tuple(Vec<Type>),
+    /// Struct type of the specified name, needs to be looked up in struct defs for its field types.
+    Struct(String),
+    /// Enum type of the specified name, needs to be looked up in enum defs for its variant types.
+    Enum(String),
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Bool => f.write_str("bool"),
+            Type::Unsigned(n) => n.fmt(f),
+            Type::Signed(n) => n.fmt(f),
+            Type::Fn(params, ret_ty) => {
+                f.write_str("(")?;
+                let mut params = params.iter();
+                if let Some(param) = params.next() {
+                    param.fmt(f)?;
+                }
+                for param in params {
+                    f.write_str(", ")?;
+                    param.fmt(f)?;
+                }
+                f.write_str(") -> ")?;
+                ret_ty.fmt(f)
+            }
+            Type::Array(ty, size) => {
+                f.write_str("[")?;
+                ty.fmt(f)?;
+                f.write_str("; ")?;
+                size.fmt(f)?;
+                f.write_str("]")
+            }
+            Type::Tuple(fields) => {
+                f.write_str("(")?;
+                let mut fields = fields.iter();
+                if let Some(field) = fields.next() {
+                    field.fmt(f)?;
+                }
+                for field in fields {
+                    f.write_str(", ")?;
+                    field.fmt(f)?;
+                }
+                f.write_str(")")
+            }
+            Type::Struct(name) => f.write_str(name),
+            Type::Enum(name) => f.write_str(name),
+        }
+    }
 }
 
 /// An expression, its type and its location in the source code.
@@ -60,6 +185,10 @@ pub enum ExprEnum {
     TupleLiteral(Vec<Expr>),
     /// Access of a tuple at the specified position.
     TupleAccess(Box<Expr>, usize),
+    /// Access of a struct at the specified field.
+    StructAccess(Box<Expr>, String),
+    /// Struct literal with the specified fields.
+    StructLiteral(String, Vec<(String, Expr)>),
     /// Enum literal of the specified variant, possibly with fields.
     EnumLiteral(String, Box<VariantExpr>),
     /// Matching the specified expression with a list of clauses (pattern + expression).
@@ -111,6 +240,18 @@ impl std::fmt::Display for Pattern {
             PatternEnum::False => f.write_str("false"),
             PatternEnum::NumUnsigned(n) => n.fmt(f),
             PatternEnum::NumSigned(n) => n.fmt(f),
+            PatternEnum::Struct(struct_name, fields) => {
+                f.write_fmt(format_args!("{struct_name} {{"))?;
+                let mut fields = fields.iter();
+                if let Some((field_name, field)) = fields.next() {
+                    f.write_fmt(format_args!("{field_name}: {field}"))?;
+                }
+                for (field_name, field) in fields {
+                    f.write_str(", ")?;
+                    f.write_fmt(format_args!("{field_name}: {field}"))?;
+                }
+                f.write_str("}")
+            }
             PatternEnum::Tuple(fields) => {
                 f.write_str("(")?;
                 let mut fields = fields.iter();
@@ -142,16 +283,26 @@ impl std::fmt::Display for Pattern {
                 if min == max {
                     min.fmt(f)
                 } else {
-                    let max = max + 1;
-                    f.write_fmt(format_args!("{min}..{max}"))
+                    match self.1 {
+                        Type::Unsigned(n) if *min == 0 && *max == n.max() => f.write_str("_"),
+                        _ => {
+                            let max = max + 1;
+                            f.write_fmt(format_args!("{min}..{max}"))
+                        }
+                    }
                 }
             }
             PatternEnum::SignedInclusiveRange(min, max) => {
                 if min == max {
                     min.fmt(f)
                 } else {
-                    let max = max + 1;
-                    f.write_fmt(format_args!("{min}..{max}"))
+                    match self.1 {
+                        Type::Signed(n) if *min == n.min() && *max == n.max() => f.write_str("_"),
+                        _ => {
+                            let max = max + 1;
+                            f.write_fmt(format_args!("{min}..{max}"))
+                        }
+                    }
                 }
             }
         }
@@ -173,6 +324,8 @@ pub enum PatternEnum {
     NumSigned(i128),
     /// Matches a tuple if all of its fields match their respective patterns.
     Tuple(Vec<Pattern>),
+    /// Matches a struct if all of its fields math their respective patterns.
+    Struct(String, Vec<(String, Pattern)>),
     /// Matches an enum with the specified name and variant.
     EnumUnit(String, String),
     /// Matches an enum with the specified name and variant, if all fields match.

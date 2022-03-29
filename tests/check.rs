@@ -1,9 +1,8 @@
 use garble::{
-    ast::Type,
     check::{TypeError, TypeErrorEnum},
     scan::scan,
     token::{MetaInfo, UnsignedNumType},
-    typed_ast::{Pattern, PatternEnum},
+    typed_ast::{Pattern, PatternEnum, Type},
     Error,
 };
 
@@ -139,17 +138,17 @@ pub fn main(x: u8) -> i32 {
             vec![
                 [Pattern(
                     PatternEnum::UnsignedInclusiveRange(2, 2),
-                    Type::Unsigned(UnsignedNumType::U128),
+                    Type::Unsigned(UnsignedNumType::U8),
                     meta
                 )],
                 [Pattern(
                     PatternEnum::UnsignedInclusiveRange(10, 10),
-                    Type::Unsigned(UnsignedNumType::U128),
+                    Type::Unsigned(UnsignedNumType::U8),
                     meta
                 )],
                 [Pattern(
                     PatternEnum::UnsignedInclusiveRange(255, 255),
-                    Type::Unsigned(UnsignedNumType::U128),
+                    Type::Unsigned(UnsignedNumType::U8),
                     meta
                 )]
             ]
