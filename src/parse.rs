@@ -314,14 +314,14 @@ impl Parser {
         }
     }
 
-    fn parse_let_binding(&mut self) -> Result<Option<(String, Expr)>, ()> {
+    fn parse_let_binding(&mut self) -> Result<Option<(Pattern, Expr)>, ()> {
         // let <var> = <binding>; <body>
         if self.next_matches(&TokenEnum::KeywordLet).is_some() {
-            let (var, _) = self.expect_identifier()?;
+            let pattern = self.parse_pattern()?;
             self.expect(&TokenEnum::Eq)?;
             if let Ok(binding) = self.parse_expr() {
                 self.expect(&TokenEnum::Semicolon)?;
-                Ok(Some((var, binding)))
+                Ok(Some((pattern, binding)))
             } else {
                 self.consume_until_one_of(&[TokenEnum::Semicolon]);
                 self.tokens.next();

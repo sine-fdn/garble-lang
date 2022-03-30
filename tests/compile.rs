@@ -1500,3 +1500,28 @@ pub fn main(x: u16) -> u16 {
     assert_eq!(u16::try_from(output).map_err(|e| pretty_print(e, prg))?, 2);
     Ok(())
 }
+
+#[test]
+fn compile_let_destructuring() -> Result<(), Error> {
+    let prg = "
+struct FooBar {
+    foo: i32,
+    bar: (i32, i32),
+}
+
+pub fn main(x: (i32, i32)) -> i32 {
+    let (a, b) = x;
+
+    let foobar = FooBar { foo: 0, bar: (0, 0) };
+    let FooBar { foo: foo, bar: bar } = foobar;
+    let (y, z) = bar;
+    a + y
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    eval.parse_literal("(1, 2)")?;
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, 1);
+    Ok(())
+}
