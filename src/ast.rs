@@ -173,8 +173,10 @@ pub enum PatternEnum {
     NumSigned(i128, Option<SignedNumType>),
     /// Matches a tuple if all of its fields match their respective patterns.
     Tuple(Vec<Pattern>),
-    /// Matches a struct if all of its fields math their respective patterns.
+    /// Matches a struct if all of its fields match their respective patterns.
     Struct(String, Vec<(String, Pattern)>),
+    /// Matches a struct if its fields match their respective patterns, ignoring remaining fields.
+    StructIgnoreRemaining(String, Vec<(String, Pattern)>),
     /// Matches an enum with the specified name and variant.
     EnumUnit(String, String),
     /// Matches an enum with the specified name and variant, if all fields match.

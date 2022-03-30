@@ -1250,7 +1250,10 @@ impl Pattern {
                     return Err(errors);
                 }
             }
-            PatternEnum::Struct(struct_name, fields) => {
+            PatternEnum::Struct(struct_name, fields)
+            | PatternEnum::StructIgnoreRemaining(struct_name, fields) => {
+                let ignore_remaining_fields =
+                    matches!(pattern, PatternEnum::StructIgnoreRemaining(_, _));
                 let struct_def_name = expect_struct_type(&ty, meta)?;
                 if &struct_def_name != struct_name {
                     let e = TypeErrorEnum::UnexpectedType {
@@ -1278,7 +1281,7 @@ impl Pattern {
                             errors.push(TypeError(e, meta));
                         }
                     }
-                    if struct_def.len() > fields.len() {
+                    if !ignore_remaining_fields && struct_def.len() > fields.len() {
                         for expected_field_name in struct_def.keys() {
                             if !fields.iter().any(|(f, _)| f == expected_field_name) {
                                 let e = TypeErrorEnum::MissingStructField(
@@ -1413,7 +1416,11 @@ enum Ctor {
 type PatternStack = Vec<typed_ast::Pattern>;
 
 fn specialize(ctor: &Ctor, pattern: &[typed_ast::Pattern]) -> Vec<PatternStack> {
-    let head = pattern.first().unwrap();
+    let head = if let Some(head) = pattern.first() {
+        head
+    } else {
+        return vec![];
+    };
     let tail = pattern.iter().skip(1).cloned();
     let typed_ast::Pattern(head_enum, _, meta) = head;
     match ctor {
@@ -1489,6 +1496,7 @@ fn specialize(ctor: &Ctor, pattern: &[typed_ast::Pattern]) -> Vec<PatternStack> 
                 vec![fields.into_iter().chain(tail).collect()]
             }
             typed_ast::PatternEnum::Struct(struct_name_in_pattern, fields)
+            | typed_ast::PatternEnum::StructIgnoreRemaining(struct_name_in_pattern, fields)
                 if struct_name == struct_name_in_pattern =>
             {
                 vec![fields

@@ -241,7 +241,7 @@ impl std::fmt::Display for Pattern {
             PatternEnum::NumUnsigned(n) => n.fmt(f),
             PatternEnum::NumSigned(n) => n.fmt(f),
             PatternEnum::Struct(struct_name, fields) => {
-                f.write_fmt(format_args!("{struct_name} {{"))?;
+                f.write_fmt(format_args!("{struct_name} {{ "))?;
                 let mut fields = fields.iter();
                 if let Some((field_name, field)) = fields.next() {
                     f.write_fmt(format_args!("{field_name}: {field}"))?;
@@ -251,6 +251,14 @@ impl std::fmt::Display for Pattern {
                     f.write_fmt(format_args!("{field_name}: {field}"))?;
                 }
                 f.write_str("}")
+            }
+            PatternEnum::StructIgnoreRemaining(struct_name, fields) => {
+                f.write_fmt(format_args!("{struct_name} {{ "))?;
+                for (field_name, field) in fields.iter() {
+                    f.write_fmt(format_args!("{field_name}: {field}"))?;
+                    f.write_str(", ")?;
+                }
+                f.write_str(".. }")
             }
             PatternEnum::Tuple(fields) => {
                 f.write_str("(")?;
@@ -324,8 +332,10 @@ pub enum PatternEnum {
     NumSigned(i128),
     /// Matches a tuple if all of its fields match their respective patterns.
     Tuple(Vec<Pattern>),
-    /// Matches a struct if all of its fields math their respective patterns.
+    /// Matches a struct if all of its fields match their respective patterns.
     Struct(String, Vec<(String, Pattern)>),
+    /// Matches a struct if its fields match their respective patterns, ignoring remaining fields.
+    StructIgnoreRemaining(String, Vec<(String, Pattern)>),
     /// Matches an enum with the specified name and variant.
     EnumUnit(String, String),
     /// Matches an enum with the specified name and variant, if all fields match.

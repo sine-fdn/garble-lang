@@ -1463,6 +1463,7 @@ pub fn main(x: FooBarBaz) -> FooBarBaz {
         FooBarBaz { foo: 1, baz, bar: 0 } => FooBarBaz { foo: 1, bar: 1, baz },
         FooBarBaz { bar, baz: false, foo } => FooBarBaz { foo, bar, baz: true },
         FooBarBaz { foo, bar, baz } => FooBarBaz { foo, bar: 1, baz },
+        FooBarBaz { foo, .. } => FooBarBaz { foo, bar: 1, baz: true },
     }
 }
 ";
@@ -1514,7 +1515,7 @@ pub fn main(x: (i32, i32)) -> i32 {
 
     let bar = (0, 0);
     let foobar = FooBar { foo: 0, bar };
-    let FooBar { foo, bar } = foobar;
+    let FooBar { bar, .. } = foobar;
     let (y, z) = bar;
     a + y
 }

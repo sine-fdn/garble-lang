@@ -75,13 +75,19 @@ impl<'a> Scanner<'a> {
                 '}' => self.push_token(TokenEnum::RightBrace),
                 '[' => self.push_token(TokenEnum::LeftBracket),
                 ']' => self.push_token(TokenEnum::RightBracket),
-                '.' => self.push_token(TokenEnum::Dot),
                 ',' => self.push_token(TokenEnum::Comma),
                 ';' => self.push_token(TokenEnum::Semicolon),
                 '%' => self.push_token(TokenEnum::Percent),
                 '^' => self.push_token(TokenEnum::Caret),
                 '*' => self.push_token(TokenEnum::Star),
                 '+' => self.push_token(TokenEnum::Plus),
+                '.' => {
+                    if self.next_matches('.') {
+                        self.push_token(TokenEnum::DoubleDot);
+                    } else {
+                        self.push_token(TokenEnum::Dot);
+                    }
+                }
                 '&' => {
                     if self.next_matches('&') {
                         self.push_token(TokenEnum::DoubleAmpersand);
