@@ -1460,9 +1460,9 @@ struct FooBarBaz {
 pub fn main(x: FooBarBaz) -> FooBarBaz {
     match x {
         FooBarBaz { foo: 1, bar: 0, baz: false } => FooBarBaz { baz: true, foo: 1, bar: 1 },
-        FooBarBaz { foo: 1, baz: baz, bar: 0 } => FooBarBaz { foo: 1, bar: 1, baz: baz },
-        FooBarBaz { bar: bar, baz: false, foo: foo } => FooBarBaz { foo: foo, bar: bar, baz: true },
-        FooBarBaz { foo: foo, bar: bar, baz: baz } => FooBarBaz { foo: foo, bar: 1, baz: baz },
+        FooBarBaz { foo: 1, baz, bar: 0 } => FooBarBaz { foo: 1, bar: 1, baz },
+        FooBarBaz { bar, baz: false, foo } => FooBarBaz { foo, bar, baz: true },
+        FooBarBaz { foo, bar, baz } => FooBarBaz { foo, bar: 1, baz },
     }
 }
 ";
@@ -1512,8 +1512,9 @@ struct FooBar {
 pub fn main(x: (i32, i32)) -> i32 {
     let (a, b) = x;
 
-    let foobar = FooBar { foo: 0, bar: (0, 0) };
-    let FooBar { foo: foo, bar: bar } = foobar;
+    let bar = (0, 0);
+    let foobar = FooBar { foo: 0, bar };
+    let FooBar { foo, bar } = foobar;
     let (y, z) = bar;
     a + y
 }

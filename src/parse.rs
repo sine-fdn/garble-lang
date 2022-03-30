@@ -626,17 +626,35 @@ impl Parser {
                     } else if self.next_matches(&TokenEnum::LeftBrace).is_some() {
                         let mut fields = vec![];
                         if !self.peek(&TokenEnum::RightBrace) {
-                            let (field_name, _) = self.expect_identifier()?;
-                            self.expect(&TokenEnum::Colon)?;
-                            let field_pattern = self.parse_pattern()?;
+                            let (field_name, field_name_meta) = self.expect_identifier()?;
+                            let field_pattern = if self.peek(&TokenEnum::Comma)
+                                || self.peek(&TokenEnum::RightBrace)
+                            {
+                                Pattern(
+                                    PatternEnum::Identifier(field_name.clone()),
+                                    field_name_meta,
+                                )
+                            } else {
+                                self.expect(&TokenEnum::Colon)?;
+                                self.parse_pattern()?
+                            };
                             fields.push((field_name, field_pattern));
                             while self.next_matches(&TokenEnum::Comma).is_some() {
                                 if self.peek(&TokenEnum::RightBrace) {
                                     break;
                                 }
-                                let (field_name, _) = self.expect_identifier()?;
-                                self.expect(&TokenEnum::Colon)?;
-                                let field_pattern = self.parse_pattern()?;
+                                let (field_name, field_name_meta) = self.expect_identifier()?;
+                                let field_pattern = if self.peek(&TokenEnum::Comma)
+                                    || self.peek(&TokenEnum::RightBrace)
+                                {
+                                    Pattern(
+                                        PatternEnum::Identifier(field_name.clone()),
+                                        field_name_meta,
+                                    )
+                                } else {
+                                    self.expect(&TokenEnum::Colon)?;
+                                    self.parse_pattern()?
+                                };
                                 fields.push((field_name, field_pattern));
                             }
                         }
@@ -894,17 +912,29 @@ impl Parser {
                     {
                         let mut fields = vec![];
                         if !self.peek(&TokenEnum::RightBrace) {
-                            let (name, _) = self.expect_identifier()?;
-                            self.expect(&TokenEnum::Colon)?;
-                            let value = self.parse_expr()?;
+                            let (name, name_meta) = self.expect_identifier()?;
+                            let value = if self.peek(&TokenEnum::Comma)
+                                || self.peek(&TokenEnum::RightBrace)
+                            {
+                                Expr(ExprEnum::Identifier(name.clone()), name_meta)
+                            } else {
+                                self.expect(&TokenEnum::Colon)?;
+                                self.parse_expr()?
+                            };
                             fields.push((name, value));
                             while self.next_matches(&TokenEnum::Comma).is_some() {
                                 if self.peek(&TokenEnum::RightBrace) {
                                     break;
                                 }
-                                let (name, _) = self.expect_identifier()?;
-                                self.expect(&TokenEnum::Colon)?;
-                                let value = self.parse_expr()?;
+                                let (name, name_meta) = self.expect_identifier()?;
+                                let value = if self.peek(&TokenEnum::Comma)
+                                    || self.peek(&TokenEnum::RightBrace)
+                                {
+                                    Expr(ExprEnum::Identifier(name.clone()), name_meta)
+                                } else {
+                                    self.expect(&TokenEnum::Colon)?;
+                                    self.parse_expr()?
+                                };
                                 fields.push((name, value));
                             }
                         }
