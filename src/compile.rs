@@ -490,9 +490,9 @@ impl Expr {
             }
             ExprEnum::Let(bindings, body) => {
                 env.push();
-                for (var, binding) in bindings {
+                for (pattern, binding) in bindings {
                     let binding = binding.compile(prg, env, circuit);
-                    env.set(var.clone(), binding);
+                    pattern.compile(&binding, prg, env, circuit);
                 }
                 let body = body.compile(prg, env, circuit);
                 env.pop();

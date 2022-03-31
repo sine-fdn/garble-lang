@@ -700,16 +700,25 @@ impl Expr {
             ExprEnum::Let(bindings, body) => {
                 let mut errors = vec![];
                 let mut typed_bindings = Vec::with_capacity(bindings.len());
-                for (var, binding) in bindings {
+                for (pattern, binding) in bindings {
                     env.push();
                     match binding.type_check(top_level_defs, env, fns, defs) {
                         Ok(binding) => {
-                            env.set(var.clone(), binding.1.clone());
-                            typed_bindings.push((var.clone(), binding));
+                            let ty = binding.1.clone();
+                            match pattern.type_check(env, fns, defs, ty.clone()) {
+                                Ok(pattern) => typed_bindings.push((pattern, binding)),
+                                Err(e) => errors.extend(e),
+                            }
                         }
                         Err(e) => {
                             errors.extend(e);
                         }
+                    }
+                }
+                for (pattern, binding) in typed_bindings.iter() {
+                    let ty = &binding.1;
+                    if let Err(e) = check_exhaustiveness(&[pattern], ty, defs, meta) {
+                        errors.push(e);
                     }
                 }
                 match body.type_check(top_level_defs, env, fns, defs) {
@@ -1079,7 +1088,8 @@ impl Expr {
                     ret_ty.clone()
                 };
 
-                if let Err(e) = check_exhaustiveness(&typed_clauses, ty, defs, meta) {
+                let patterns: Vec<_> = typed_clauses.iter().map(|(p, _)| p).collect();
+                if let Err(e) = check_exhaustiveness(patterns.as_slice(), ty, defs, meta) {
                     errors.push(e);
                 }
 
@@ -1367,12 +1377,13 @@ impl Pattern {
 // https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_build/thir/pattern/usefulness/index.html
 // (which implements the paper http://moscova.inria.fr/~maranget/papers/warn/index.html)
 fn check_exhaustiveness(
-    clauses: &[(typed_ast::Pattern, typed_ast::Expr)],
+    patterns: &[&typed_ast::Pattern],
     ty: &Type,
     defs: &Defs,
     meta: MetaInfo,
 ) -> Result<(), TypeError> {
-    let patterns = clauses.iter().map(|(p, _)| vec![p.clone()]).collect();
+    let patterns: Vec<Vec<typed_ast::Pattern>> =
+        patterns.iter().map(|&p| vec![p.clone()]).collect();
     let wildcard_pattern = vec![typed_ast::Pattern(
         typed_ast::PatternEnum::Identifier("_".to_string()),
         ty.clone(),
