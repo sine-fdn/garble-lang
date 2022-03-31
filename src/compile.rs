@@ -778,13 +778,13 @@ impl Pattern {
                 let mut is_match = 1;
                 let mut w = 0;
                 for (field_name, field_type) in struct_def.fields.iter() {
+                    let field_bits = field_type.size_in_bits_for_defs(prg);
                     if let Some(field_pattern) = fields.get(field_name) {
-                        let field_bits = field_type.size_in_bits_for_defs(prg);
                         let match_expr = &match_expr[w..w + field_bits];
                         let is_field_match = field_pattern.compile(match_expr, prg, env, circuit);
                         is_match = circuit.push_and(is_match, is_field_match);
-                        w += field_bits;
                     }
+                    w += field_bits;
                 }
                 is_match
             }

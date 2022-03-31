@@ -1527,3 +1527,52 @@ pub fn main(x: (i32, i32)) -> i32 {
     assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, 1);
     Ok(())
 }
+
+#[test]
+fn compile_struct_shorthand() -> Result<(), Error> {
+    let prg = "
+struct FooBar {
+    foo: i32,
+    bar: (i32, i32),
+    baz: (i32, i32, i32),
+}
+
+pub fn main(x: i32) -> i32 {
+    let foobar = FooBar {
+        foo: 1,
+        bar: (2, 3),
+        baz: (4, 5, 6),
+    };
+    match x {
+        0 => {
+            let FooBar { foo, .. } = foobar;
+            foo
+        },
+        1 => {
+            let FooBar { bar, .. } = foobar;
+            let (x, y) = bar;
+            y
+        },
+        _ => {
+            let FooBar { baz, .. } = foobar;
+            let (x, y, z) = baz;
+            z
+        }
+    }
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    for x in [0, 1, 2] {
+        let expected = match x {
+            0 => 1,
+            1 => 3,
+            _ => 6,
+        };
+        println!("{x} -> {expected}");
+        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        eval.set_i32(x);
+        let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+        assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, expected);
+    }
+    Ok(())
+}
