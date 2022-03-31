@@ -272,3 +272,23 @@ impl std::fmt::Debug for MetaInfo {
         )
     }
 }
+
+impl PartialOrd for MetaInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self.start.partial_cmp(&other.start) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        self.end.partial_cmp(&other.end)
+    }
+}
+
+impl Ord for MetaInfo {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.start.cmp(&other.start) {
+            core::cmp::Ordering::Equal => {}
+            ord => return ord,
+        }
+        self.end.cmp(&other.end)
+    }
+}
