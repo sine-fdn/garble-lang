@@ -1,3 +1,5 @@
+#![cfg(feature = "smart-cookie")]
+
 use std::{fs::File, io::Read};
 
 use garble::{
