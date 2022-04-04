@@ -33,6 +33,8 @@ pub enum TokenEnum {
     KeywordPub,
     /// `.`.
     Dot,
+    /// `..`.
+    DoubleDot,
     /// `,`.
     Comma,
     /// `;`.
@@ -123,6 +125,7 @@ impl std::fmt::Display for TokenEnum {
             TokenEnum::KeywordAs => f.write_str("as"),
             TokenEnum::KeywordPub => f.write_str("pub"),
             TokenEnum::Dot => f.write_str("."),
+            TokenEnum::DoubleDot => f.write_str(".."),
             TokenEnum::Comma => f.write_str(","),
             TokenEnum::Semicolon => f.write_str(";"),
             TokenEnum::Colon => f.write_str(":"),

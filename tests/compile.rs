@@ -1460,9 +1460,10 @@ struct FooBarBaz {
 pub fn main(x: FooBarBaz) -> FooBarBaz {
     match x {
         FooBarBaz { foo: 1, bar: 0, baz: false } => FooBarBaz { baz: true, foo: 1, bar: 1 },
-        FooBarBaz { foo: 1, baz: baz, bar: 0 } => FooBarBaz { foo: 1, bar: 1, baz: baz },
-        FooBarBaz { bar: bar, baz: false, foo: foo } => FooBarBaz { foo: foo, bar: bar, baz: true },
-        FooBarBaz { foo: foo, bar: bar, baz: baz } => FooBarBaz { foo: foo, bar: 1, baz: baz },
+        FooBarBaz { foo: 1, baz, bar: 0 } => FooBarBaz { foo: 1, bar: 1, baz },
+        FooBarBaz { bar, baz: false, foo } => FooBarBaz { foo, bar, baz: true },
+        FooBarBaz { foo, bar, baz } => FooBarBaz { foo, bar: 1, baz },
+        FooBarBaz { foo, .. } => FooBarBaz { foo, bar: 1, baz: true },
     }
 }
 ";
@@ -1512,8 +1513,9 @@ struct FooBar {
 pub fn main(x: (i32, i32)) -> i32 {
     let (a, b) = x;
 
-    let foobar = FooBar { foo: 0, bar: (0, 0) };
-    let FooBar { foo: foo, bar: bar } = foobar;
+    let bar = (0, 0);
+    let foobar = FooBar { foo: 0, bar };
+    let FooBar { bar, .. } = foobar;
     let (y, z) = bar;
     a + y
 }
@@ -1523,5 +1525,54 @@ pub fn main(x: (i32, i32)) -> i32 {
     eval.parse_literal("(1, 2)")?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, 1);
+    Ok(())
+}
+
+#[test]
+fn compile_struct_shorthand() -> Result<(), Error> {
+    let prg = "
+struct FooBar {
+    foo: i32,
+    bar: (i32, i32),
+    baz: (i32, i32, i32),
+}
+
+pub fn main(x: i32) -> i32 {
+    let foobar = FooBar {
+        foo: 1,
+        bar: (2, 3),
+        baz: (4, 5, 6),
+    };
+    match x {
+        0 => {
+            let FooBar { foo, .. } = foobar;
+            foo
+        },
+        1 => {
+            let FooBar { bar, .. } = foobar;
+            let (x, y) = bar;
+            y
+        },
+        _ => {
+            let FooBar { baz, .. } = foobar;
+            let (x, y, z) = baz;
+            z
+        }
+    }
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    for x in [0, 1, 2] {
+        let expected = match x {
+            0 => 1,
+            1 => 3,
+            _ => 6,
+        };
+        println!("{x} -> {expected}");
+        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        eval.set_i32(x);
+        let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+        assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, expected);
+    }
     Ok(())
 }
