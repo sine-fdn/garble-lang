@@ -403,6 +403,7 @@ impl<'a> EvalOutput<'a> {
 
     /// Decodes the evaluated result as a literal (with enums looked up in the program).
     pub fn into_literal(self) -> Result<Literal, EvalError> {
-        Literal::from_result_bits(self.program, &self.main_fn.body.1, &self.output)
+        let ret_ty = self.main_fn.return_type();
+        Literal::from_result_bits(self.program, &ret_ty, &self.output)
     }
 }

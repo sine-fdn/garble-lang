@@ -62,7 +62,7 @@ pub struct FnDef {
     /// The parameters of the function.
     pub params: Vec<ParamDef>,
     /// The body expression that the function evaluates to.
-    pub body: Expr,
+    pub body: Vec<Stmt>,
     /// The location in the source code.
     pub meta: MetaInfo,
 }
@@ -90,6 +90,19 @@ pub enum PreliminaryType {
     Tuple(Vec<PreliminaryType>),
     /// A struct or an enum, depending on the top level definitions.
     StructOrEnum(String, MetaInfo),
+}
+
+/// A statement and its location in the source code.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct Stmt(pub StmtEnum, pub MetaInfo);
+
+/// The different kinds of statements.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum StmtEnum {
+    /// Let expression, binds variables to expressions and evaluates the body with them in scope.
+    Let(Pattern, Expr),
+    /// An expression (all expressions are statements, but not all statements expressions).
+    Expr(Expr),
 }
 
 /// An expression and its location in the source code.
@@ -136,9 +149,7 @@ pub enum ExprEnum {
     /// Application of a binary operator.
     Op(Op, Box<Expr>, Box<Expr>),
     /// A block that lexically scopes any bindings introduced within it.
-    LexicallyScopedBlock(Box<Expr>),
-    /// Let expression, binds variables to expressions and evaluates the body with them in scope.
-    Let(Vec<(Pattern, Expr)>, Box<Expr>),
+    Block(Vec<Stmt>),
     /// Call of the specified function with a list of arguments.
     FnCall(String, Vec<Expr>),
     /// If-else expression for the specified condition, if-expr and else-expr.

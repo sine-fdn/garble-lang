@@ -8,8 +8,8 @@ use crate::{
     env::Env,
     token::{SignedNumType, UnsignedNumType},
     typed_ast::{
-        EnumDef, Expr, ExprEnum, FnDef, ParamDef, Pattern, PatternEnum, Program, StructDef, Type,
-        VariantExpr, VariantExprEnum,
+        EnumDef, Expr, ExprEnum, FnDef, ParamDef, Pattern, PatternEnum, Program, Stmt, StructDef,
+        Type, VariantExpr, VariantExprEnum, StmtEnum,
     },
 };
 
@@ -51,10 +51,43 @@ impl Program {
                 env.set(identifier.clone(), wires);
             }
             let mut circuit = CircuitBuilder::new(input_gates);
-            let output_gates = fn_def.body.compile(self, &mut env, &mut circuit);
+            let output_gates = compile_block(&fn_def.body, &self, &mut env, &mut circuit);
             Ok((circuit.build(output_gates), fn_def))
         } else {
             Err(CompilerError::FnNotFound(fn_name.to_string()))
+        }
+    }
+}
+
+fn compile_block(
+    stmts: &[Stmt],
+    prg: &Program,
+    env: &mut Env<Vec<GateIndex>>,
+    circuit: &mut CircuitBuilder,
+) -> Vec<GateIndex> {
+    env.push();
+    let mut expr = vec![];
+    for stmt in stmts {
+        expr = stmt.compile(prg, env, circuit);
+    }
+    env.pop();
+    expr
+}
+
+impl Stmt {
+    fn compile(
+        &self,
+        prg: &Program,
+        env: &mut Env<Vec<GateIndex>>,
+        circuit: &mut CircuitBuilder,
+    ) -> Vec<GateIndex> {
+        match &self.0 {
+            StmtEnum::Let(pattern, binding) => {
+                let binding = binding.compile(prg, env, circuit);
+                pattern.compile(&binding, prg, env, circuit);
+                vec![]
+            }
+            StmtEnum::Expr(expr) => expr.compile(prg, env, circuit)
         }
     }
 }
@@ -488,22 +521,7 @@ impl Expr {
                     }
                 }
             }
-            ExprEnum::LexicallyScopedBlock(expr) => {
-                env.push();
-                let expr = expr.compile(prg, env, circuit);
-                env.pop();
-                expr
-            }
-            ExprEnum::Let(bindings, body) => {
-                env.push();
-                for (pattern, binding) in bindings {
-                    let binding = binding.compile(prg, env, circuit);
-                    pattern.compile(&binding, prg, env, circuit);
-                }
-                let body = body.compile(prg, env, circuit);
-                env.pop();
-                body
-            }
+            ExprEnum::Block(stmts) => compile_block(stmts, prg, env, circuit),
             ExprEnum::FnCall(identifier, args) => {
                 let fn_def = prg.fn_defs.get(identifier).unwrap();
                 let mut bindings = Vec::with_capacity(fn_def.params.len());
@@ -517,7 +535,7 @@ impl Expr {
                 for (var, binding) in bindings {
                     env.set(var.clone(), binding);
                 }
-                let body = fn_def.body.compile(prg, env, circuit);
+                let body = compile_block(&fn_def.body, prg, env, circuit);
                 env.pop();
                 body
             }

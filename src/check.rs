@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::{
-        self, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, Program, UnaryOp,
+        self, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, Program, Stmt, UnaryOp,
         VariantExpr, VariantExprEnum,
     },
     env::Env,
@@ -445,10 +445,11 @@ impl FnDef {
                 }
             }
         }
-        let mut body = self.body.type_check(top_level_defs, &mut env, fns, defs)?;
+        let (body, mut ret_expr) =
+            type_check_block(&self.body, self.meta, top_level_defs, &mut env, fns, defs)?;
         match self.ty.as_concrete_type(top_level_defs) {
             Ok(ret_ty) => {
-                if let Err(e) = check_type(&mut body, &ret_ty) {
+                if let Err(e) = check_type(&mut ret_expr, &ret_ty) {
                     errors.extend(e);
                 }
             }
@@ -468,6 +469,55 @@ impl FnDef {
             })
         } else {
             Err(errors)
+        }
+    }
+}
+
+fn type_check_block(
+    block: &[Stmt],
+    meta: MetaInfo,
+    top_level_defs: &TopLevelTypes,
+    env: &mut Env<Type>,
+    fns: &mut TypedFns,
+    defs: &Defs,
+) -> Result<(Vec<typed_ast::Stmt>, typed_ast::Expr), Vec<TypeError>> {
+    let mut typed_block = Vec::with_capacity(block.len());
+    let mut ret_expr = typed_ast::Expr(
+        typed_ast::ExprEnum::TupleLiteral(vec![]),
+        Type::Tuple(vec![]),
+        meta,
+    );
+    for (i, stmt) in block.iter().enumerate() {
+        let stmt = stmt.type_check(top_level_defs, env, fns, defs)?;
+        if i == block.len() - 1 {
+            if let typed_ast::Stmt(typed_ast::StmtEnum::Expr(expr), _) = &stmt {
+                ret_expr = expr.clone();
+            }
+        }
+        typed_block.push(stmt);
+    }
+    Ok((typed_block, ret_expr))
+}
+
+impl Stmt {
+    pub(crate) fn type_check(
+        &self,
+        top_level_defs: &TopLevelTypes,
+        env: &mut Env<Type>,
+        fns: &mut TypedFns,
+        defs: &Defs,
+    ) -> Result<typed_ast::Stmt, Vec<TypeError>> {
+        let meta = self.1;
+        match &self.0 {
+            ast::StmtEnum::Let(pattern, binding) => {
+                let binding = binding.type_check(top_level_defs, env, fns, defs)?;
+                let pattern = pattern.type_check(env, fns, defs, binding.1.clone())?;
+                Ok(typed_ast::Stmt(typed_ast::StmtEnum::Let(pattern, binding), meta))
+            }
+            ast::StmtEnum::Expr(expr) => {
+                let expr = expr.type_check(top_level_defs, env, fns, defs)?;
+                Ok(typed_ast::Stmt(typed_ast::StmtEnum::Expr(expr), meta))
+            }
         }
     }
 }
@@ -686,55 +736,13 @@ impl Expr {
                     (typed_ast::ExprEnum::Op(*op, Box::new(x), Box::new(y)), ty_x)
                 }
             },
-            ExprEnum::LexicallyScopedBlock(expr) => {
+            ExprEnum::Block(stmts) => {
                 env.push();
-                let typed_ast::Expr(expr, ty, _) =
-                    expr.type_check(top_level_defs, env, fns, defs)?;
+                let (body, ret_expr) =
+                    type_check_block(stmts, meta, top_level_defs, env, fns, defs)?;
+                let ty = ret_expr.1.clone();
                 env.pop();
-                (expr, ty)
-            }
-            ExprEnum::Let(bindings, body) => {
-                let mut errors = vec![];
-                let mut typed_bindings = Vec::with_capacity(bindings.len());
-                for (pattern, binding) in bindings {
-                    env.push();
-                    match binding.type_check(top_level_defs, env, fns, defs) {
-                        Ok(binding) => {
-                            let ty = binding.1.clone();
-                            match pattern.type_check(env, fns, defs, ty.clone()) {
-                                Ok(pattern) => typed_bindings.push((pattern, binding)),
-                                Err(e) => errors.extend(e),
-                            }
-                        }
-                        Err(e) => {
-                            errors.extend(e);
-                        }
-                    }
-                }
-                for (pattern, binding) in typed_bindings.iter() {
-                    let ty = &binding.1;
-                    if let Err(e) = check_exhaustiveness(&[pattern], ty, defs, meta) {
-                        errors.push(e);
-                    }
-                }
-                match body.type_check(top_level_defs, env, fns, defs) {
-                    Ok(body) => {
-                        if errors.is_empty() {
-                            for _ in bindings {
-                                env.pop();
-                            }
-                            let ty = body.1.clone();
-                            let expr = typed_ast::ExprEnum::Let(typed_bindings, Box::new(body));
-                            (expr, ty)
-                        } else {
-                            return Err(errors);
-                        }
-                    }
-                    Err(e) => {
-                        errors.extend(e);
-                        return Err(errors);
-                    }
-                }
+                (typed_ast::ExprEnum::Block(body), ty)
             }
             ExprEnum::FnCall(identifier, args) => {
                 if !fns.typed.contains_key(identifier) {
@@ -748,7 +756,7 @@ impl Expr {
                 }
                 match (fns.typed.get(identifier), env.get(identifier)) {
                     (Some(Ok(fn_def)), None) => {
-                        let typed_ast::Expr(_, ret_ty, _) = &fn_def.body;
+                        let ret_ty = fn_def.return_type();
                         let mut fn_arg_types = Vec::with_capacity(fn_def.params.len());
                         for typed_ast::ParamDef(_, ty) in fn_def.params.iter() {
                             fn_arg_types.push(ty.clone());
