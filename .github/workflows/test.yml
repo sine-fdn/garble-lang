@@ -22,5 +22,5 @@ jobs:
             ~/.rustup
           key: ${{ env.cache-name }}-${{ hashFiles('**/Cargo.toml') }}
       - run: cargo build
-      - run: cargo test
+      - run: cargo test --features "fuzz,smart-cookie"
       - run: cargo clippy -- -Dwarnings
