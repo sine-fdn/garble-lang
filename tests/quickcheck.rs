@@ -1,290 +1,206 @@
-#![cfg(feature = "fuzz")]
-
 use garble::{
+    ast::Op::{self, *},
     compile,
     eval::{EvalError, Evaluator},
+    literal::Literal::{self, NumSigned, NumUnsigned},
+    token::{SignedNumType::*, UnsignedNumType::*},
+    typed_ast::Type,
     Error,
 };
+use quickcheck::Arbitrary;
 use quickcheck_macros::quickcheck;
 
-#[macro_export]
-macro_rules! quickcheck_for {
-    (
-        [$( $fn_name:ident($x: ident: $x_ty: ty, $y:ident: $y_ty: ty) -> $z_ty: ty), *],
-        $prg_ident:ident = $prg:literal,
-        $test_fn:block
-    ) => {
-        $(
-            #[quickcheck]
-            fn $fn_name($x: $x_ty, $y: $y_ty) -> Result<bool, Error> {
-                type RetTy = $z_ty;
-                let $prg_ident = format!($prg, stringify!($x_ty), stringify!($y_ty), stringify!($z_ty));
-                let (typed_prg, main_fn, circuit) = compile(&$prg_ident, "main")?;
-                let mut $prg_ident = Evaluator::new(&typed_prg, &main_fn, &circuit);
-                $prg_ident.parse_literal(&format!("{}{}", $x, stringify!($x_ty)))?;
-                $prg_ident.parse_literal(&format!("{}{}", $y, stringify!($y_ty)))?;
-                $test_fn
+#[derive(Debug, Clone)]
+struct OperatorTestCase {
+    x: Literal,
+    y: Literal,
+    result: Option<Literal>,
+    prg: String,
+}
+
+impl Arbitrary for OperatorTestCase {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        let ops = [
+            Add,
+            Sub,
+            Mul,
+            Div,
+            Mod,
+            BitAnd,
+            BitXor,
+            BitOr,
+            GreaterThan,
+            LessThan,
+            Eq,
+            NotEq,
+            ShiftLeft,
+            ShiftRight,
+        ];
+        let op = g.choose(&ops).unwrap();
+        let num_tys = [
+            Type::Unsigned(U8),
+            Type::Unsigned(U16),
+            Type::Unsigned(U32),
+            Type::Unsigned(U64),
+            Type::Unsigned(U128),
+            Type::Signed(I8),
+            Type::Signed(I16),
+            Type::Signed(I32),
+            Type::Signed(I64),
+            Type::Signed(I128),
+        ];
+        let (x, ty_x, y, ty_y, result, ty_result, op) = match op {
+            Add | Sub | Mul | Div | Mod | BitAnd | BitXor | BitOr => {
+                let ty = g.choose(&num_tys).unwrap();
+                let x = arbitrary_literal_of_ty(g, &ty);
+                let y = arbitrary_literal_of_ty(g, &ty);
+                let result = apply_operator(op, &x, &y);
+                (x, ty.clone(), y, ty.clone(), result, ty.clone(), op)
             }
-        )*
-    };
-}
-
-quickcheck_for! {
-    [
-        compile_add_u8(x: u8, y: u8) -> u8,
-        compile_add_u16(x: u16, y: u16) -> u16,
-        compile_add_u32(x: u32, y: u32) -> u32,
-        compile_add_u64(x: u64, y: u64) -> u64,
-        compile_add_u128(x: u128, y: u128) -> u128,
-        compile_add_i8(x: i8, y: i8) -> i8,
-        compile_add_i16(x: i16, y: i16) -> i16,
-        compile_add_i32(x: i32, y: i32) -> i32,
-        compile_add_i64(x: i64, y: i64) -> i64,
-        compile_add_i128(x: i128, y: i128) -> i128
-    ],
-    prg = "pub fn main(x: {}, y: {}) -> {} {{ x + y }}",
-    {
-        let output = prg.run()?;
-        match RetTy::try_from(output) {
-            Ok(output) => Ok(output == x + y),
-            Err(EvalError::Panic(_)) => Ok(x.checked_add(y).is_none()),
-            Err(e) => Err(e.into()),
-        }
+            GreaterThan | LessThan | Eq | NotEq => {
+                let ty = g.choose(&num_tys).unwrap();
+                let x = arbitrary_literal_of_ty(g, &ty);
+                let y = arbitrary_literal_of_ty(g, &ty);
+                let result = apply_operator(op, &x, &y);
+                (x, ty.clone(), y, ty.clone(), result, Type::Bool, op)
+            }
+            ShiftLeft => {
+                let ty = g.choose(&num_tys).unwrap();
+                let ty_u8 = Type::Unsigned(U8);
+                let x = arbitrary_literal_of_ty(g, &ty);
+                let y_u8 = u8::arbitrary(g);
+                let y = NumUnsigned(y_u8 as u128, U8);
+                let result = match x {
+                    NumUnsigned(x, unsigned_ty) => match unsigned_ty {
+                        Usize => unreachable!("usize types must not be tested"),
+                        U8 => (x as u8).checked_shl(y_u8 as u32).map(|z| z.into()),
+                        U16 => (x as u16).checked_shl(y_u8 as u32).map(|z| z.into()),
+                        U32 => (x as u32).checked_shl(y_u8 as u32).map(|z| z.into()),
+                        U64 => (x as u64).checked_shl(y_u8 as u32).map(|z| z.into()),
+                        U128 => x.checked_shl(y_u8 as u32).map(|z| z.into()),
+                    },
+                    NumSigned(x, signed_ty) => match signed_ty {
+                        I8 => (x as i8).checked_shl(y_u8 as u32).map(|z| z.into()),
+                        I16 => (x as i16).checked_shl(y_u8 as u32).map(|z| z.into()),
+                        I32 => (x as i32).checked_shl(y_u8 as u32).map(|z| z.into()),
+                        I64 => (x as i64).checked_shl(y_u8 as u32).map(|z| z.into()),
+                        I128 => x.checked_shl(y_u8 as u32).map(|z| z.into()),
+                    },
+                    _ => unreachable!("shift expects a num type"),
+                };
+                (x, ty.clone(), y, ty_u8.clone(), result, ty.clone(), op)
+            }
+            ShiftRight => {
+                let ty = g.choose(&num_tys).unwrap();
+                let ty_u8 = Type::Unsigned(U8);
+                let x = arbitrary_literal_of_ty(g, &ty);
+                let y_u8 = u8::arbitrary(g);
+                let y = NumUnsigned(y_u8 as u128, U8);
+                let result = match x {
+                    NumUnsigned(x, unsigned_ty) => match unsigned_ty {
+                        Usize => unreachable!("usize types must not be tested"),
+                        U8 => (x as u8).checked_shr(y_u8 as u32).map(|z| z.into()),
+                        U16 => (x as u16).checked_shr(y_u8 as u32).map(|z| z.into()),
+                        U32 => (x as u32).checked_shr(y_u8 as u32).map(|z| z.into()),
+                        U64 => (x as u64).checked_shr(y_u8 as u32).map(|z| z.into()),
+                        U128 => x.checked_shr(y_u8 as u32).map(|z| z.into()),
+                    },
+                    NumSigned(x, signed_ty) => match signed_ty {
+                        I8 => (x as i8).checked_shr(y_u8 as u32).map(|z| z.into()),
+                        I16 => (x as i16).checked_shr(y_u8 as u32).map(|z| z.into()),
+                        I32 => (x as i32).checked_shr(y_u8 as u32).map(|z| z.into()),
+                        I64 => (x as i64).checked_shr(y_u8 as u32).map(|z| z.into()),
+                        I128 => x.checked_shr(y_u8 as u32).map(|z| z.into()),
+                    },
+                    _ => unreachable!("shift expects a num type"),
+                };
+                (x, ty.clone(), y, ty_u8.clone(), result, ty.clone(), op)
+            }
+            ShortCircuitAnd | ShortCircuitOr => unreachable!("&& and || expect bool types"),
+        };
+        let prg = format!("pub fn main(x: {ty_x}, y: {ty_y}) -> {ty_result} {{ x {op} y }}");
+        OperatorTestCase { x, y, result, prg }
     }
 }
 
-quickcheck_for! {
-    [
-        compile_sub_u8(x: u8, y: u8) -> u8,
-        compile_sub_u16(x: u16, y: u16) -> u16,
-        compile_sub_u32(x: u32, y: u32) -> u32,
-        compile_sub_u64(x: u64, y: u64) -> u64,
-        compile_sub_u128(x: u128, y: u128) -> u128,
-        compile_sub_i8(x: i8, y: i8) -> i8,
-        compile_sub_i16(x: i16, y: i16) -> i16,
-        compile_sub_i32(x: i32, y: i32) -> i32,
-        compile_sub_i64(x: i64, y: i64) -> i64,
-        compile_sub_i128(x: i128, y: i128) -> i128
-    ],
-    prg = "pub fn main(x: {}, y: {}) -> {} {{ x - y }}",
-    {
-        let output = prg.run()?;
-        match RetTy::try_from(output) {
-            Ok(output) => Ok(output == x - y),
-            Err(EvalError::Panic(_)) => Ok(x.checked_sub(y).is_none()),
-            Err(e) => Err(e.into()),
-        }
+fn arbitrary_literal_of_ty(g: &mut quickcheck::Gen, ty: &Type) -> Literal {
+    match ty {
+        Type::Unsigned(ty) => match ty {
+            Usize => unreachable!("usize is not supported"),
+            U8 => NumUnsigned(u8::arbitrary(g) as u128, *ty),
+            U16 => NumUnsigned(u16::arbitrary(g) as u128, *ty),
+            U32 => NumUnsigned(u32::arbitrary(g) as u128, *ty),
+            U64 => NumUnsigned(u64::arbitrary(g) as u128, *ty),
+            U128 => NumUnsigned(u128::arbitrary(g), *ty),
+        },
+        Type::Signed(ty) => match ty {
+            I8 => NumSigned(i8::arbitrary(g) as i128, *ty),
+            I16 => NumSigned(i16::arbitrary(g) as i128, *ty),
+            I32 => NumSigned(i32::arbitrary(g) as i128, *ty),
+            I64 => NumSigned(i64::arbitrary(g) as i128, *ty),
+            I128 => NumSigned(i128::arbitrary(g), *ty),
+        },
+        _ => unreachable!("only num types are supported"),
     }
 }
 
-quickcheck_for! {
-    [
-        compile_mul_u8(x: u8, y: u8) -> u8,
-        compile_mul_u16(x: u16, y: u16) -> u16,
-        compile_mul_u32(x: u32, y: u32) -> u32,
-        compile_mul_u64(x: u64, y: u64) -> u64,
-        compile_mul_u128(x: u128, y: u128) -> u128,
-        compile_mul_i8(x: i8, y: i8) -> i8,
-        compile_mul_i16(x: i16, y: i16) -> i16,
-        compile_mul_i32(x: i32, y: i32) -> i32,
-        compile_mul_i64(x: i64, y: i64) -> i64,
-        compile_mul_i128(x: i128, y: i128) -> i128
-    ],
-    prg = "pub fn main(x: {}, y: {}) -> {} {{ x * y }}",
-    {
-        let output = prg.run()?;
-        match RetTy::try_from(output) {
-            Ok(output) => Ok(output == x * y),
-            Err(EvalError::Panic(_)) => Ok(x.checked_mul(y).is_none()),
-            Err(e) => Err(e.into()),
-        }
+fn apply_operator(op: &Op, x: &Literal, y: &Literal) -> Option<Literal> {
+    match (x, y) {
+        (NumUnsigned(x, U8), NumUnsigned(y, U8)) => apply!(op, x: u8, y: u8),
+        (NumUnsigned(x, U16), NumUnsigned(y, U16)) => apply!(op, x: u16, y: u16),
+        (NumUnsigned(x, U32), NumUnsigned(y, U32)) => apply!(op, x: u32, y: u32),
+        (NumUnsigned(x, U64), NumUnsigned(y, U64)) => apply!(op, x: u64, y: u64),
+        (NumUnsigned(x, U128), NumUnsigned(y, U128)) => apply!(op, x: u128, y: u128),
+        (NumSigned(x, I8), NumSigned(y, I8)) => apply!(op, x: i8, y: i8),
+        (NumSigned(x, I16), NumSigned(y, I16)) => apply!(op, x: i16, y: i16),
+        (NumSigned(x, I32), NumSigned(y, I32)) => apply!(op, x: i32, y: i32),
+        (NumSigned(x, I64), NumSigned(y, I64)) => apply!(op, x: i64, y: i64),
+        (NumSigned(x, I128), NumSigned(y, I128)) => apply!(op, x: i128, y: i128),
+        (x, y) => unreachable!("Incompatible x and y: {x}, {y}"),
     }
 }
 
-quickcheck_for! {
-    [
-        compile_div_u8(x: u8, y: u8) -> u8,
-        compile_div_u16(x: u16, y: u16) -> u16,
-        compile_div_u32(x: u32, y: u32) -> u32,
-        compile_div_u64(x: u64, y: u64) -> u64,
-        compile_div_u128(x: u128, y: u128) -> u128,
-        compile_div_i8(x: i8, y: i8) -> i8,
-        compile_div_i16(x: i16, y: i16) -> i16,
-        compile_div_i32(x: i32, y: i32) -> i32,
-        compile_div_i64(x: i64, y: i64) -> i64,
-        compile_div_i128(x: i128, y: i128) -> i128
-    ],
-    prg = "pub fn main(x: {}, y: {}) -> {} {{ x / y }}",
-    {
-        let output = prg.run()?;
-        match RetTy::try_from(output) {
-            Ok(output) => Ok(output == x / y),
-            Err(EvalError::Panic(_)) => Ok(x.checked_div(y).is_none()),
-            Err(e) => Err(e.into()),
+#[macro_export]
+macro_rules! apply {
+    (
+        $op:ident, $x:ident:$x_ty:ty, $y:ident:$y_ty:ty
+    ) => {{
+        let $x = *$x as $x_ty;
+        let $y = *$y as $y_ty;
+        match $op {
+            Add => $x.checked_add($y).map(|z| Literal::from(z)),
+            Sub => $x.checked_sub($y).map(|z| Literal::from(z)),
+            Mul => $x.checked_mul($y).map(|z| Literal::from(z)),
+            Div => $x.checked_div($y).map(|z| Literal::from(z)),
+            Mod => $x.checked_rem($y).map(|z| Literal::from(z)),
+            BitAnd => Some($x & $y).map(|z| Literal::from(z)),
+            BitXor => Some($x ^ $y).map(|z| Literal::from(z)),
+            BitOr => Some($x | $y).map(|z| Literal::from(z)),
+            GreaterThan => Some($x > $y).map(|z| Literal::from(z)),
+            LessThan => Some($x < $y).map(|z| Literal::from(z)),
+            Eq => Some($x == $y).map(|z| Literal::from(z)),
+            NotEq => Some($x != $y).map(|z| Literal::from(z)),
+            ShiftLeft => $x.checked_shl($y as u32).map(|z| Literal::from(z)),
+            ShiftRight => $x.checked_shr($y as u32).map(|z| Literal::from(z)),
+            ShortCircuitAnd => unreachable!("&& can only be applied to bools"),
+            ShortCircuitOr => unreachable!("|| can only be applied to bools"),
         }
-    }
+    }};
 }
 
-quickcheck_for! {
-    [
-        compile_mod_u8(x: u8, y: u8) -> u8,
-        compile_mod_u16(x: u16, y: u16) -> u16,
-        compile_mod_u32(x: u32, y: u32) -> u32,
-        compile_mod_u64(x: u64, y: u64) -> u64,
-        compile_mod_u128(x: u128, y: u128) -> u128,
-        compile_mod_i8(x: i8, y: i8) -> i8,
-        compile_mod_i16(x: i16, y: i16) -> i16,
-        compile_mod_i32(x: i32, y: i32) -> i32,
-        compile_mod_i64(x: i64, y: i64) -> i64,
-        compile_mod_i128(x: i128, y: i128) -> i128
-    ],
-    prg = "pub fn main(x: {}, y: {}) -> {} {{ x % y }}",
-    {
-        let output = prg.run()?;
-        match RetTy::try_from(output) {
-            Ok(output) => Ok(output == x % y),
-            Err(EvalError::Panic(_)) => Ok(x.checked_rem(y).is_none()),
-            Err(e) => Err(e.into()),
-        }
+#[quickcheck]
+fn quickcheck_operator(test_case: OperatorTestCase) -> Result<(), Error> {
+    let OperatorTestCase { x, y, result, prg } = test_case;
+    let (typed_prg, main_fn, circuit) = compile(&prg, "main")?;
+    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    eval.set_literal(x)?;
+    eval.set_literal(y)?;
+    let output = eval.run()?;
+    let output = output.into_literal();
+    match output {
+        Ok(output) => assert_eq!(result, Some(output)),
+        Err(EvalError::Panic(_)) => assert_eq!(result, None),
+        Err(e) => return Err(e.into()),
     }
-}
-
-quickcheck_for! {
-    [
-        compile_shl_u8(x: u8, y: u8) -> u8,
-        compile_shl_u16(x: u16, y: u8) -> u16,
-        compile_shl_u32(x: u32, y: u8) -> u32,
-        compile_shl_u64(x: u64, y: u8) -> u64,
-        compile_shl_u128(x: u128, y: u8) -> u128,
-        compile_shl_i8(x: i8, y: u8) -> i8,
-        compile_shl_i16(x: i16, y: u8) -> i16,
-        compile_shl_i32(x: i32, y: u8) -> i32,
-        compile_shl_i64(x: i64, y: u8) -> i64,
-        compile_shl_i128(x: i128, y: u8) -> i128
-    ],
-    prg = "pub fn main(x: {}, y: {}) -> {} {{ x << y }}",
-    {
-        let output = prg.run()?;
-        match RetTy::try_from(output) {
-            Ok(output) => Ok(output == x << y),
-            Err(EvalError::Panic(_)) => Ok(x.checked_shl(y as u32).is_none()),
-            Err(e) => Err(e.into()),
-        }
-    }
-}
-
-quickcheck_for! {
-    [
-        compile_shr_u8(x: u8, y: u8) -> u8,
-        compile_shr_u16(x: u16, y: u8) -> u16,
-        compile_shr_u32(x: u32, y: u8) -> u32,
-        compile_shr_u64(x: u64, y: u8) -> u64,
-        compile_shr_u128(x: u128, y: u8) -> u128,
-        compile_shr_i8(x: i8, y: u8) -> i8,
-        compile_shr_i16(x: i16, y: u8) -> i16,
-        compile_shr_i32(x: i32, y: u8) -> i32,
-        compile_shr_i64(x: i64, y: u8) -> i64,
-        compile_shr_i128(x: i128, y: u8) -> i128
-    ],
-    prg = "pub fn main(x: {}, y: {}) -> {} {{ x >> y }}",
-    {
-        let output = prg.run()?;
-        match RetTy::try_from(output) {
-            Ok(output) => Ok(output == x >> y),
-            Err(EvalError::Panic(_)) => Ok(x.checked_shr(y as u32).is_none()),
-            Err(e) => Err(e.into()),
-        }
-    }
-}
-
-quickcheck_for! {
-    [
-        compile_lt_u8(x: u8, y: u8) -> bool,
-        compile_lt_u16(x: u16, y: u16) -> bool,
-        compile_lt_u32(x: u32, y: u32) -> bool,
-        compile_lt_u64(x: u64, y: u64) -> bool,
-        compile_lt_u128(x: u128, y: u128) -> bool,
-        compile_lt_i8(x: i8, y: i8) -> bool,
-        compile_lt_i16(x: i16, y: i16) -> bool,
-        compile_lt_i32(x: i32, y: i32) -> bool,
-        compile_lt_i64(x: i64, y: i64) -> bool,
-        compile_lt_i128(x: i128, y: i128) -> bool
-    ],
-    prg = "pub fn main(x: {}, y: {}) -> {} {{ x < y }}",
-    {
-        let output = prg.run()?;
-        match RetTy::try_from(output) {
-            Ok(output) => Ok(output == (x < y)),
-            Err(e) => Err(e.into()),
-        }
-    }
-}
-
-quickcheck_for! {
-    [
-        compile_gt_u8(x: u8, y: u8) -> bool,
-        compile_gt_u16(x: u16, y: u16) -> bool,
-        compile_gt_u32(x: u32, y: u32) -> bool,
-        compile_gt_u64(x: u64, y: u64) -> bool,
-        compile_gt_u128(x: u128, y: u128) -> bool,
-        compile_gt_i8(x: i8, y: i8) -> bool,
-        compile_gt_i16(x: i16, y: i16) -> bool,
-        compile_gt_i32(x: i32, y: i32) -> bool,
-        compile_gt_i64(x: i64, y: i64) -> bool,
-        compile_gt_i128(x: i128, y: i128) -> bool
-    ],
-    prg = "pub fn main(x: {}, y: {}) -> {} {{ x > y }}",
-    {
-        let output = prg.run()?;
-        match RetTy::try_from(output) {
-            Ok(output) => Ok(output == (x > y)),
-            Err(e) => Err(e.into()),
-        }
-    }
-}
-
-quickcheck_for! {
-    [
-        compile_eq_u8(x: u8, y: u8) -> bool,
-        compile_eq_u16(x: u16, y: u16) -> bool,
-        compile_eq_u32(x: u32, y: u32) -> bool,
-        compile_eq_u64(x: u64, y: u64) -> bool,
-        compile_eq_u128(x: u128, y: u128) -> bool,
-        compile_eq_i8(x: i8, y: i8) -> bool,
-        compile_eq_i16(x: i16, y: i16) -> bool,
-        compile_eq_i32(x: i32, y: i32) -> bool,
-        compile_eq_i64(x: i64, y: i64) -> bool,
-        compile_eq_i128(x: i128, y: i128) -> bool
-    ],
-    prg = "pub fn main(x: {}, y: {}) -> {} {{ x == y }}",
-    {
-        let output = prg.run()?;
-        match RetTy::try_from(output) {
-            Ok(output) => Ok(output == (x == y)),
-            Err(e) => Err(e.into()),
-        }
-    }
-}
-
-quickcheck_for! {
-    [
-        compile_ne_u8(x: u8, y: u8) -> bool,
-        compile_ne_u16(x: u16, y: u16) -> bool,
-        compile_ne_u32(x: u32, y: u32) -> bool,
-        compile_ne_u64(x: u64, y: u64) -> bool,
-        compile_ne_u128(x: u128, y: u128) -> bool,
-        compile_ne_i8(x: i8, y: i8) -> bool,
-        compile_ne_i16(x: i16, y: i16) -> bool,
-        compile_ne_i32(x: i32, y: i32) -> bool,
-        compile_ne_i64(x: i64, y: i64) -> bool,
-        compile_ne_i128(x: i128, y: i128) -> bool
-    ],
-    prg = "pub fn main(x: {}, y: {}) -> {} {{ x != y }}",
-    {
-        let output = prg.run()?;
-        match RetTy::try_from(output) {
-            Ok(output) => Ok(output == (x != y)),
-            Err(e) => Err(e.into()),
-        }
-    }
+    Ok(())
 }

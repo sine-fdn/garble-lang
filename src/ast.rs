@@ -245,3 +245,26 @@ pub enum Op {
     /// Short-circuiting or (`||`).
     ShortCircuitOr,
 }
+
+impl std::fmt::Display for Op {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Op::Add => f.write_str("+"),
+            Op::Sub => f.write_str("-"),
+            Op::Mul => f.write_str("*"),
+            Op::Div => f.write_str("/"),
+            Op::Mod => f.write_str("%"),
+            Op::BitAnd => f.write_str("&"),
+            Op::BitXor => f.write_str("^"),
+            Op::BitOr => f.write_str("|"),
+            Op::GreaterThan => f.write_str(">"),
+            Op::LessThan => f.write_str("<"),
+            Op::Eq => f.write_str("=="),
+            Op::NotEq => f.write_str("!="),
+            Op::ShiftLeft => f.write_str("<<"),
+            Op::ShiftRight => f.write_str(">>"),
+            Op::ShortCircuitAnd => f.write_str("&&"),
+            Op::ShortCircuitOr => f.write_str("||"),
+        }
+    }
+}

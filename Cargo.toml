@@ -4,9 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-fuzz = ["quickcheck", "quickcheck_macros"]
 smart-cookie = []
 
-[dependencies]
-quickcheck = { version = "1", optional = true }
-quickcheck_macros = { version = "1", optional = true }
+[dev-dependencies]
+quickcheck = "1"
+quickcheck_macros = "1"
