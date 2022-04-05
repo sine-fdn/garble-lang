@@ -3,9 +3,6 @@ name = "garble"
 version = "0.1.0"
 edition = "2021"
 
-[features]
-smart-cookie = []
-
 [dev-dependencies]
 quickcheck = "1"
 quickcheck_macros = "1"
