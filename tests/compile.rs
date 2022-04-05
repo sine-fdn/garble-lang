@@ -1571,7 +1571,10 @@ pub fn main(x: i32) -> i32 {
         let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
         eval.set_i32(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
-        assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, expected);
+        assert_eq!(
+            i32::try_from(output).map_err(|e| pretty_print(e, prg))?,
+            expected
+        );
     }
     Ok(())
 }

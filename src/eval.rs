@@ -391,7 +391,7 @@ impl<'a> EvalOutput<'a> {
                 16 => (n as i16) as i128,
                 32 => (n as i32) as i128,
                 64 => (n as i64) as i128,
-                _ => n
+                _ => n,
             })
         } else {
             Err(EvalError::OutputTypeMismatch {
