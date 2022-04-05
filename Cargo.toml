@@ -3,4 +3,6 @@ name = "garble"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
+[dev-dependencies]
+quickcheck = "1"
+quickcheck_macros = "1"

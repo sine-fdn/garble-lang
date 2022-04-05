@@ -366,8 +366,8 @@ impl<'a> EvalOutput<'a> {
         let size = ty.size_in_bits_for_defs(self.program);
         if output.len() == size {
             let mut n = 0;
-            for (i, output) in output.iter().copied().take(size).enumerate() {
-                n += (output as u128) << (size - 1 - i);
+            for (i, output) in output.iter().copied().enumerate() {
+                n |= (output as u128) << (size - 1 - i);
             }
             Ok(n)
         } else {
@@ -383,10 +383,16 @@ impl<'a> EvalOutput<'a> {
         let size = ty.size_in_bits_for_defs(self.program);
         if output.len() == size {
             let mut n = 0;
-            for (i, output) in output.iter().copied().enumerate().take(size) {
-                n += (output as i128) << (size - 1 - i);
+            for (i, output) in output.iter().copied().enumerate() {
+                n |= (output as i128) << (size - 1 - i);
             }
-            Ok(n)
+            Ok(match size {
+                8 => (n as i8) as i128,
+                16 => (n as i16) as i128,
+                32 => (n as i32) as i128,
+                64 => (n as i64) as i128,
+                _ => n,
+            })
         } else {
             Err(EvalError::OutputTypeMismatch {
                 expected: ty,

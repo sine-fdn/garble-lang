@@ -41,13 +41,13 @@ pub fn main(_x: i32) -> i32 {
 #[test]
 fn optimize_same_expr() -> Result<(), String> {
     let unoptimized = "
-pub fn main(b: bool, x: i32) -> i32 {
-    if b { x % x } else { x % x }
+pub fn main(b: bool, x: i32) -> bool {
+    if b { x < x } else { x < x }
 }
 ";
     let optimized = "
-pub fn main(b: bool, x: i32) -> i32 {
-    let y = x % x;
+pub fn main(b: bool, x: i32) -> bool {
+    let y = x < x;
     if b { y } else { y }
 }
 ";

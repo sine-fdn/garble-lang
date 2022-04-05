@@ -438,6 +438,12 @@ impl Expr {
                         }
                     }
                     Op::Mod => {
+                        let mut all_zero = 1;
+                        for b in y.iter() {
+                            let eq = circuit.push_eq(*b, 0);
+                            all_zero = circuit.push_and(all_zero, eq);
+                        }
+                        circuit.push_panic_if(all_zero, PanicReason::DivByZero, *meta);
                         if is_signed(ty) {
                             circuit.push_signed_division_circuit(&mut x, &mut y).1
                         } else {

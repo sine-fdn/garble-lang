@@ -195,8 +195,8 @@ impl Literal {
                 let size = ty.size_in_bits_for_defs(checked);
                 if bits.len() == size {
                     let mut n = 0;
-                    for (i, output) in bits.iter().copied().take(size).enumerate() {
-                        n += (output as u128) << (size - 1 - i);
+                    for (i, output) in bits.iter().copied().enumerate() {
+                        n |= (output as u128) << (size - 1 - i);
                     }
                     Ok(Literal::NumUnsigned(n, *unsigned_ty))
                 } else {
@@ -210,9 +210,16 @@ impl Literal {
                 let size = ty.size_in_bits_for_defs(checked);
                 if bits.len() == size {
                     let mut n = 0;
-                    for (i, output) in bits.iter().copied().take(size).enumerate() {
-                        n += (output as i128) << (size - 1 - i);
+                    for (i, output) in bits.iter().copied().enumerate() {
+                        n |= (output as i128) << (size - 1 - i);
                     }
+                    let n = match size {
+                        8 => (n as i8) as i128,
+                        16 => (n as i16) as i128,
+                        32 => (n as i32) as i128,
+                        64 => (n as i64) as i128,
+                        _ => n,
+                    };
                     Ok(Literal::NumSigned(n, *signed_ty))
                 } else {
                     Err(EvalError::OutputTypeMismatch {
@@ -498,5 +505,75 @@ impl VariantExpr {
                 VariantLiteral::Tuple(fields.into_iter().map(|f| f.into_literal()).collect())
             }
         }
+    }
+}
+
+impl From<bool> for Literal {
+    fn from(b: bool) -> Self {
+        if b {
+            Literal::True
+        } else {
+            Literal::False
+        }
+    }
+}
+
+impl From<u8> for Literal {
+    fn from(n: u8) -> Self {
+        Literal::NumUnsigned(n as u128, UnsignedNumType::U8)
+    }
+}
+
+impl From<u16> for Literal {
+    fn from(n: u16) -> Self {
+        Literal::NumUnsigned(n as u128, UnsignedNumType::U16)
+    }
+}
+
+impl From<u32> for Literal {
+    fn from(n: u32) -> Self {
+        Literal::NumUnsigned(n as u128, UnsignedNumType::U32)
+    }
+}
+
+impl From<u64> for Literal {
+    fn from(n: u64) -> Self {
+        Literal::NumUnsigned(n as u128, UnsignedNumType::U64)
+    }
+}
+
+impl From<u128> for Literal {
+    fn from(n: u128) -> Self {
+        Literal::NumUnsigned(n, UnsignedNumType::U128)
+    }
+}
+
+impl From<i8> for Literal {
+    fn from(n: i8) -> Self {
+        Literal::NumSigned(n as i128, SignedNumType::I8)
+    }
+}
+
+impl From<i16> for Literal {
+    fn from(n: i16) -> Self {
+        Literal::NumSigned(n as i128, SignedNumType::I16)
+    }
+}
+
+impl From<i32> for Literal {
+    fn from(n: i32) -> Self {
+        Literal::NumSigned(n as i128, SignedNumType::I32)
+    }
+}
+
+impl From<i64> for Literal {
+    fn from(n: i64) -> Self {
+        Literal::NumSigned(n as i128, SignedNumType::I64)
+    }
+}
+
+impl From<i128> for Literal {
+    fn from(n: i128) -> Self {
+        Literal::NumSigned(n, SignedNumType::I128)
     }
 }
