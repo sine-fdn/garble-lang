@@ -7,7 +7,7 @@ use std::{
 };
 
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     check::{coerce_type, Defs, TopLevelTypes, TypedFns},
