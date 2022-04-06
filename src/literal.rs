@@ -390,8 +390,14 @@ impl Display for Literal {
         match self {
             Literal::True => write!(f, "true"),
             Literal::False => write!(f, "false"),
-            Literal::NumUnsigned(n, _) => write!(f, "{n}"),
-            Literal::NumSigned(n, _) => write!(f, "{n}"),
+            Literal::NumUnsigned(n, ty) => write!(f, "{n}{ty}"),
+            Literal::NumSigned(n, ty) => {
+                if let SignedNumType::I32 = ty {
+                    write!(f, "{n}")
+                } else {
+                    write!(f, "{n}{ty}")
+                }
+            }
             Literal::ArrayRepeat(elem, size) => write!(f, "[{elem}; {size}]"),
             Literal::Array(elems) => {
                 write!(f, "[")?;
