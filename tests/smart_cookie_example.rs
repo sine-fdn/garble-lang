@@ -56,10 +56,10 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
 
         let mut init_eval = Evaluator::new(&program, init_fn, &init_circuit);
         init_eval
-            .parse_literal("()")
+            .set_literal(website_signing_key.clone())
             .map_err(|e| pretty_print(e, &smart_cookie))?;
         init_eval
-            .set_literal(website_signing_key.clone())
+            .parse_literal("()")
             .map_err(|e| pretty_print(e, &smart_cookie))?;
         let mut user_state = init_eval
             .run()
@@ -71,9 +71,6 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
             println!("  {i}: logging '{interest}'");
             let mut log_interest_eval =
                 Evaluator::new(&program, log_interest_fn, &log_interest_circuit);
-            log_interest_eval
-                .set_literal(user_state)
-                .map_err(|e| pretty_print(e, &smart_cookie))?;
             let interest = Literal::Enum(
                 "UserInterest".to_string(),
                 interest.to_string(),
@@ -88,6 +85,9 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
                     ],
                 ))
                 .map_err(|e| pretty_print(e, &smart_cookie))?;
+            log_interest_eval
+                .set_literal(user_state)
+                .map_err(|e| pretty_print(e, &smart_cookie))?;
             let log_interest_result = log_interest_eval
                 .run()
                 .map_err(|e| pretty_print(e, &smart_cookie))?
@@ -100,10 +100,10 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
 
         let mut decide_ad_eval = Evaluator::new(&program, decide_ad_fn, &decide_ad_circuit);
         decide_ad_eval
-            .set_literal(user_state)
+            .set_literal(website_signing_key)
             .map_err(|e| pretty_print(e, &smart_cookie))?;
         decide_ad_eval
-            .set_literal(website_signing_key)
+            .set_literal(user_state)
             .map_err(|e| pretty_print(e, &smart_cookie))?;
         let ad_decision = decide_ad_eval
             .run()

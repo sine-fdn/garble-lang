@@ -1,4 +1,4 @@
-pub fn init(state: (), website_key: SigningKey) -> UserState {
+pub fn init(website_key: SigningKey, state: ()) -> UserState {
     let logged_interest_counter = 0u8;
     let interests = [UserInterest::None; 16];
     let signed = sign(interests, website_key);
@@ -8,7 +8,7 @@ pub fn init(state: (), website_key: SigningKey) -> UserState {
     }
 }
 
-pub fn log_interest(state: UserState, website_visit: WebsiteVisit) -> LogResult {
+pub fn log_interest(website_visit: WebsiteVisit, state: UserState) -> LogResult {
     if is_signature_ok(state, website_visit.key) {
         let interests = state.interests;
         let user_interest = website_visit.interest;
@@ -30,7 +30,7 @@ pub fn log_interest(state: UserState, website_visit: WebsiteVisit) -> LogResult 
     }
 }
 
-pub fn decide_ad(state: UserState, website_key: SigningKey) -> AdDecisionResult {
+pub fn decide_ad(website_key: SigningKey, state: UserState) -> AdDecisionResult {
     if is_signature_ok(state, website_key) {
         let sums = [0u8; 6]; // for the 6 user interests
         let interests = state.interests;
