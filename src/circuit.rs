@@ -752,8 +752,8 @@ impl CircuitBuilder {
 
     pub fn push_signed_division_circuit(
         &mut self,
-        x: &mut Vec<GateIndex>,
-        y: &mut Vec<GateIndex>,
+        x: &mut [GateIndex],
+        y: &mut [GateIndex],
     ) -> (Vec<GateIndex>, Vec<GateIndex>) {
         assert_eq!(x.len(), y.len());
         let bits = x.len();
