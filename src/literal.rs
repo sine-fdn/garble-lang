@@ -6,6 +6,9 @@ use std::{
     fmt::Display,
 };
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 use crate::{
     check::{coerce_type, Defs, TopLevelTypes, TypedFns},
     circuit::EvalPanic,
@@ -21,6 +24,7 @@ use crate::{
 /// A subset of [`crate::typed_ast::Expr`] that is used as input / output by an
 /// [`crate::eval::Evaluator`].
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Literal {
     /// Literal `true`.
     True,
@@ -46,6 +50,7 @@ pub enum Literal {
 
 /// A variant literal (either of unit type or containing fields), used by [`Literal::EnumLiteral`].
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum VariantLiteral {
     /// A unit variant, containing no fields.
     Unit,
