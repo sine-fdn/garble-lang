@@ -2,10 +2,14 @@
 
 use std::collections::HashMap;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 use crate::token::{MetaInfo, SignedNumType, UnsignedNumType};
 
 /// A program, consisting of top level definitions (enums or functions).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Program {
     /// Top level struct type definitions.
     pub struct_defs: HashMap<String, StructDef>,
@@ -17,6 +21,7 @@ pub struct Program {
 
 /// A top level struct type definition.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct StructDef {
     /// The variants of the enum type.
     pub fields: Vec<(String, PreliminaryType)>,
@@ -26,6 +31,7 @@ pub struct StructDef {
 
 /// A top level enum type definition.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct EnumDef {
     /// The variants of the enum type.
     pub variants: Vec<Variant>,
@@ -35,6 +41,7 @@ pub struct EnumDef {
 
 /// An enum variant.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Variant {
     /// A unit variant with the specified name, but containing no fields.
     Unit(String),
@@ -44,6 +51,7 @@ pub enum Variant {
 
 /// A top level function definition.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct FnDef {
     /// Whether or not the function is public.
     pub is_pub: bool,
@@ -61,10 +69,12 @@ pub struct FnDef {
 
 /// A parameter definition (parameter name and type).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ParamDef(pub String, pub PreliminaryType);
 
 /// Either a concrete type or a struct/enum that needs to be looked up in the definitions.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum PreliminaryType {
     /// Boolean type with the values true and false.
     Bool,
@@ -84,10 +94,12 @@ pub enum PreliminaryType {
 
 /// An expression and its location in the source code.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Expr(pub ExprEnum, pub MetaInfo);
 
 /// The different kinds of expressions.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ExprEnum {
     /// Literal `true`.
     True,
@@ -143,10 +155,12 @@ pub enum ExprEnum {
 
 /// A variant literal, used by [`ExprEnum::EnumLiteral`], with its location in the source code.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct VariantExpr(pub String, pub VariantExprEnum, pub MetaInfo);
 
 /// The different kinds of variant literals.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum VariantExprEnum {
     /// A unit variant, containing no fields.
     Unit,
@@ -156,10 +170,12 @@ pub enum VariantExprEnum {
 
 /// A (possibly nested) pattern used by [`ExprEnum::Match`], with its location in the source code.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Pattern(pub PatternEnum, pub MetaInfo);
 
 /// The different kinds of patterns.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum PatternEnum {
     /// A variable, always matches.
     Identifier(String),
@@ -189,6 +205,7 @@ pub enum PatternEnum {
 
 /// A non-first-flass closure, used only by [`ExprEnum::Map`] and [`ExprEnum::Fold`].
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Closure {
     /// The return type of the closure.
     pub ty: PreliminaryType,
@@ -202,6 +219,7 @@ pub struct Closure {
 
 /// The different kinds of unary operator.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum UnaryOp {
     /// Bitwise / logical negation (`!`).
     Not,
@@ -211,6 +229,7 @@ pub enum UnaryOp {
 
 /// the different kinds of binary operators.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Op {
     /// Addition (`+`).
     Add,
