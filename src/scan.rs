@@ -328,6 +328,7 @@ impl<'a> Scanner<'a> {
         false
     }
 
+    #[allow(clippy::wrong_self_convention)]
     fn is_empty(&mut self) -> bool {
         self.chars.peek().is_none()
     }
