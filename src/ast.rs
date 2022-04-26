@@ -99,8 +99,12 @@ pub struct Stmt(pub StmtEnum, pub MetaInfo);
 /// The different kinds of statements.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum StmtEnum {
-    /// Let expression, binds variables to expressions and evaluates the body with them in scope.
+    /// Let expression, binds variables to exprs.
     Let(Pattern, Expr),
+    /// Mutable let expression, bind a single variable to an expr.
+    LetMut(String, Expr),
+    /// Assignment of a (previously as mutable declared) variable
+    VarAssign(String, Expr),
     /// An expression (all expressions are statements, but not all statements expressions).
     Expr(Expr),
 }

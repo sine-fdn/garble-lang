@@ -87,7 +87,17 @@ impl Stmt {
                 pattern.compile(&binding, prg, env, circuit);
                 vec![]
             }
-            StmtEnum::Expr(expr) => expr.compile(prg, env, circuit)
+            StmtEnum::Expr(expr) => expr.compile(prg, env, circuit),
+            StmtEnum::LetMut(identifier, binding) => {
+                let binding = binding.compile(prg, env, circuit);
+                env.set(identifier.clone(), binding);
+                vec![]
+            }
+            StmtEnum::VarAssign(identifier, value) => {
+                let value = value.compile(prg, env, circuit);
+                env.set(identifier.clone(), value);
+                vec![]
+            }
         }
     }
 }

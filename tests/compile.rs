@@ -1578,3 +1578,22 @@ pub fn main(x: i32) -> i32 {
     }
     Ok(())
 }
+
+#[test]
+fn compile_mutable_bindings() -> Result<(), Error> {
+    let prg = "
+pub fn main(x: i32) -> i32 {
+    let mut y = 0;
+    y = x;
+    y
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    for x in -20..20 {
+        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        eval.set_i32(x);
+        let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+        assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, x);
+    }
+    Ok(())
+}

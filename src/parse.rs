@@ -292,22 +292,49 @@ impl Parser {
         let mut stmts = vec![];
         while !self.peek(&TokenEnum::RightBrace) {
             if let Some(meta) = self.next_matches(&TokenEnum::KeywordLet) {
-                // let <pattern> = <binding>;
-                let pattern = self.parse_pattern()?;
-                self.expect(&TokenEnum::Eq)?;
-                if let Ok(binding) = self.parse_expr() {
-                    let meta = join_meta(meta, binding.1);
-                    stmts.push(Stmt(StmtEnum::Let(pattern, binding), meta));
+                if self.next_matches(&TokenEnum::KeywordMut).is_some() {
+                    // let mut <identifier> = <binding>;
+                    let (identifier, _) = self.expect_identifier()?;
+                    self.expect(&TokenEnum::Eq)?;
+                    if let Ok(binding) = self.parse_expr() {
+                        let meta = join_meta(meta, binding.1);
+                        stmts.push(Stmt(StmtEnum::LetMut(identifier, binding), meta));
+                    } else {
+                        self.push_error_for_next(ParseErrorEnum::ExpectedStmt);
+                        self.consume_until_one_of(&[TokenEnum::Semicolon]);
+                        self.tokens.next();
+                        self.parse_expr()?;
+                    }
                 } else {
-                    self.push_error_for_next(ParseErrorEnum::ExpectedStmt);
-                    self.consume_until_one_of(&[TokenEnum::Semicolon]);
-                    self.tokens.next();
-                    self.parse_expr()?;
+                    // let <pattern> = <binding>;
+                    let pattern = self.parse_pattern()?;
+                    self.expect(&TokenEnum::Eq)?;
+                    if let Ok(binding) = self.parse_expr() {
+                        let meta = join_meta(meta, binding.1);
+                        stmts.push(Stmt(StmtEnum::Let(pattern, binding), meta));
+                    } else {
+                        self.push_error_for_next(ParseErrorEnum::ExpectedStmt);
+                        self.consume_until_one_of(&[TokenEnum::Semicolon]);
+                        self.tokens.next();
+                        self.parse_expr()?;
+                    }
                 }
             } else {
                 let expr = self.parse_expr()?;
                 let meta = expr.1;
-                stmts.push(Stmt(StmtEnum::Expr(expr), meta));
+                let stmt = if let Expr(ExprEnum::Identifier(identifier), identifier_meta) = expr {
+                    if self.next_matches(&TokenEnum::Eq).is_some() {
+                        let value = self.parse_expr()?;
+                        let meta = join_meta(identifier_meta, value.1);
+                        Stmt(StmtEnum::VarAssign(identifier, value), meta)
+                    } else {
+                        let expr = Expr(ExprEnum::Identifier(identifier), identifier_meta);
+                        Stmt(StmtEnum::Expr(expr), meta)
+                    }
+                } else {
+                    Stmt(StmtEnum::Expr(expr), meta)
+                };
+                stmts.push(stmt);
             }
             if !self.peek(&TokenEnum::RightBrace) {
                 self.expect(&TokenEnum::Semicolon)?;

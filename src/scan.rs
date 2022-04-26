@@ -279,6 +279,7 @@ impl<'a> Scanner<'a> {
                             "let" => self.push_token(TokenEnum::KeywordLet),
                             "if" => self.push_token(TokenEnum::KeywordIf),
                             "else" => self.push_token(TokenEnum::KeywordElse),
+                            "mut" => self.push_token(TokenEnum::KeywordMut),
                             "match" => self.push_token(TokenEnum::KeywordMatch),
                             "as" => self.push_token(TokenEnum::KeywordAs),
                             "pub" => self.push_token(TokenEnum::KeywordPub),

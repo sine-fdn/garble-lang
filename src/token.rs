@@ -32,6 +32,8 @@ pub enum TokenEnum {
     KeywordElse,
     /// `match` keyword.
     KeywordMatch,
+    /// `mut` keyword.
+    KeywordMut,
     /// `as` keyword.
     KeywordAs,
     /// `pub` keyword.
@@ -117,6 +119,7 @@ impl std::fmt::Display for TokenEnum {
             TokenEnum::KeywordLet => f.write_str("let"),
             TokenEnum::KeywordIf => f.write_str("if"),
             TokenEnum::KeywordElse => f.write_str("else"),
+            TokenEnum::KeywordMut => f.write_str("mut"),
             TokenEnum::KeywordMatch => f.write_str("match"),
             TokenEnum::KeywordAs => f.write_str("as"),
             TokenEnum::KeywordPub => f.write_str("pub"),

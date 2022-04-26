@@ -54,6 +54,8 @@ pub enum TypeErrorEnum {
     UnknownEnumVariant(String, String),
     /// No variable or function with the specified name exists in the current scope.
     UnknownIdentifier(String),
+    /// The identifier exists, but it was declared as immutable.
+    IdentifierNotDeclaredAsMutable(String),
     /// The index is larger than the specified tuple size.
     TupleAccessOutOfBounds(usize),
     /// A parameter name is used more than once in a function declaration.
@@ -143,6 +145,9 @@ impl std::fmt::Display for TypeErrorEnum {
             TypeErrorEnum::UnknownIdentifier(name) => {
                 f.write_fmt(format_args!("Unknown identifier '{name}'"))
             }
+            TypeErrorEnum::IdentifierNotDeclaredAsMutable(name) => {
+                f.write_fmt(format_args!("'{name}' exists, but was not declared as mutable"))
+            }
             TypeErrorEnum::TupleAccessOutOfBounds(size) => {
                 f.write_fmt(format_args!("The tuple only has {size} fields"))
             }
@@ -218,6 +223,15 @@ impl std::fmt::Display for TypeErrorEnum {
             }
         }
     }
+}
+
+/// Indicates whether a variable is declared as mutable.
+#[derive(Debug, Clone, Copy)]
+pub enum Mutability {
+    /// The variable is declared as mutable.
+    Mutable,
+    /// The variable is declared as immutable.
+    Immutable,
 }
 
 pub(crate) struct TopLevelTypes<'a> {
@@ -437,7 +451,7 @@ impl FnDef {
             }
             match ty.as_concrete_type(top_level_defs) {
                 Ok(ty) => {
-                    env.set(identifier.clone(), ty.clone());
+                    env.set(identifier.clone(), (ty.clone(), Mutability::Immutable));
                     params.push(typed_ast::ParamDef(identifier.clone(), ty));
                 }
                 Err(e) => {
@@ -477,7 +491,7 @@ fn type_check_block(
     block: &[Stmt],
     meta: MetaInfo,
     top_level_defs: &TopLevelTypes,
-    env: &mut Env<Type>,
+    env: &mut Env<(Type, Mutability)>,
     fns: &mut TypedFns,
     defs: &Defs,
 ) -> Result<(Vec<typed_ast::Stmt>, typed_ast::Expr), Vec<TypeError>> {
@@ -503,7 +517,7 @@ impl Stmt {
     pub(crate) fn type_check(
         &self,
         top_level_defs: &TopLevelTypes,
-        env: &mut Env<Type>,
+        env: &mut Env<(Type, Mutability)>,
         fns: &mut TypedFns,
         defs: &Defs,
     ) -> Result<typed_ast::Stmt, Vec<TypeError>> {
@@ -512,11 +526,42 @@ impl Stmt {
             ast::StmtEnum::Let(pattern, binding) => {
                 let binding = binding.type_check(top_level_defs, env, fns, defs)?;
                 let pattern = pattern.type_check(env, fns, defs, binding.1.clone())?;
-                Ok(typed_ast::Stmt(typed_ast::StmtEnum::Let(pattern, binding), meta))
+                Ok(typed_ast::Stmt(
+                    typed_ast::StmtEnum::Let(pattern, binding),
+                    meta,
+                ))
+            }
+            ast::StmtEnum::LetMut(identifier, binding) => {
+                let binding = binding.type_check(top_level_defs, env, fns, defs)?;
+                env.set(identifier.clone(), (binding.1.clone(), Mutability::Mutable));
+                Ok(typed_ast::Stmt(
+                    typed_ast::StmtEnum::LetMut(identifier.clone(), binding),
+                    meta,
+                ))
             }
             ast::StmtEnum::Expr(expr) => {
                 let expr = expr.type_check(top_level_defs, env, fns, defs)?;
                 Ok(typed_ast::Stmt(typed_ast::StmtEnum::Expr(expr), meta))
+            }
+            ast::StmtEnum::VarAssign(identifier, value) => {
+                if let Some((ty, Mutability::Mutable)) = env.get(identifier) {
+                    let mut value = value.type_check(top_level_defs, env, fns, defs)?;
+                    coerce_type(&mut value, &ty)?;
+                    Ok(typed_ast::Stmt(
+                        typed_ast::StmtEnum::VarAssign(identifier.clone(), value),
+                        meta,
+                    ))
+                } else if let Some((_, Mutability::Immutable)) = env.get(identifier) {
+                    return Err(vec![TypeError(
+                        TypeErrorEnum::IdentifierNotDeclaredAsMutable(identifier.clone()),
+                        meta,
+                    )]);
+                } else {
+                    return Err(vec![TypeError(
+                        TypeErrorEnum::UnknownIdentifier(identifier.clone()),
+                        meta,
+                    )]);
+                }
             }
         }
     }
@@ -526,7 +571,7 @@ impl Expr {
     pub(crate) fn type_check(
         &self,
         top_level_defs: &TopLevelTypes,
-        env: &mut Env<Type>,
+        env: &mut Env<(Type, Mutability)>,
         fns: &mut TypedFns,
         defs: &Defs,
     ) -> Result<typed_ast::Expr, Vec<TypeError>> {
@@ -544,7 +589,7 @@ impl Expr {
                 Type::Signed(*type_suffix),
             ),
             ExprEnum::Identifier(s) => {
-                if let Some(ty) = env.get(s) {
+                if let Some((ty, _mutability)) = env.get(s) {
                     (typed_ast::ExprEnum::Identifier(s.clone()), ty)
                 } else {
                     return Err(vec![TypeError(
@@ -882,8 +927,14 @@ impl Expr {
                 }
 
                 env.push();
-                env.set(acc_identifier.clone(), acc_param_ty.clone());
-                env.set(elem_identifier.clone(), elem_param_ty.clone());
+                env.set(
+                    acc_identifier.clone(),
+                    (acc_param_ty.clone(), Mutability::Immutable),
+                );
+                env.set(
+                    elem_identifier.clone(),
+                    (elem_param_ty.clone(), Mutability::Immutable),
+                );
                 let mut body = closure.body.type_check(top_level_defs, env, fns, defs)?;
                 unify(&mut init, &mut body, meta)?;
                 env.pop();
@@ -932,7 +983,10 @@ impl Expr {
                 }
 
                 env.push();
-                env.set(elem_identifier.clone(), elem_param_ty.clone());
+                env.set(
+                    elem_identifier.clone(),
+                    (elem_param_ty.clone(), Mutability::Immutable),
+                );
                 let mut body = closure.body.type_check(top_level_defs, env, fns, defs)?;
                 env.pop();
 
@@ -1181,7 +1235,7 @@ impl Expr {
 impl Pattern {
     fn type_check(
         &self,
-        env: &mut Env<Type>,
+        env: &mut Env<(Type, Mutability)>,
         fns: &mut TypedFns,
         defs: &Defs,
         ty: Type,
@@ -1190,7 +1244,7 @@ impl Pattern {
         let meta = *meta;
         let pattern = match pattern {
             PatternEnum::Identifier(s) => {
-                env.set(s.clone(), ty.clone());
+                env.set(s.clone(), (ty.clone(), Mutability::Immutable));
                 typed_ast::PatternEnum::Identifier(s.clone())
             }
             PatternEnum::True => {
