@@ -541,26 +541,37 @@ impl Parser {
             self.expect(&TokenEnum::LeftBrace)?;
 
             if let Ok(then_expr) = self.parse_block_as_expr() {
-                self.expect(&TokenEnum::RightBrace)?;
-                self.expect(&TokenEnum::KeywordElse)?;
+                let meta_right_brace = self.expect(&TokenEnum::RightBrace)?;
+                if self.next_matches(&TokenEnum::KeywordElse).is_some() {
+                    if self.peek(&TokenEnum::KeywordIf) {
+                        let elseif_expr = self.parse_block_as_expr()?;
+                        let meta = join_meta(meta, elseif_expr.1);
+                        Ok(Expr(
+                            ExprEnum::If(
+                                Box::new(cond_expr),
+                                Box::new(then_expr),
+                                Box::new(elseif_expr),
+                            ),
+                            meta,
+                        ))
+                    } else {
+                        self.expect(&TokenEnum::LeftBrace)?;
 
-                if self.peek(&TokenEnum::KeywordIf) {
-                    let elseif_expr = self.parse_block_as_expr()?;
-                    let meta = join_meta(meta, elseif_expr.1);
-                    Ok(Expr(
-                        ExprEnum::If(
-                            Box::new(cond_expr),
-                            Box::new(then_expr),
-                            Box::new(elseif_expr),
-                        ),
-                        meta,
-                    ))
+                        let else_expr = self.parse_block_as_expr()?;
+                        let meta_end = self.expect(&TokenEnum::RightBrace)?;
+                        let meta = join_meta(meta, meta_end);
+                        Ok(Expr(
+                            ExprEnum::If(
+                                Box::new(cond_expr),
+                                Box::new(then_expr),
+                                Box::new(else_expr),
+                            ),
+                            meta,
+                        ))
+                    }
                 } else {
-                    self.expect(&TokenEnum::LeftBrace)?;
-
-                    let else_expr = self.parse_block_as_expr()?;
-                    let meta_end = self.expect(&TokenEnum::RightBrace)?;
-                    let meta = join_meta(meta, meta_end);
+                    let meta = join_meta(meta, meta_right_brace);
+                    let else_expr = Expr(ExprEnum::TupleLiteral(vec![]), meta);
                     Ok(Expr(
                         ExprEnum::If(
                             Box::new(cond_expr),

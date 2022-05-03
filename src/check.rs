@@ -451,7 +451,7 @@ impl FnDef {
             }
             match ty.as_concrete_type(top_level_defs) {
                 Ok(ty) => {
-                    env.set(identifier.clone(), (ty.clone(), Mutability::Immutable));
+                    env.let_in_current_scope(identifier.clone(), (ty.clone(), Mutability::Immutable));
                     params.push(typed_ast::ParamDef(identifier.clone(), ty));
                 }
                 Err(e) => {
@@ -533,7 +533,7 @@ impl Stmt {
             }
             ast::StmtEnum::LetMut(identifier, binding) => {
                 let binding = binding.type_check(top_level_defs, env, fns, defs)?;
-                env.set(identifier.clone(), (binding.1.clone(), Mutability::Mutable));
+                env.let_in_current_scope(identifier.clone(), (binding.1.clone(), Mutability::Mutable));
                 Ok(typed_ast::Stmt(
                     typed_ast::StmtEnum::LetMut(identifier.clone(), binding),
                     meta,
@@ -546,7 +546,7 @@ impl Stmt {
             ast::StmtEnum::VarAssign(identifier, value) => {
                 if let Some((ty, Mutability::Mutable)) = env.get(identifier) {
                     let mut value = value.type_check(top_level_defs, env, fns, defs)?;
-                    coerce_type(&mut value, &ty)?;
+                    check_type(&mut value, &ty)?;
                     Ok(typed_ast::Stmt(
                         typed_ast::StmtEnum::VarAssign(identifier.clone(), value),
                         meta,
@@ -927,11 +927,11 @@ impl Expr {
                 }
 
                 env.push();
-                env.set(
+                env.let_in_current_scope(
                     acc_identifier.clone(),
                     (acc_param_ty.clone(), Mutability::Immutable),
                 );
-                env.set(
+                env.let_in_current_scope(
                     elem_identifier.clone(),
                     (elem_param_ty.clone(), Mutability::Immutable),
                 );
@@ -983,7 +983,7 @@ impl Expr {
                 }
 
                 env.push();
-                env.set(
+                env.let_in_current_scope(
                     elem_identifier.clone(),
                     (elem_param_ty.clone(), Mutability::Immutable),
                 );
@@ -1244,7 +1244,7 @@ impl Pattern {
         let meta = *meta;
         let pattern = match pattern {
             PatternEnum::Identifier(s) => {
-                env.set(s.clone(), (ty.clone(), Mutability::Immutable));
+                env.let_in_current_scope(s.clone(), (ty.clone(), Mutability::Immutable));
                 typed_ast::PatternEnum::Identifier(s.clone())
             }
             PatternEnum::True => {

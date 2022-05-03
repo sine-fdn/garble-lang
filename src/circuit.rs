@@ -1,6 +1,6 @@
 //! The circuit representation used by the compiler.
 
-use crate::{compile::wires_as_unsigned, token::MetaInfo};
+use crate::{compile::wires_as_unsigned, token::MetaInfo, env::Env};
 use std::collections::HashMap;
 
 // This module currently implements 4 very basic types of circuit optimizations:
@@ -510,6 +510,31 @@ impl CircuitBuilder {
             panic_gates.end_column[i] = self.push_mux(condition, if_true, if_false);
         }
         panic_gates
+    }
+
+    pub fn mux_envs(&mut self, condition: usize, a: Env<Vec<GateIndex>>, b: Env<Vec<GateIndex>>) -> Env<Vec<GateIndex>> {
+        if a.0.len() != b.0.len() {
+            panic!("Cannot mux environments with different scopes: {a:?} vs. {b:?}");
+        }
+        let mut muxed = Env(vec![]);
+        for (a, b) in a.0.iter().zip(b.0.iter()) {
+            muxed.push();
+            if a.len() != a.len() || !a.keys().all(|k| b.contains_key(k)) {
+                panic!("Scopes have different bindings: {a:?} vs {b:?}");
+            }
+            for (identifier, binding_a) in a {
+                let binding_b = b.get(identifier).unwrap();
+                if binding_a.len() != binding_b.len() {
+                    panic!("Bindings of variable '{identifier}' have different lengths: {binding_a:?} vs {binding_b:?}");
+                }
+                let mut binding = vec![0; binding_a.len()];
+                for (i, (&if_true, &if_false)) in binding_a.iter().zip(binding_b.iter()).enumerate() {
+                    binding[i] = self.push_mux(condition, if_true, if_false);
+                }
+                muxed.let_in_current_scope(identifier.clone(), binding);
+            }
+        }
+        muxed
     }
 
     // - Constant evaluation (e.g. x ^ 0 == x; x ^ x == 0)

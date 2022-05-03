@@ -48,7 +48,7 @@ impl Program {
                     wire += 1;
                 }
                 input_gates.push(type_size);
-                env.set(identifier.clone(), wires);
+                env.let_in_current_scope(identifier.clone(), wires);
             }
             let mut circuit = CircuitBuilder::new(input_gates);
             let output_gates = compile_block(&fn_def.body, &self, &mut env, &mut circuit);
@@ -90,12 +90,12 @@ impl Stmt {
             StmtEnum::Expr(expr) => expr.compile(prg, env, circuit),
             StmtEnum::LetMut(identifier, binding) => {
                 let binding = binding.compile(prg, env, circuit);
-                env.set(identifier.clone(), binding);
+                env.let_in_current_scope(identifier.clone(), binding);
                 vec![]
             }
             StmtEnum::VarAssign(identifier, value) => {
                 let value = value.compile(prg, env, circuit);
-                env.set(identifier.clone(), value);
+                env.assign_mut(identifier.clone(), value);
                 vec![]
             }
         }
@@ -543,7 +543,7 @@ impl Expr {
                 }
                 env.push();
                 for (var, binding) in bindings {
-                    env.set(var.clone(), binding);
+                    env.let_in_current_scope(var.clone(), binding);
                 }
                 let body = compile_block(&fn_def.body, prg, env, circuit);
                 env.pop();
@@ -555,12 +555,16 @@ impl Expr {
 
                 assert_eq!(condition.len(), 1);
                 let condition = condition[0];
+                let mut env_if_true = env.clone();
+                let mut env_if_false = env.clone();
 
-                let case_true = case_true.compile(prg, env, circuit);
+                let case_true = case_true.compile(prg, &mut env_if_true, circuit);
                 let panic_if_true = circuit.replace_panic_with(panic_before_branches.clone());
 
-                let case_false = case_false.compile(prg, env, circuit);
+                let case_false = case_false.compile(prg, &mut env_if_false, circuit);
                 let panic_if_false = circuit.replace_panic_with(panic_before_branches);
+
+                *env = circuit.mux_envs(condition, env_if_true, env_if_false);
 
                 let muxed_panic = circuit.mux_panic(condition, &panic_if_true, &panic_if_false);
                 circuit.replace_panic_with(muxed_panic);
@@ -600,8 +604,8 @@ impl Expr {
                 while i < array.len() {
                     let elem = &array[i..i + elem_bits];
                     env.push();
-                    env.set(init_identifier.clone(), acc);
-                    env.set(elem_identifier.clone(), elem.to_vec());
+                    env.let_in_current_scope(init_identifier.clone(), acc);
+                    env.let_in_current_scope(elem_identifier.clone(), elem.to_vec());
                     acc = closure.body.compile(prg, env, circuit);
                     env.pop();
                     i += elem_bits;
@@ -621,7 +625,7 @@ impl Expr {
                 while i < array.len() {
                     let elem_in = &array[i..i + elem_in_bits];
                     env.push();
-                    env.set(elem_identifier.clone(), elem_in.to_vec());
+                    env.let_in_current_scope(elem_identifier.clone(), elem_in.to_vec());
                     let elem_out = closure.body.compile(prg, env, circuit);
                     result.extend(elem_out);
                     env.pop();
@@ -669,27 +673,32 @@ impl Expr {
                 let mut has_prev_match = 0;
                 let mut muxed_ret_expr = vec![0; bits];
                 let mut muxed_panic = circuit.peek_panic().clone();
+                let mut muxed_env = env.clone();
 
                 for (pattern, ret_expr) in clauses {
+                    let mut env = env.clone();
                     env.push();
 
                     circuit.replace_panic_with(PanicResult::ok());
 
-                    let is_match = pattern.compile(&expr, prg, env, circuit);
-                    let ret_expr = ret_expr.compile(prg, env, circuit);
+                    let is_match = pattern.compile(&expr, prg, &mut env, circuit);
+                    let ret_expr = ret_expr.compile(prg, &mut env, circuit);
 
                     let no_prev_match = circuit.push_not(has_prev_match);
                     let s = circuit.push_and(no_prev_match, is_match);
 
+                    env.pop();
+
                     muxed_panic = circuit.mux_panic(s, &circuit.peek_panic().clone(), &muxed_panic);
+                    muxed_env = circuit.mux_envs(s, env, muxed_env);
                     for i in 0..bits {
                         let x0 = ret_expr[i];
                         let x1 = muxed_ret_expr[i];
                         muxed_ret_expr[i] = circuit.push_mux(s, x0, x1);
                     }
                     has_prev_match = circuit.push_or(has_prev_match, is_match);
-                    env.pop();
                 }
+                *env = muxed_env;
                 circuit.replace_panic_with(muxed_panic);
                 muxed_ret_expr
             }
@@ -735,7 +744,7 @@ impl Pattern {
         let Pattern(pattern, ty, _) = self;
         match pattern {
             PatternEnum::Identifier(s) => {
-                env.set(s.clone(), match_expr.to_vec());
+                env.let_in_current_scope(s.clone(), match_expr.to_vec());
                 1
             }
             PatternEnum::True => {

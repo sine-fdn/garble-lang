@@ -1471,11 +1471,19 @@ pub fn main(x: FooBarBaz) -> FooBarBaz {
 
     let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
     let ty = Type::Struct("FooBarBaz".to_string());
-    let input = Literal::parse(&typed_prg, &ty, "FooBarBaz { foo: 1i32, bar: 0u8, baz: true }")?;
+    let input = Literal::parse(
+        &typed_prg,
+        &ty,
+        "FooBarBaz { foo: 1i32, bar: 0u8, baz: true }",
+    )?;
     eval.set_literal(input)?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-    let expected = Literal::parse(&typed_prg, &ty, "FooBarBaz { foo: 1i32, bar: 1u8, baz: true }")?;
+    let expected = Literal::parse(
+        &typed_prg,
+        &ty,
+        "FooBarBaz { foo: 1i32, bar: 1u8, baz: true }",
+    )?;
     assert_eq!(r, expected);
     Ok(())
 }
@@ -1583,7 +1591,7 @@ pub fn main(x: i32) -> i32 {
 fn compile_mutable_bindings() -> Result<(), Error> {
     let prg = "
 pub fn main(x: i32) -> i32 {
-    let mut y = 0;
+    let mut y = 0i32;
     y = x;
     y
 }
@@ -1594,6 +1602,73 @@ pub fn main(x: i32) -> i32 {
         eval.set_i32(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, x);
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_mutable_bindings_inside_if() -> Result<(), Error> {
+    let prg = "
+pub fn main(x: i32, b: bool) -> i32 {
+    let mut y = 0i32;
+    if b {
+        y = x;
+    };
+    y
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    for b in [true, false] {
+        for x in -20..20 {
+            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            eval.set_i32(x);
+            eval.set_bool(b);
+            let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+            let expected = if b { x } else { 0 };
+            assert_eq!(
+                i32::try_from(output).map_err(|e| pretty_print(e, prg))?,
+                expected
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_mutable_bindings_inside_match() -> Result<(), Error> {
+    let prg = "
+pub fn main(x: i32) -> i32 {
+    let mut y = 0i32;
+    match x {
+        0i32 => {},
+        1i32..10i32 => {
+            y = 1i32;
+        },
+        10i32..100i32 => {
+            y = 2i32;
+        },
+        _ => {
+            y = 3i32;
+        }
+    };
+    y
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    for x in 0..110 {
+        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        eval.set_i32(x);
+        let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+        let expected = match x {
+            0 => 0,
+            1..=9 => 1,
+            10..=99 => 2,
+            _ => 3,
+        };
+        assert_eq!(
+            i32::try_from(output).map_err(|e| pretty_print(e, prg))?,
+            expected
+        );
     }
     Ok(())
 }
