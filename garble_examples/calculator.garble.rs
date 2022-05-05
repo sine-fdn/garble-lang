@@ -12,7 +12,7 @@ enum OpResult {
     DivByZero,
 }
 
-fn main(values: (u8, u8), op: Op) -> OpResult {
+pub fn main(values: (u8, u8), op: Op) -> OpResult {
     match (op, values) {
         (Op::Add, (x, y)) => OpResult::Ok(x + y),
         (Op::Sub, (x, y)) => OpResult::Ok(x - y),

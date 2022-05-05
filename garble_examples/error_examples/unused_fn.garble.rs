@@ -1,4 +1,4 @@
-fn main(x: u16) -> u16 {
+pub fn main(x: u16) -> u16 {
     x + 1
 }
 

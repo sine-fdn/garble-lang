@@ -13,7 +13,7 @@ enum Richest {
     Tie,
 }
 
-fn main(a: u64, b: u64) -> Richest {
+pub fn main(a: u64, b: u64) -> Richest {
     if a > b {
         Richest::IsA
     } else if b > a {
@@ -34,11 +34,11 @@ To execute the Millionaire's problem example, first install the `garble` utility
 
 ```sh
 $ cargo install --git https://github.com/sine-fdn/garble
-$ garble garble_examples/millionaires.garble.rs 10000000 10000
+$ garble garble_examples/millionaires.garble.rs 10000000u64 10000u64
 Richest::IsA
-$ garble garble_examples/millionaires.garble.rs 100 5000000
+$ garble garble_examples/millionaires.garble.rs 100u64 5000000u64
 Richest::IsB
-$ garble garble_examples/millionaires.garble.rs 1000 1000
+$ garble garble_examples/millionaires.garble.rs 1000u64 1000u64
 Richest::Tie
 ```
 
@@ -54,12 +54,4 @@ The Garble compiler is relatively straightforward and turns a program `&str` int
 
 ## Rough Edges
 
-Garble is still in a very early stage. The core language is usable, but the user experience leaves a lot to be desired. Some of the current pain points are:
-
-  - Lots of type casts necessary for unsigned and signed integers. Type coercion is currently very basic, it is often necessary to cast or to use typed literals (e.g. `1u32`).
-  - Panics not yet implemented for all cases, e.g. multiplication overflows simply return garbage data.
-  - Poor coverage of edge cases in the parser, some valid expressions cannot be parsed.
-  - Pattern exhaustiveness check, but no detailed exhaustiveness reporting.
-  - No first-class functions / lambdas / closures.
-  - Only basic error reporting.
-  - No structs.
+Garble is still in a very early stage. The core language is usable, but the user experience leaves a lot to be desired. Some of the error messages can be cryptic and especially in the case of type errors the first error may produce quite a few unrelated subsequent errors. Additionally, Garble does not support type coercion for integers, so you have to manually specify the bit width of each number (`2u8` for the unsigned number 2 with 8 bits, `3i32` for the signed number 3 with 32 bits, etc.)
