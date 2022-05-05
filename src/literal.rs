@@ -10,7 +10,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    check::{coerce_type, Defs, TopLevelTypes, TypedFns},
+    check::{check_type, Defs, TopLevelTypes, TypedFns},
     circuit::EvalPanic,
     compile::{enum_max_size, enum_tag_number, enum_tag_size, signed_to_bits, unsigned_to_bits},
     env::Env,
@@ -79,7 +79,7 @@ impl Literal {
                 errs.sort();
                 errs
             })?;
-        coerce_type(&mut expr, ty)?;
+        check_type(&mut expr, ty)?;
         expr.1 = ty.clone();
         Ok(expr.into_literal())
     }

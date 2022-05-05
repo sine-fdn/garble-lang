@@ -180,9 +180,9 @@ pub enum ExprEnum {
     /// Literal `false`.
     False,
     /// Unsigned number literal.
-    NumUnsigned(u128, Option<UnsignedNumType>),
+    NumUnsigned(u128, UnsignedNumType),
     /// Signed number literal.
-    NumSigned(i128, Option<SignedNumType>),
+    NumSigned(i128, SignedNumType),
     /// Identifier (either a variable or a function).
     Identifier(String),
     /// Array literal which explicitly specifies all of its elements.
