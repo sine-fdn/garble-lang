@@ -34,11 +34,11 @@ To execute the Millionaire's problem example, first install the `garble` utility
 
 ```sh
 $ cargo install --git https://github.com/sine-fdn/garble
-$ garble garble_examples/millionaires.garble.rs 10000000u64 10000u64
+$ garble garble_examples/millionaires.garble.rs main 10000000u64 10000u64
 Richest::IsA
-$ garble garble_examples/millionaires.garble.rs 100u64 5000000u64
+$ garble garble_examples/millionaires.garble.rs main 100u64 5000000u64
 Richest::IsB
-$ garble garble_examples/millionaires.garble.rs 1000u64 1000u64
+$ garble garble_examples/millionaires.garble.rs main 1000u64 1000u64
 Richest::Tie
 ```
 

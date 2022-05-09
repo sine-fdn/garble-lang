@@ -221,7 +221,7 @@ impl<'a> Scanner<'a> {
                             while let Some(char) = self.next_matches_alphanumeric() {
                                 literal_suffix.push(char);
                             }
-                            if literal_suffix == "" && n <= u32::MAX as u128 {
+                            if literal_suffix.is_empty() && n <= u32::MAX as u128 {
                                 self.push_token(TokenEnum::ConstantIndexOrSize(n as u32));
                             } else {
                                 let token = match literal_suffix.as_str() {

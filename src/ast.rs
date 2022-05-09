@@ -150,7 +150,7 @@ pub enum ExprEnum {
     /// `map`s the specified array with the specified 1-param closure.
     Map(Box<Expr>, Box<Closure>),
     /// Range of numbers from the specified min (inclusive) to the specified max (exclusive).
-    Range(usize, usize),
+    Range((u128, UnsignedNumType), (u128, UnsignedNumType)),
 }
 
 /// A variant literal, used by [`ExprEnum::EnumLiteral`], with its location in the source code.

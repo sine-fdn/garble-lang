@@ -1005,7 +1005,7 @@ fn compile_range() -> Result<(), Error> {
     let prg = "
 pub fn main(_x: u8) -> i16 {
     let arr = 1u8..101u8;
-    arr.fold(0i16, |acc: i16, x: usize| -> i16 {
+    arr.fold(0i16, |acc: i16, x: u8| -> i16 {
         acc + (x as i16)
     })
 }

@@ -847,7 +847,10 @@ impl Parser {
                 let i = *i;
                 let meta = *meta;
                 self.tokens.next();
-                let index = Expr(ExprEnum::NumUnsigned(i as u128, UnsignedNumType::Usize), meta);
+                let index = Expr(
+                    ExprEnum::NumUnsigned(i as u128, UnsignedNumType::Usize),
+                    meta,
+                );
                 let end = self.expect(&TokenEnum::RightBracket)?;
                 let meta = join_meta(expr.1, end);
                 expr = Expr(ExprEnum::ArrayAccess(Box::new(expr), Box::new(index)), meta);
@@ -966,27 +969,23 @@ impl Parser {
                     }
                 }
             },
-            TokenEnum::UnsignedNum(n, type_suffix) => {
+            TokenEnum::UnsignedNum(n, n_suffix) => {
                 if self.next_matches(&TokenEnum::DoubleDot).is_some() {
-                    if let Some(Token(TokenEnum::UnsignedNum(range_end, _), meta_end)) =
+                    if let Some(Token(TokenEnum::UnsignedNum(range_end, range_end_suffix), meta_end)) =
                         self.tokens.peek()
                     {
                         let range_end = *range_end;
+                        let range_end_suffix = *range_end_suffix;
                         let meta_end = *meta_end;
                         self.tokens.next();
-                        if n < usize::MAX as u128 && range_end < usize::MAX as u128 {
-                            let meta = join_meta(meta, meta_end);
-                            Expr(ExprEnum::Range(n as usize, range_end as usize), meta)
-                        } else {
-                            self.push_error(ParseErrorEnum::InvalidRangeExpr, meta_end);
-                            return Err(());
-                        }
+                        let meta = join_meta(meta, meta_end);
+                        Expr(ExprEnum::Range((n, n_suffix), (range_end, range_end_suffix)), meta)
                     } else {
                         self.push_error_for_next(ParseErrorEnum::InvalidRangeExpr);
                         return Err(());
                     }
                 } else {
-                    Expr(ExprEnum::NumUnsigned(n, type_suffix), meta)
+                    Expr(ExprEnum::NumUnsigned(n, n_suffix), meta)
                 }
             }
             TokenEnum::SignedNum(n, type_suffix) => Expr(ExprEnum::NumSigned(n, type_suffix), meta),

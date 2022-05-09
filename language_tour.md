@@ -46,22 +46,22 @@ Garble supports two forms of control flow: if/else and pattern matching. Both fo
 
 ```rust
 pub fn main(x: i32) -> i32 {
-    if x < 0 {
-        -1
-    } else if x == 0 {
-        0
+    if x < 0i32 {
+        -1i32
+    } else if x == 0i32 {
+        0i32
     } else {
-        1
+        1i32
     }
 }
 ```
 
-An here is pattern matching on numbers (see below for examples of pattern matching on tuples and enums):
+And here is pattern matching on numbers (see below for examples of pattern matching on tuples and enums):
 
 ```rust
 pub fn main(x: i32) -> i32 {
     match x {
-        0 => 1,
+        0i32 => 1i32,
         x => x,
     }
 }
@@ -75,7 +75,7 @@ pub fn main(x: u16) -> u16 {
 }
 
 fn inc(x: u16) -> u16 {
-    add(x, 1)
+    add(x, 1u16)
 }
 
 fn add(x: u16, y: u16) -> u16 {
@@ -92,14 +92,14 @@ Type error on line 3:2.
 Function 'inc' is declared but never used:
 
        | pub fn main(x: u16) -> u16 {
-       |     x + 1
+       |     x + 1u16
    3 > | }
      > |
    4 > |
      > |
    5 > | fn inc(x: u16) -> u16 {
      > | ^^^^^^^^^^^^^^^^^^^^^^^
-   6 > |     add(x, 1)
+   6 > |     add(x, 1u16)
      > | ^^^^^^^^^^^^^
    7 > | }
      > | ^
@@ -108,21 +108,21 @@ Function 'inc' is declared but never used:
 
 ## Primitive Types
 
-Garble supports a number of primitive types: Booleans (`bool`), unsigned integers of different bit lengths (`u8`, `u16`, `u32`, `u64`, `u128`, `usize`) and signed integers of different bit lengths (`i8`, `i16`, `i32`, `i64`, `i128`). If no type is specified, numbers are `i32` by default. Primitive types support the usual logical, bitwise and arithmetic operations:
+Garble supports a number of primitive types: Booleans (`bool`), unsigned integers of different bit lengths (`u8`, `u16`, `u32`, `u64`, `u128`, `usize`) and signed integers of different bit lengths (`i8`, `i16`, `i32`, `i64`, `i128`). Note that in contrast to Rust, the type suffix of numbers must always be specified (there is no automatic type coercion), except for tuple/array sizes or indexes (see below). Primitive types support the usual logical, bitwise and arithmetic operations:
 
 ```rust
 pub fn main(_a: i32, _b: i32) -> i32 {
-    let add = 0 + 1;
-    let sub = 1 - 1;
-    let mul = 2 * 1;
-    let div = 2 / 1;
-    let rem = 5 % 2;
+    let add = 0i32 + 1i32;
+    let sub = 1i32 - 1i32;
+    let mul = 2i32 * 1i32;
+    let div = 2i32 / 1i32;
+    let rem = 5i32 % 2i32;
 
-    let bit_xor = 4 ^ 6;
-    let bit_and = 4 & 6;
-    let bit_or = 4 | 6;
-    let bit_shiftl = 4 << 1;
-    let bit_shiftr = 4 >> 1;
+    let bit_xor = 4i32 ^ 6i32;
+    let bit_and = 4i32 & 6i32;
+    let bit_or = 4i32 | 6i32;
+    let bit_shiftl = 4i32 << 1i32;
+    let bit_shiftr = 4i32 >> 1i32;
 
     let and = true & false;
     let or = true | false;
@@ -130,20 +130,20 @@ pub fn main(_a: i32, _b: i32) -> i32 {
     let eq = true == false;
     let neq = true != false;
 
-    let gt = 5 > 4;
-    let lt = 4 < 5;
-    let gte = 5 >= 4;
-    let lte = 4 <= 5;
+    let gt = 5i32 > 4i32;
+    let lt = 4i32 < 5i32;
+    let gte = 5i32 >= 4i32;
+    let lte = 4i32 <= 5i32;
 
     let unary_not = !true;
-    let unary_minus = -5;
-    let unary_bitflip = !5;
+    let unary_minus = -5i32;
+    let unary_bitflip = !5i32;
 
-    0
+    0i32
 }
 ```
 
-Garble does not do a lot of type coercions, so it is often necessary to either explicitly cast integers to the desired type or declare the type explicitly as part of the literal, with the type directly following the number:
+Since Garble does not support automatic type coercions, it is often necessary to explicitly cast integers to the desired type:
 
 ```rust
 pub fn main(a: i32, b: u32) -> i64 {
@@ -169,7 +169,7 @@ Panic due to Overflow on line 17:43.
 
 Several collection types are supported: Fixed-size arrays, ranges, tuples, structs and enums. Let's look at each of them in turn:
 
-Arrays can be initialized either by explicitly listing all elements (which must have the same type) or by using a 'repeat expression', which repeats a single element a number of times:
+Arrays can be initialized either by explicitly listing all elements (which must have the same type) or by using a 'repeat expression', which repeats a single element a number of times. Note that the size of an array is specified without any type suffix (`4`, not `4usize`):
 
 ```rust
 pub fn main(a: u32, b: u32) -> [u32; 4] {
@@ -179,28 +179,28 @@ pub fn main(a: u32, b: u32) -> [u32; 4] {
 }
 ```
 
-Arrays are indexed using `array[index]`, but an index can only be read, never reassigned. Instead, Garble supports a purely functional array update syntax using `array.update(index, value)`, which returns a new array with the specified index set to the new value:
+Arrays are indexed using `array[index]` (with a literal index being written without type suffix), but an index can only be read, never reassigned. Instead, Garble supports a purely functional array update syntax using `array.update(index, value)`, which returns a new array with the specified index set to the new value:
 
 ```rust
 pub fn main(replacement: i32) -> [i32; 4] {
-    let array1 = [10, 20, 30, 40];
-    let second_val = array1[1]; // will be `20`
+    let array1 = [10i32, 20i32, 30i32, 40i32];
+    let second_val = array1[1]; // will be `20i32`
     let array2 = array1.update(1, replacement);
-    let second_val = array1[1]; // will still be `20`
-    let second_val = array2[1]; // will be equal to `replacement`
+    let second_val = array1[1]; // will still be `20i32`
+    let second_val = array2[1]; // will be equal to the value of `replacement`
     array2
 }
 ```
 
-Ranges are a more convenient notation for arrays of continuous `usize` numbers, they are treated by Garble as arrays and have an array type. The minimum value of a range is inclusive, the maximum value exclusive:
+Ranges are a more convenient notation for arrays of continuous numbers. They are treated by Garble as arrays and have an array type. The minimum value of a range is inclusive, the maximum value exclusive:
 
 ```rust
 pub fn main(_a: i32) -> [usize; 5] {
-    10..15 // equal to `[10, 11, 12, 13, 14]`
+    10i32..15i32 // equivalent to `[10i32, 11i32, 12i32, 13i32, 14i32]`
 }
 ```
 
-Tuples can hold a fixed number of elements of heterogeneous types. Tuple fields are accessed using `tuple.index` or using let-destructuring (tuples are immutable, it is not possible to reassign a tuple field):
+Tuples can hold a fixed number of elements of heterogeneous types. Tuple fields are accessed using `.` followed by an index (without type suffix) or using let-destructuring (tuples are immutable, so it is not possible to reassign a tuple field):
 
 ```rust
 pub fn main(a: i32, b: u64) -> (i32, u64, i128) {
@@ -223,7 +223,7 @@ struct FooBar {
 }
 
 pub fn main(x: i32) -> i32 {
-    let foobar = FooBar { foo: x, bar: 2 };
+    let foobar = FooBar { foo: x, bar: 2i32 };
     foobar.bar
 }
 ```
@@ -243,7 +243,7 @@ enum OpResult {
 
 pub fn main(op: Op) -> OpResult {
     match op {
-        Op::Zero => OpResult::Ok(0),
+        Op::Zero => OpResult::Ok(0u8),
         Op::Div(x, 0u8) => OpResult::DivByZero,
         Op::Div(x, y) => OpResult::Ok(x / y),
     }
@@ -255,9 +255,24 @@ Pattern matching is also supported for tuples and range literals (but not arrays
 ```rust
 fn main(x: (bool, (u8, u8))) -> i32 {
     match x {
-        (false, _) => 0,
-        (_, (_, 0)) => 1,
-        (_, (x, y)) => (x as i32) + (y as i32) + 1,
+        (false, _) => 0i32,
+        (_, (_, 0u8)) => 1i32,
+        (_, (x, y)) => (x as i32) + (y as i32) + 1i32,
+    }
+}
+```
+
+Garble also supports inclusive-end ranges in patterns (but only there, not yet as array literals), using `..=` instead of `..`:
+
+```rust
+pub fn main(x: u8) -> u8 {
+    match x {
+        0u8..10u8 => 1u8,
+        10u8 => 2u8,
+        11u8 => 2u8,
+        13u8 => 2u8,
+        12u8..100u8 => 2u8,
+        100u8..=255u8 => 3u8,
     }
 }
 ```
@@ -276,12 +291,12 @@ The patterns are not exhaustive. Missing cases:
        | pub fn main(x: (bool, (u8, u8))) -> i32 {
    2 > |     match x {
      > |     ^^^^^^^^^
-   3 > |         (false, _) => 0,
-     > | ^^^^^^^^^^^^^^^^^^^^^^^^
-   4 > |         (_, (_, 0)) => 1,
-     > | ^^^^^^^^^^^^^^^^^^^^^^^^^
-   5 > |         (_, (0, y)) => 2,
-     > | ^^^^^^^^^^^^^^^^^^^^^^^^^
+   3 > |         (false, _) => 0u8,
+     > | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   4 > |         (_, (_, 0u8)) => 1u8,
+     > | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   5 > |         (_, (0u8, y)) => 2u8,
+     > | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    6 > |     }
      > | ^^^^^
        | }
@@ -294,9 +309,9 @@ Garble deliberately only implements a very restricted form of bounded recursion 
 ```rust
 fn main(nums: [u8; 5]) -> ([bool; 5], u16) {
     let greater_than_ten = nums.map(|n: u8| -> bool {
-        n > 10
+        n > 10u8
     });
-    let sum = nums.fold(0, |acc: u16, n: u8| -> u16 {
+    let sum = nums.fold(0u16, |acc: u16, n: u8| -> u16 {
         acc + (n as u16)
     });
     (greater_than_ten, sum)
