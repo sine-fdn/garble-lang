@@ -30,6 +30,7 @@ impl std::fmt::Display for ScanErrorEnum {
 }
 
 /// A stream of tokens.
+#[derive(Debug, Clone)]
 pub struct Tokens(pub Vec<Token>);
 
 /// Splits the source code into tokens (or returns scan errors).
@@ -155,6 +156,9 @@ impl<'a> Scanner<'a> {
                                 level += 1;
                             } else if self.next_matches('*') && self.next_matches('/') {
                                 level -= 1;
+                            } else if self.next_matches('\n') {
+                                self.line += 1;
+                                self.column = 0;
                             } else if !self.peek('*') && !self.peek('/') {
                                 self.advance();
                             }
