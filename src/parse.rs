@@ -349,6 +349,19 @@ impl Parser {
                         }
                         Stmt(StmtEnum::Expr(expr), meta)
                     }
+                } else if let Expr(ExprEnum::ArrayAccess(array, index), array_meta) = expr {
+                    if let (Expr(ExprEnum::Identifier(identifier), _), Some(_)) = (array.as_ref(), self.next_matches(&TokenEnum::Eq)) {
+                        let value = self.parse_expr()?;
+                        let meta = join_meta(array_meta, value.1);
+                        self.expect(&TokenEnum::Semicolon)?;
+                        Stmt(StmtEnum::ArrayAssign(identifier.clone(), *index, value), meta)
+                    } else {
+                        let expr = Expr(ExprEnum::ArrayAccess(array, index), array_meta);
+                        if !self.peek(&TokenEnum::RightBrace) {
+                            self.expect(&TokenEnum::Semicolon)?;
+                        }
+                        Stmt(StmtEnum::Expr(expr), meta)
+                    }
                 } else {
                     if !is_conditional && !self.peek(&TokenEnum::RightBrace) {
                         self.expect(&TokenEnum::Semicolon)?;

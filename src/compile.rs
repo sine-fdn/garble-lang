@@ -98,6 +98,54 @@ impl Stmt {
                 env.assign_mut(identifier.clone(), value);
                 vec![]
             }
+            StmtEnum::ArrayAssign(identifier, index, value) => {
+                let elem_bits = value.1.size_in_bits_for_defs(prg);
+                let mut array = env.get(identifier).unwrap();
+                let size = array.len() / elem_bits;
+                let mut index = index.compile(prg, env, circuit);
+                let value = value.compile(prg, env, circuit);
+                let index_bits = Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(prg);
+                extend_to_bits(
+                    &mut index,
+                    &Type::Unsigned(UnsignedNumType::Usize),
+                    index_bits,
+                );
+
+                let mut index_negated = vec![0; index.len()];
+                for (i, index) in index.iter().copied().enumerate() {
+                    index_negated[i] = circuit.push_not(index);
+                }
+                // for each array element...
+                for i in 0..size {
+                    // ...and each bit of that array element...
+                    for b in 0..elem_bits {
+                        // ...use a index-length chain of mux, select the value if index == i
+                        let mut x1 = value[b];
+                        for s in 0..index.len() {
+                            let s_must_be_negated = ((i >> (index.len() - s - 1)) & 1) > 0;
+                            let s = if s_must_be_negated {
+                                index_negated[s]
+                            } else {
+                                index[s]
+                            };
+                            // x0 is selected by the mux-chain whenever a single bit of index != i
+                            let x0 = array[i * elem_bits + b];
+                            // x1 is value[b] only if index == i in all bits
+                            x1 = circuit.push_mux(s, x0, x1);
+                        }
+                        array[i * elem_bits + b] = x1;
+                    }
+                }
+                let mut array_len = Vec::with_capacity(index_bits);
+                unsigned_to_bits(size as u128, index_bits, &mut array_len);
+                let array_len: Vec<usize> = array_len.into_iter().map(|b| b as usize).collect();
+                let (index_less_than_array_len, _) =
+                    circuit.push_comparator_circuit(index_bits, &index, false, &array_len, false);
+                let out_of_bounds = circuit.push_not(index_less_than_array_len);
+                circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, self.1);
+                env.assign_mut(identifier.clone(), array);
+                vec![]
+            }
             StmtEnum::ForEachLoop(var, array, body) => {
                 let elem_in_bits = match &array.1 {
                     Type::Array(elem_ty, _size) => elem_ty.size_in_bits_for_defs(prg),

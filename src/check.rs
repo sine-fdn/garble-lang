@@ -563,6 +563,31 @@ impl Stmt {
                     )]);
                 }
             }
+            ast::StmtEnum::ArrayAssign(identifier, index, value) => {
+                if let Some((array_ty, Mutability::Mutable)) = env.get(identifier) {
+                    let (elem_ty, _) = expect_array_type(&array_ty, meta)?;
+
+                    let mut index = index.type_check(top_level_defs, env, fns, defs)?;
+                    check_type(&mut index, &Type::Unsigned(UnsignedNumType::Usize))?;
+
+                    let mut value = value.type_check(top_level_defs, env, fns, defs)?;
+                    check_type(&mut value, &elem_ty)?;
+                    Ok(typed_ast::Stmt(
+                        typed_ast::StmtEnum::ArrayAssign(identifier.clone(), index, value),
+                        meta,
+                    ))
+                } else if let Some((_, Mutability::Immutable)) = env.get(identifier) {
+                    return Err(vec![TypeError(
+                        TypeErrorEnum::IdentifierNotDeclaredAsMutable(identifier.clone()),
+                        meta,
+                    )]);
+                } else {
+                    return Err(vec![TypeError(
+                        TypeErrorEnum::UnknownIdentifier(identifier.clone()),
+                        meta,
+                    )]);
+                }
+            }
             ast::StmtEnum::ForEachLoop(var, binding, body) => {
                 let binding = binding.type_check(top_level_defs, env, fns, defs)?;
                 let (elem_ty, _) = expect_array_type(&binding.1, meta)?;

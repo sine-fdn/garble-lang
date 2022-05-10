@@ -1,5 +1,5 @@
 use garble::{
-    compile, eval::Evaluator, literal::Literal, token::UnsignedNumType, typed_ast::Type, Error,
+    compile, eval::Evaluator, literal::Literal, token::{UnsignedNumType, SignedNumType}, typed_ast::Type, Error,
 };
 
 fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
@@ -1694,5 +1694,30 @@ pub fn main(x: i32) -> i32 {
             x + 0 + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9,
         );
     }
+    Ok(())
+}
+
+#[test]
+fn compile_array_assign_inside_for_loop() -> Result<(), Error> {
+    let prg = "
+pub fn main(_x: i32) -> [i32; 5] {
+    let mut array = [0i32; 5];
+    for i in 0u8..5u8 {
+        array[i as usize] = i as i32 * 2i32;
+    }
+    array
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    eval.set_i32(0);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
+    let expected = Literal::parse(
+        &typed_prg,
+        &Type::Array(Box::new(Type::Signed(SignedNumType::I32)), 5),
+        "[0i32, 2i32, 4i32, 6i32, 8i32]",
+    )?;
+    assert_eq!(r, expected);
     Ok(())
 }
