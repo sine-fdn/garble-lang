@@ -67,10 +67,10 @@ pub struct FnDef {
     pub meta: MetaInfo,
 }
 
-/// A parameter definition (parameter name and type).
+/// A parameter definition (mutability flag, parameter name and type).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct ParamDef(pub String, pub PreliminaryType);
+pub struct ParamDef(pub bool, pub String, pub PreliminaryType);
 
 /// Either a concrete type or a struct/enum that needs to be looked up in the definitions.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

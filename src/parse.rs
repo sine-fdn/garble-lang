@@ -281,11 +281,12 @@ impl Parser {
     }
 
     fn parse_param(&mut self) -> Result<ParamDef, ()> {
-        // <param>: <type>
+        // mut <param>: <type>
+        let is_mutable = self.next_matches(&TokenEnum::KeywordMut).is_some();
         let (param_name, _) = self.expect_identifier()?;
         self.expect(&TokenEnum::Colon)?;
         let (ty, _) = self.parse_type()?;
-        Ok(ParamDef(param_name, ty))
+        Ok(ParamDef(is_mutable, param_name, ty))
     }
 
     fn parse_stmt(&mut self) -> Result<Stmt, ()> {
@@ -1215,7 +1216,7 @@ impl Parser {
                 let closure_meta = join_meta(closure_start, closure_end);
                 let closure = Closure {
                     ty: ret_ty,
-                    params: vec![ParamDef(param_name, param_ty)],
+                    params: vec![ParamDef(false, param_name, param_ty)],
                     body,
                     meta: closure_meta,
                 };
@@ -1258,8 +1259,8 @@ impl Parser {
                 let closure = Closure {
                     ty: ret_ty,
                     params: vec![
-                        ParamDef(param1_name, param1_ty),
-                        ParamDef(param2_name, param2_ty),
+                        ParamDef(false, param1_name, param1_ty),
+                        ParamDef(false, param2_name, param2_ty),
                     ],
                     body,
                     meta: closure_meta,

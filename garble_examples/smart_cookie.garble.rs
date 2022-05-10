@@ -65,6 +65,44 @@ pub fn decide_ad(website_key: SigningKey, state: UserState) -> AdDecisionResult 
     }
 }
 
+struct UserState {
+    signature: [u8; 16],
+    interests: [UserInterest; 16],
+}
+
+struct WebsiteVisit {
+    interest: UserInterest,
+    key: SigningKey,
+}
+
+enum UserInterest {
+    None,
+    Luxury,
+    Cars,
+    Politics,
+    Sports,
+    Arts,
+}
+
+struct SigningKey {
+    key: [u8; 16],
+}
+
+enum LogResult {
+    InvalidSignature,
+    Ok(UserState),
+}
+
+enum AdDecisionResult {
+    InvalidSignature,
+    Ok(UserInterest),
+}
+
+struct MaxInterest {
+    index_of_variant: usize,
+    visits: u8,
+}
+
 fn interest_as_u8(interest: UserInterest) -> u8 {
     match interest {
         UserInterest::None => 0u8,
@@ -78,9 +116,10 @@ fn interest_as_u8(interest: UserInterest) -> u8 {
 }
 
 fn is_signature_ok(state: UserState, website_key: SigningKey) -> bool {
-    let bytes = state
-        .interests
-        .map(|interest: UserInterest| -> u8 { interest_as_u8(interest) });
+    let mut bytes = [0u8; 16];
+    for i in 0usize..16usize {
+        bytes[i] = interest_as_u8(state.interests[i]);
+    }
     let st = absorb(bytes);
     let st = absorb_cont(st, website_key.key);
     let hash = squeeze(st);
@@ -88,7 +127,10 @@ fn is_signature_ok(state: UserState, website_key: SigningKey) -> bool {
 }
 
 fn sign(interests: [UserInterest; 16], website_key: SigningKey) -> [u8; 16] {
-    let bytes = interests.map(|interest: UserInterest| -> u8 { interest_as_u8(interest) });
+    let mut bytes = [0u8; 16];
+    for i in 0usize..16usize {
+        bytes[i] = interest_as_u8(interests[i]);
+    }
     let st = absorb(bytes);
     let st = absorb_cont(st, website_key.key);
     let hash = squeeze(st);
@@ -108,44 +150,27 @@ fn absorb_cont(st: [u8; 48], bin: [u8; 16]) -> [u8; 48] {
 }
 
 fn swap(st: [u32; 12], a: usize, b: usize) -> [u32; 12] {
-    let st1 = st.update(a, st[b]);
-    let st2 = st1.update(b, st[a]);
-    st2
+    let mut st_updated = st;
+    st_updated[a] = st[b];
+    st_updated[b] = st[a];
+    st_updated
 }
 
-fn round(st: [u32; 12], round_key: u32) -> [u32; 12] {
-    // for i in 0..4 {
-    //    e[i] = rotate_right(st[i] ^ st[i + 4] ^ st[i + 8], 18);
-    //    e[i] ^= rotate_right(e[i], 9);
-    // }
-    let e = 0usize..4usize.map(|i: usize| -> u32 {
-        let e = rotate_right(st[i] ^ st[i + 4usize] ^ st[i + 8usize], 18u8);
-        let e = e ^ rotate_right(e, 9u8);
-        e
-    });
+fn round(mut st: [u32; 12], round_key: u32) -> [u32; 12] {
+    let mut e = [0u32; 4];
+    for i in 0usize..4usize {
+        e[i] = rotate_right(st[i] ^ st[i + 4usize] ^ st[i + 8usize], 18u8);
+        e[i] = e[i] ^ rotate_right(e[i], 9u8);
+    }
 
-    // for i in 0..12 {
-    //     st[i] ^= e[(i.wrapping_sub(1)) & 3];
-    // }
-    let st = [
-        st[0] ^ e[3],
-        st[1] ^ e[0],
-        st[2] ^ e[1],
-        st[3] ^ e[2],
-        st[4] ^ e[3],
-        st[5] ^ e[0],
-        st[6] ^ e[1],
-        st[7] ^ e[2],
-        st[8] ^ e[3],
-        st[9] ^ e[0],
-        st[10] ^ e[1],
-        st[11] ^ e[2],
-    ];
+    for i in 0usize..12usize {
+        st[i] = st[i] ^ e[(i + 3usize) % 4usize]
+    }
 
     let st = swap(st, 7usize, 4usize);
     let st = swap(st, 7usize, 5usize);
-    let st = swap(st, 7usize, 6usize);
-    let st = st.update(0usize, st[0] ^ round_key);
+    let mut st = swap(st, 7usize, 6usize);
+    st[0] = st[0] ^ round_key;
 
     // for i in 0..4 {
     //     let a = st[i];
@@ -286,42 +311,4 @@ fn add_bytes(st: [u8; 48], chunk: [u8; 16]) -> [u8; 48] {
     0usize..16usize.fold(st, |st: [u8; 48], i: usize| -> [u8; 48] {
         add_byte(st, chunk[i], i)
     })
-}
-
-struct UserState {
-    signature: [u8; 16],
-    interests: [UserInterest; 16],
-}
-
-struct WebsiteVisit {
-    interest: UserInterest,
-    key: SigningKey,
-}
-
-enum UserInterest {
-    None,
-    Luxury,
-    Cars,
-    Politics,
-    Sports,
-    Arts,
-}
-
-struct SigningKey {
-    key: [u8; 16],
-}
-
-enum LogResult {
-    InvalidSignature,
-    Ok(UserState),
-}
-
-enum AdDecisionResult {
-    InvalidSignature,
-    Ok(UserInterest),
-}
-
-struct MaxInterest {
-    index_of_variant: usize,
-    visits: u8,
 }

@@ -442,7 +442,7 @@ impl FnDef {
         let mut params = Vec::with_capacity(self.params.len());
         let mut param_identifiers = HashSet::new();
         for param in self.params.iter() {
-            let ParamDef(identifier, ty) = param;
+            let ParamDef(is_mutable, identifier, ty) = param;
             if param_identifiers.contains(identifier) {
                 let e = TypeErrorEnum::DuplicateFnParam(identifier.clone());
                 errors.push(TypeError(e, self.meta));
@@ -451,7 +451,12 @@ impl FnDef {
             }
             match ty.as_concrete_type(top_level_defs) {
                 Ok(ty) => {
-                    env.let_in_current_scope(identifier.clone(), (ty.clone(), Mutability::Immutable));
+                    let mutability = if *is_mutable {
+                        Mutability::Mutable
+                    } else {
+                        Mutability::Immutable
+                    };
+                    env.let_in_current_scope(identifier.clone(), (ty.clone(), mutability));
                     params.push(typed_ast::ParamDef(identifier.clone(), ty));
                 }
                 Err(e) => {
@@ -533,7 +538,10 @@ impl Stmt {
             }
             ast::StmtEnum::LetMut(identifier, binding) => {
                 let binding = binding.type_check(top_level_defs, env, fns, defs)?;
-                env.let_in_current_scope(identifier.clone(), (binding.1.clone(), Mutability::Mutable));
+                env.let_in_current_scope(
+                    identifier.clone(),
+                    (binding.1.clone(), Mutability::Mutable),
+                );
                 Ok(typed_ast::Stmt(
                     typed_ast::StmtEnum::LetMut(identifier.clone(), binding),
                     meta,
@@ -945,7 +953,7 @@ impl Expr {
                     .map_err(|e| vec![e])?;
                 let mut params = Vec::with_capacity(closure.params.len());
                 let mut param_types = Vec::with_capacity(closure.params.len());
-                for ParamDef(name, ty) in closure.params.iter() {
+                for ParamDef(_is_mutable, name, ty) in closure.params.iter() {
                     let ty = ty.as_concrete_type(top_level_defs).map_err(|e| vec![e])?;
                     params.push(typed_ast::ParamDef(name.clone(), ty.clone()));
                     param_types.push(ty);
@@ -1003,7 +1011,7 @@ impl Expr {
                     .map_err(|e| vec![e])?;
                 let mut params = Vec::with_capacity(closure.params.len());
                 let mut param_types = Vec::with_capacity(closure.params.len());
-                for ParamDef(name, ty) in closure.params.iter() {
+                for ParamDef(_is_mutable, name, ty) in closure.params.iter() {
                     let ty = ty.as_concrete_type(top_level_defs).map_err(|e| vec![e])?;
                     params.push(typed_ast::ParamDef(name.clone(), ty.clone()));
                     param_types.push(ty);
@@ -1055,7 +1063,10 @@ impl Expr {
                     return Err(vec![TypeError(e, meta)]);
                 }
                 let ty = Type::Array(Box::new(Type::Unsigned(*from_suffix)), (to - from) as usize);
-                (typed_ast::ExprEnum::Range((*from, *from_suffix), (*to, *to_suffix)), ty)
+                (
+                    typed_ast::ExprEnum::Range((*from, *from_suffix), (*to, *to_suffix)),
+                    ty,
+                )
             }
             ExprEnum::EnumLiteral(identifier, variant) => {
                 if let Some(enum_def) = defs.enums.get(identifier.as_str()) {
