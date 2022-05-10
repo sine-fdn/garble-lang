@@ -167,48 +167,39 @@ fn round(mut st: [u32; 12], round_key: u32) -> [u32; 12] {
         st[i] = st[i] ^ e[(i + 3usize) % 4usize]
     }
 
-    let st = swap(st, 7usize, 4usize);
-    let st = swap(st, 7usize, 5usize);
-    let mut st = swap(st, 7usize, 6usize);
+    st = swap(st, 7usize, 4usize);
+    st = swap(st, 7usize, 5usize);
+    st = swap(st, 7usize, 6usize);
     st[0] = st[0] ^ round_key;
 
-    // for i in 0..4 {
-    //     let a = st[i];
-    //     let b = st[i + 4];
-    //     let c = st[i + 8].rotate_right(21);
-    //     st[i + 8] = ((b & !a) ^ c).rotate_right(24);
-    //     st[i + 4] = ((a & !c) ^ b).rotate_right(31);
-    //     st[i] ^= c & !b;
-    // }
-    let st = 0usize..4usize.fold(st, |st: [u32; 12], i: usize| -> [u32; 12] {
+    for i in 0usize..4usize {
         let a = st[i];
         let b = st[i + 4usize];
         let c = rotate_right(st[i + 8usize], 21u8);
-        let st = st.update(i + 8usize, rotate_right((b & !a) ^ c, 24u8));
-        let st = st.update(i + 4usize, rotate_right((a & !c) ^ b, 31u8));
-        let st = st.update(i, st[i] ^ (c & !b));
-        st
-    });
+        st[i + 8usize] = rotate_right((b & !a) ^ c, 24u8);
+        st[i + 4usize] = rotate_right((a & !c) ^ b, 31u8);
+        st[i] = st[i] ^ (c & !b);
+    }
 
-    let st = swap(st, 8usize, 10usize);
-    let st = swap(st, 9usize, 11usize);
-
+    st = swap(st, 8usize, 10usize);
+    st = swap(st, 9usize, 11usize);
     st
 }
 
-fn permute(st: [u32; 12]) -> [u32; 12] {
+fn permute(mut st: [u32; 12]) -> [u32; 12] {
     let ROUND_KEYS = [
         88u32, 56u32, 960u32, 208u32, 288u32, 20u32, 96u32, 44u32, 896u32, 240u32, 416u32, 18u32,
     ];
 
-    0usize..12usize.fold(st, |st: [u32; 12], i: usize| -> [u32; 12] {
-        round(st, ROUND_KEYS[i])
-    })
+    for i in 0usize..12usize {
+        st = round(st, ROUND_KEYS[i])
+    }
+    st
 }
 
 fn squeeze(st: [u8; 48]) -> [u8; 16] {
-    let st = u8_to_u32_arr(st);
-    let st = permute(st);
+    let mut st = u8_to_u32_arr(st);
+    st = permute(st);
     [
         st[0] as u8,
         (st[0] >> 8u8) as u8,
@@ -229,10 +220,11 @@ fn squeeze(st: [u8; 48]) -> [u8; 16] {
     ]
 }
 
-fn down(st: [u8; 48], bin: [u8; 16], cd: u8) -> [u8; 48] {
-    let st = add_bytes(st, bin);
-    let st = add_byte(st, 1u8, 16usize);
-    add_byte(st, cd, 47usize)
+fn down(mut st: [u8; 48], bin: [u8; 16], cd: u8) -> [u8; 48] {
+    st = add_bytes(st, bin);
+    st = add_byte(st, 1u8, 16usize);
+    st = add_byte(st, cd, 47usize);
+    st
 }
 
 fn rotate_right(val: u32, rotation: u8) -> u32 {
@@ -240,60 +232,22 @@ fn rotate_right(val: u32, rotation: u8) -> u32 {
 }
 
 fn u8_to_u32_arr(st: [u8; 48]) -> [u32; 12] {
-    0usize..12usize.map(|i: usize| -> u32 { u8_to_u32(st, i * 4usize) })
+    let mut arr = [0u32; 12];
+    for i in 0usize..12usize {
+        u8_to_u32(st, i * 4usize)
+    }
+    arr
 }
 
 fn u32_to_u8_arr(st: [u32; 12]) -> [u8; 48] {
-    [
-        st[0] as u8,
-        (st[0] >> 8u8) as u8,
-        (st[0] >> 16u8) as u8,
-        (st[0] >> 24u8) as u8,
-        st[1] as u8,
-        (st[1] >> 8u8) as u8,
-        (st[1] >> 16u8) as u8,
-        (st[1] >> 24u8) as u8,
-        st[2] as u8,
-        (st[2] >> 8u8) as u8,
-        (st[2] >> 16u8) as u8,
-        (st[2] >> 24u8) as u8,
-        st[3] as u8,
-        (st[3] >> 8u8) as u8,
-        (st[3] >> 16u8) as u8,
-        (st[3] >> 24u8) as u8,
-        st[4] as u8,
-        (st[4] >> 8u8) as u8,
-        (st[4] >> 16u8) as u8,
-        (st[4] >> 24u8) as u8,
-        st[5] as u8,
-        (st[5] >> 8u8) as u8,
-        (st[5] >> 16u8) as u8,
-        (st[5] >> 24u8) as u8,
-        st[6] as u8,
-        (st[6] >> 8u8) as u8,
-        (st[6] >> 16u8) as u8,
-        (st[6] >> 24u8) as u8,
-        st[7] as u8,
-        (st[7] >> 8u8) as u8,
-        (st[7] >> 16u8) as u8,
-        (st[7] >> 24u8) as u8,
-        st[8] as u8,
-        (st[8] >> 8u8) as u8,
-        (st[8] >> 16u8) as u8,
-        (st[8] >> 24u8) as u8,
-        st[9] as u8,
-        (st[9] >> 8u8) as u8,
-        (st[9] >> 16u8) as u8,
-        (st[9] >> 24u8) as u8,
-        st[10] as u8,
-        (st[10] >> 8u8) as u8,
-        (st[10] >> 16u8) as u8,
-        (st[10] >> 24u8) as u8,
-        st[11] as u8,
-        (st[11] >> 8u8) as u8,
-        (st[11] >> 16u8) as u8,
-        (st[11] >> 24u8) as u8,
-    ]
+    let mut arr = [0u8; 48];
+    for i in 0usize..12usize {
+        arr[i * 4usize] = st[0] as u8;
+        arr[i * 4usize + 1usize] = (st[0] >> 8u8) as u8;
+        arr[i * 4usize + 2usize] = (st[0] >> 16u8) as u8;
+        arr[i * 4usize + 3usize] = (st[0] >> 24u8) as u8;
+    }
+    arr
 }
 
 fn u8_to_u32(st: [u8; 48], base_idx: usize) -> u32 {
@@ -303,12 +257,14 @@ fn u8_to_u32(st: [u8; 48], base_idx: usize) -> u32 {
         ^ ((st[base_idx + 3usize] as u32) << 24u8)
 }
 
-fn add_byte(st: [u8; 48], byte: u8, offset: usize) -> [u8; 48] {
-    st.update(offset, st[offset] ^ byte)
+fn add_byte(mut st: [u8; 48], byte: u8, offset: usize) -> [u8; 48] {
+    st[offset] = st[offset] ^ byte;
+    st
 }
 
-fn add_bytes(st: [u8; 48], chunk: [u8; 16]) -> [u8; 48] {
-    0usize..16usize.fold(st, |st: [u8; 48], i: usize| -> [u8; 48] {
-        add_byte(st, chunk[i], i)
-    })
+fn add_bytes(mut st: [u8; 48], chunk: [u8; 16]) -> [u8; 48] {
+    for i in 0usize..16usize {
+        st = add_byte(st, chunk[i], i);
+    }
+    st
 }
