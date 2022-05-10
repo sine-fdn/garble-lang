@@ -98,6 +98,27 @@ impl Stmt {
                 env.assign_mut(identifier.clone(), value);
                 vec![]
             }
+            StmtEnum::ForEachLoop(var, array, body) => {
+                let elem_in_bits = match &array.1 {
+                    Type::Array(elem_ty, _size) => elem_ty.size_in_bits_for_defs(prg),
+                    _ => panic!("Found a non-array value in an array access expr"),
+                };
+                env.push();
+                let array = array.compile(prg, env, circuit);
+
+                let mut i = 0;
+                while i < array.len() {
+                    let binding = &array[i..i + elem_in_bits];
+                    env.let_in_current_scope(var.clone(), binding.to_vec());
+
+                    for stmt in body {
+                        stmt.compile(prg, env, circuit);
+                    }
+                    i += elem_in_bits;
+                }
+                env.pop();
+                vec![]
+            }
         }
     }
 }

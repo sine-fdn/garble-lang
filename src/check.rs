@@ -563,6 +563,21 @@ impl Stmt {
                     )]);
                 }
             }
+            ast::StmtEnum::ForEachLoop(var, binding, body) => {
+                let binding = binding.type_check(top_level_defs, env, fns, defs)?;
+                let (elem_ty, _) = expect_array_type(&binding.1, meta)?;
+                let mut body_typed = Vec::with_capacity(body.len());
+                env.push();
+                env.let_in_current_scope(var.clone(), (elem_ty, Mutability::Immutable));
+                for stmt in body {
+                    body_typed.push(stmt.type_check(top_level_defs, env, fns, defs)?);
+                }
+                env.pop();
+                Ok(typed_ast::Stmt(
+                    typed_ast::StmtEnum::ForEachLoop(var.clone(), binding, body_typed),
+                    meta,
+                ))
+            }
         }
     }
 }

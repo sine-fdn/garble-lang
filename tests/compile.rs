@@ -1613,7 +1613,7 @@ pub fn main(x: i32, b: bool) -> i32 {
     let mut y = 0i32;
     if b {
         y = x;
-    };
+    }
     y
 }
 ";
@@ -1650,7 +1650,7 @@ pub fn main(x: i32) -> i32 {
         _ => {
             y = 3i32;
         }
-    };
+    }
     y
 }
 ";
@@ -1668,6 +1668,30 @@ pub fn main(x: i32) -> i32 {
         assert_eq!(
             i32::try_from(output).map_err(|e| pretty_print(e, prg))?,
             expected
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_for_loop() -> Result<(), Error> {
+    let prg = "
+pub fn main(x: i32) -> i32 {
+    let mut y = x;
+    for i in 0u8..10u8 {
+        y = y + i as i32;
+    }
+    y
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    for x in 0..110 {
+        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        eval.set_i32(x);
+        let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+        assert_eq!(
+            i32::try_from(output).map_err(|e| pretty_print(e, prg))?,
+            x + 0 + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9,
         );
     }
     Ok(())

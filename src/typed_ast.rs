@@ -190,6 +190,8 @@ pub enum StmtEnum {
     LetMut(String, Expr),
     /// Assignment of a (previously as mutable declared) variable
     VarAssign(String, Expr),
+    /// Binds an identifier to each value of an array expr, evaluating the body.
+    ForEachLoop(String, Expr, Vec<Stmt>),
     /// An expression (all expressions are statements, but not all statements expressions).
     Expr(Expr),
 }

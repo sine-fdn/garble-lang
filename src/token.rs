@@ -38,6 +38,10 @@ pub enum TokenEnum {
     KeywordAs,
     /// `pub` keyword.
     KeywordPub,
+    /// `for` keyword.
+    KeywordFor,
+    /// `in` keyword.
+    KeywordIn,
     /// `.`.
     Dot,
     /// `..`.
@@ -123,6 +127,8 @@ impl std::fmt::Display for TokenEnum {
             TokenEnum::KeywordMatch => f.write_str("match"),
             TokenEnum::KeywordAs => f.write_str("as"),
             TokenEnum::KeywordPub => f.write_str("pub"),
+            TokenEnum::KeywordFor => f.write_str("for"),
+            TokenEnum::KeywordIn => f.write_str("in"),
             TokenEnum::Dot => f.write_str("."),
             TokenEnum::DoubleDot => f.write_str(".."),
             TokenEnum::DoubleDotEquals => f.write_str("..="),
