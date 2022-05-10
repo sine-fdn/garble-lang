@@ -52,22 +52,22 @@ impl Arbitrary for OperatorTestCase {
         let (x, ty_x, y, ty_y, result, ty_result, op) = match op {
             Add | Sub | Mul | Div | Mod | BitAnd | BitXor | BitOr => {
                 let ty = g.choose(&num_tys).unwrap();
-                let x = arbitrary_literal_of_ty(g, &ty);
-                let y = arbitrary_literal_of_ty(g, &ty);
+                let x = arbitrary_literal_of_ty(g, ty);
+                let y = arbitrary_literal_of_ty(g, ty);
                 let result = apply_operator(op, &x, &y);
                 (x, ty.clone(), y, ty.clone(), result, ty.clone(), op)
             }
             GreaterThan | LessThan | Eq | NotEq => {
                 let ty = g.choose(&num_tys).unwrap();
-                let x = arbitrary_literal_of_ty(g, &ty);
-                let y = arbitrary_literal_of_ty(g, &ty);
+                let x = arbitrary_literal_of_ty(g, ty);
+                let y = arbitrary_literal_of_ty(g, ty);
                 let result = apply_operator(op, &x, &y);
                 (x, ty.clone(), y, ty.clone(), result, Type::Bool, op)
             }
             ShiftLeft => {
                 let ty = g.choose(&num_tys).unwrap();
                 let ty_u8 = Type::Unsigned(U8);
-                let x = arbitrary_literal_of_ty(g, &ty);
+                let x = arbitrary_literal_of_ty(g, ty);
                 let y_u8 = u8::arbitrary(g);
                 let y = NumUnsigned(y_u8 as u128, U8);
                 let result = match x {
@@ -88,12 +88,12 @@ impl Arbitrary for OperatorTestCase {
                     },
                     _ => unreachable!("shift expects a num type"),
                 };
-                (x, ty.clone(), y, ty_u8.clone(), result, ty.clone(), op)
+                (x, ty.clone(), y, ty_u8, result, ty.clone(), op)
             }
             ShiftRight => {
                 let ty = g.choose(&num_tys).unwrap();
                 let ty_u8 = Type::Unsigned(U8);
-                let x = arbitrary_literal_of_ty(g, &ty);
+                let x = arbitrary_literal_of_ty(g, ty);
                 let y_u8 = u8::arbitrary(g);
                 let y = NumUnsigned(y_u8 as u128, U8);
                 let result = match x {
@@ -114,7 +114,7 @@ impl Arbitrary for OperatorTestCase {
                     },
                     _ => unreachable!("shift expects a num type"),
                 };
-                (x, ty.clone(), y, ty_u8.clone(), result, ty.clone(), op)
+                (x, ty.clone(), y, ty_u8, result, ty.clone(), op)
             }
             ShortCircuitAnd | ShortCircuitOr => unreachable!("&& and || expect bool types"),
         };

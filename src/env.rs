@@ -1,5 +1,5 @@
 //! Simple helper for lexical scopes used by [`crate::check`] and [`crate::compile`].
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 
 #[derive(Debug, Clone)]
 pub(crate) struct Env<T: Clone>(pub(crate) Vec<HashMap<String, T>>);
@@ -24,8 +24,8 @@ impl<T: Clone + std::fmt::Debug> Env<T> {
 
     pub(crate) fn assign_mut(&mut self, identifier: String, binding: T) {
         for scope in self.0.iter_mut().rev() {
-            if scope.contains_key(&identifier) {
-                scope.insert(identifier, binding);
+            if let Entry::Occupied(mut e) = scope.entry(identifier.clone()) {
+                e.insert(binding);
                 return;
             }
         }

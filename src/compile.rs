@@ -51,7 +51,7 @@ impl Program {
                 env.let_in_current_scope(identifier.clone(), wires);
             }
             let mut circuit = CircuitBuilder::new(input_gates);
-            let output_gates = compile_block(&fn_def.body, &self, &mut env, &mut circuit);
+            let output_gates = compile_block(&fn_def.body, self, &mut env, &mut circuit);
             Ok((circuit.build(output_gates), fn_def))
         } else {
             Err(CompilerError::FnNotFound(fn_name.to_string()))

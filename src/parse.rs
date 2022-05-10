@@ -403,7 +403,7 @@ impl Parser {
             let stmts = self.parse_stmts()?;
             let meta_end = self.expect(&TokenEnum::RightBrace)?;
             let meta = join_meta(meta, meta_end);
-            return Ok(Expr(ExprEnum::Block(stmts), meta));
+            Ok(Expr(ExprEnum::Block(stmts), meta))
         } else {
             self.parse_short_circuiting_or()
         }
@@ -687,12 +687,12 @@ impl Parser {
         let pattern = self.parse_pattern()?;
         self.expect(&TokenEnum::FatArrow)?;
         let stmt = self.parse_stmt()?;
-        let ends_with_brace = match stmt.0 {
-            StmtEnum::Expr(Expr(ExprEnum::Match(_, _), _)) => true,
-            StmtEnum::Expr(Expr(ExprEnum::Block(_), _)) => true,
-            StmtEnum::Expr(Expr(ExprEnum::If(_, _, _), _)) => true,
-            _ => false,
-        };
+        let ends_with_brace = matches!(
+            stmt.0,
+            StmtEnum::Expr(Expr(ExprEnum::Match(_, _), _))
+                | StmtEnum::Expr(Expr(ExprEnum::Block(_), _))
+                | StmtEnum::Expr(Expr(ExprEnum::If(_, _, _), _))
+        );
         let meta = stmt.1;
         let expr = Expr(ExprEnum::Block(vec![stmt]), meta);
         Ok(((pattern, expr), ends_with_brace))
@@ -1192,7 +1192,7 @@ impl Parser {
     fn parse_method_call_or_struct_access(&mut self, recv: Expr) -> Result<Expr, ()> {
         let (field, call_start) = self.expect_identifier()?;
         Ok(Expr(
-            ExprEnum::StructAccess(Box::new(recv), field.to_string()),
+            ExprEnum::StructAccess(Box::new(recv), field),
             call_start,
         ))
     }

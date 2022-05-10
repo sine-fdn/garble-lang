@@ -560,15 +560,15 @@ impl Stmt {
                         meta,
                     ))
                 } else if let Some((_, Mutability::Immutable)) = env.get(identifier) {
-                    return Err(vec![TypeError(
+                    Err(vec![TypeError(
                         TypeErrorEnum::IdentifierNotDeclaredAsMutable(identifier.clone()),
                         meta,
-                    )]);
+                    )])
                 } else {
-                    return Err(vec![TypeError(
+                    Err(vec![TypeError(
                         TypeErrorEnum::UnknownIdentifier(identifier.clone()),
                         meta,
-                    )]);
+                    )])
                 }
             }
             ast::StmtEnum::ArrayAssign(identifier, index, value) => {
@@ -585,15 +585,15 @@ impl Stmt {
                         meta,
                     ))
                 } else if let Some((_, Mutability::Immutable)) = env.get(identifier) {
-                    return Err(vec![TypeError(
+                    Err(vec![TypeError(
                         TypeErrorEnum::IdentifierNotDeclaredAsMutable(identifier.clone()),
                         meta,
-                    )]);
+                    )])
                 } else {
-                    return Err(vec![TypeError(
+                    Err(vec![TypeError(
                         TypeErrorEnum::UnknownIdentifier(identifier.clone()),
                         meta,
-                    )]);
+                    )])
                 }
             }
             ast::StmtEnum::ForEachLoop(var, binding, body) => {
@@ -815,7 +815,7 @@ impl Expr {
                 env.push();
                 let (body, ret_expr) =
                     type_check_block(stmts, meta, top_level_defs, env, fns, defs)?;
-                let ty = ret_expr.1.clone();
+                let ty = ret_expr.1;
                 env.pop();
                 (typed_ast::ExprEnum::Block(body), ty)
             }
@@ -836,7 +836,6 @@ impl Expr {
                         for typed_ast::ParamDef(_, ty) in fn_def.params.iter() {
                             fn_arg_types.push(ty.clone());
                         }
-                        let ret_ty = ret_ty.clone();
 
                         let mut errors = vec![];
                         let mut arg_types = Vec::with_capacity(args.len());
