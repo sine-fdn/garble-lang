@@ -964,38 +964,39 @@ impl Parser {
             self.push_error_for_next(ParseErrorEnum::ExpectedExpr);
             return Err(());
         };
-        while self.next_matches(&TokenEnum::LeftBracket).is_some() {
-            if let Some(Token(TokenEnum::ConstantIndexOrSize(i), meta)) = self.tokens.peek() {
-                let i = *i;
-                let meta = *meta;
-                self.tokens.next();
-                let index = Expr(
-                    ExprEnum::NumUnsigned(i as u128, UnsignedNumType::Usize),
-                    meta,
-                );
-                let end = self.expect(&TokenEnum::RightBracket)?;
-                let meta = join_meta(expr.1, end);
-                expr = Expr(ExprEnum::ArrayAccess(Box::new(expr), Box::new(index)), meta);
-            } else {
-                let index = self.parse_expr()?;
-                let end = self.expect(&TokenEnum::RightBracket)?;
-                let meta = join_meta(expr.1, end);
-                expr = Expr(ExprEnum::ArrayAccess(Box::new(expr), Box::new(index)), meta);
-            }
-        }
-        while self.next_matches(&TokenEnum::Dot).is_some() {
-            let peeked = self.tokens.peek();
-            if let Some(Token(TokenEnum::Identifier(_), _)) = peeked {
-                expr = self.parse_method_call_or_struct_access(expr)?;
-            } else if let Some(Token(TokenEnum::ConstantIndexOrSize(i), meta_index)) = peeked {
-                let i = *i;
-                let meta_index = *meta_index;
-                self.tokens.next();
-                let meta = join_meta(expr.1, meta_index);
-                expr = Expr(ExprEnum::TupleAccess(Box::new(expr), i as usize), meta)
-            } else {
-                self.push_error_for_next(ParseErrorEnum::ExpectedMethodCallOrFieldAccess);
-                return Err(());
+        while self.peek(&TokenEnum::LeftBracket) || self.peek(&TokenEnum::Dot) {
+            if self.next_matches(&TokenEnum::LeftBracket).is_some() {
+                if let Some(Token(TokenEnum::ConstantIndexOrSize(i), meta)) = self.tokens.peek() {
+                    let i = *i;
+                    let meta = *meta;
+                    self.tokens.next();
+                    let index = Expr(
+                        ExprEnum::NumUnsigned(i as u128, UnsignedNumType::Usize),
+                        meta,
+                    );
+                    let end = self.expect(&TokenEnum::RightBracket)?;
+                    let meta = join_meta(expr.1, end);
+                    expr = Expr(ExprEnum::ArrayAccess(Box::new(expr), Box::new(index)), meta);
+                } else {
+                    let index = self.parse_expr()?;
+                    let end = self.expect(&TokenEnum::RightBracket)?;
+                    let meta = join_meta(expr.1, end);
+                    expr = Expr(ExprEnum::ArrayAccess(Box::new(expr), Box::new(index)), meta);
+                }
+            } else if self.next_matches(&TokenEnum::Dot).is_some() {
+                let peeked = self.tokens.peek();
+                if let Some(Token(TokenEnum::Identifier(_), _)) = peeked {
+                    expr = self.parse_method_call_or_struct_access(expr)?;
+                } else if let Some(Token(TokenEnum::ConstantIndexOrSize(i), meta_index)) = peeked {
+                    let i = *i;
+                    let meta_index = *meta_index;
+                    self.tokens.next();
+                    let meta = join_meta(expr.1, meta_index);
+                    expr = Expr(ExprEnum::TupleAccess(Box::new(expr), i as usize), meta)
+                } else {
+                    self.push_error_for_next(ParseErrorEnum::ExpectedMethodCallOrFieldAccess);
+                    return Err(());
+                }
             }
         }
         Ok(expr)
