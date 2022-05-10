@@ -12,13 +12,11 @@ pub fn log_interest(website_visit: WebsiteVisit, state: UserState) -> LogResult 
     if is_signature_ok(state, website_visit.key) {
         let interests = state.interests;
         let user_interest = website_visit.interest;
-        let updated_interests = 0usize..16usize.map(|i: usize| -> UserInterest {
-            if i == 0usize {
-                user_interest
-            } else {
-                interests[i - 1usize]
-            }
-        });
+        let mut updated_interests = [UserInterest::None; 16];
+        updated_interests[0] = user_interest;
+        for i in 1usize..16usize {
+            updated_interests[i] = interests[i - 1usize];
+        }
         let updated_signature = sign(updated_interests, website_visit.key);
         let updated_state = UserState {
             signature: updated_signature,
@@ -32,35 +30,27 @@ pub fn log_interest(website_visit: WebsiteVisit, state: UserState) -> LogResult 
 
 pub fn decide_ad(website_key: SigningKey, state: UserState) -> AdDecisionResult {
     if is_signature_ok(state, website_key) {
-        let sums = [0u8; 6]; // for the 6 user interests
+        let mut sums = [0u8; 6]; // for the 6 user interests
         let interests = state.interests;
-        let sums = interests.fold(sums, |sums: [u8; 6], interest: UserInterest| -> [u8; 6] {
+        for interest in interests {
             match interest {
-                UserInterest::None => sums,
-                UserInterest::Luxury => sums.update(1usize, sums[1] + 1u8),
-                UserInterest::Cars => sums.update(2usize, sums[2] + 1u8),
-                UserInterest::Politics => sums.update(3usize, sums[3] + 1u8),
-                UserInterest::Sports => sums.update(4usize, sums[4] + 1u8),
-                UserInterest::Arts => sums.update(5usize, sums[5] + 1u8),
+                UserInterest::None => {}
+                UserInterest::Luxury => sums[1] = sums[1] + 1u8,
+                UserInterest::Cars => sums[2] = sums[2] + 1u8,
+                UserInterest::Politics => sums[3] = sums[3] + 1u8,
+                UserInterest::Sports => sums[4] = sums[4] + 1u8,
+                UserInterest::Arts => sums[5] = sums[5] + 1u8,
             }
-        });
-        let max_interest = 0usize..6usize.fold(
-            MaxInterest {
-                visits: 0u8,
-                index_of_variant: 0usize,
-            },
-            |max_interest: MaxInterest, i: usize| -> MaxInterest {
-                if sums[i] > max_interest.visits {
-                    MaxInterest {
-                        index_of_variant: i,
-                        visits: sums[i],
-                    }
-                } else {
-                    max_interest
-                }
-            },
-        );
-        AdDecisionResult::Ok(match max_interest.index_of_variant {
+        }
+        let mut max_visits = 0u8;
+        let mut index_of_max_visited = 0usize;
+        for i in 0usize..6usize {
+            if sums[i] > max_visits {
+                max_visits = sums[i];
+                index_of_max_visited = i;
+            }
+        }
+        let interest = match index_of_max_visited {
             0u8 => UserInterest::None,
             1u8 => UserInterest::Luxury,
             2u8 => UserInterest::Cars,
@@ -68,7 +58,8 @@ pub fn decide_ad(website_key: SigningKey, state: UserState) -> AdDecisionResult 
             4u8 => UserInterest::Sports,
             5u8 => UserInterest::Arts,
             _ => UserInterest::None,
-        })
+        };
+        AdDecisionResult::Ok(interest)
     } else {
         AdDecisionResult::InvalidSignature
     }
@@ -87,9 +78,9 @@ fn interest_as_u8(interest: UserInterest) -> u8 {
 }
 
 fn is_signature_ok(state: UserState, website_key: SigningKey) -> bool {
-    let bytes = state.interests.map(|interest: UserInterest| -> u8 {
-        interest_as_u8(interest)
-    });
+    let bytes = state
+        .interests
+        .map(|interest: UserInterest| -> u8 { interest_as_u8(interest) });
     let st = absorb(bytes);
     let st = absorb_cont(st, website_key.key);
     let hash = squeeze(st);
@@ -97,9 +88,7 @@ fn is_signature_ok(state: UserState, website_key: SigningKey) -> bool {
 }
 
 fn sign(interests: [UserInterest; 16], website_key: SigningKey) -> [u8; 16] {
-    let bytes = interests.map(|interest: UserInterest| -> u8 {
-        interest_as_u8(interest)
-    });
+    let bytes = interests.map(|interest: UserInterest| -> u8 { interest_as_u8(interest) });
     let st = absorb(bytes);
     let st = absorb_cont(st, website_key.key);
     let hash = squeeze(st);
