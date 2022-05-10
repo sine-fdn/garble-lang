@@ -265,59 +265,6 @@ impl Expr {
                     array
                 }
             }
-            ExprEnum::ArrayAssignment(array, index, value) => {
-                let (elem_ty, size) = match ty {
-                    Type::Array(elem_ty, size) => (elem_ty, size),
-                    _ => panic!(
-                        "Expected array assignment to have an array type, but found {:?}",
-                        ty
-                    ),
-                };
-                let mut array = array.compile(prg, env, circuit);
-                let mut index = index.compile(prg, env, circuit);
-                let value = value.compile(prg, env, circuit);
-                let index_bits = Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(prg);
-                extend_to_bits(
-                    &mut index,
-                    &Type::Unsigned(UnsignedNumType::Usize),
-                    index_bits,
-                );
-                let elem_bits = elem_ty.size_in_bits_for_defs(prg);
-
-                let mut index_negated = vec![0; index.len()];
-                for (i, index) in index.iter().copied().enumerate() {
-                    index_negated[i] = circuit.push_not(index);
-                }
-                // for each array element...
-                for i in 0..*size {
-                    // ...and each bit of that array element...
-                    for b in 0..elem_bits {
-                        // ...use a index-length chain of mux, select the value if index == i
-                        let mut x1 = value[b];
-                        for s in 0..index.len() {
-                            let s_must_be_negated = ((i >> (index.len() - s - 1)) & 1) > 0;
-                            let s = if s_must_be_negated {
-                                index_negated[s]
-                            } else {
-                                index[s]
-                            };
-                            // x0 is selected by the mux-chain whenever a single bit of index != i
-                            let x0 = array[i * elem_bits + b];
-                            // x1 is value[b] only if index == i in all bits
-                            x1 = circuit.push_mux(s, x0, x1);
-                        }
-                        array[i * elem_bits + b] = x1;
-                    }
-                }
-                let mut array_len = Vec::with_capacity(index_bits);
-                unsigned_to_bits(*size as u128, index_bits, &mut array_len);
-                let array_len: Vec<usize> = array_len.into_iter().map(|b| b as usize).collect();
-                let (index_less_than_array_len, _) =
-                    circuit.push_comparator_circuit(index_bits, &index, false, &array_len, false);
-                let out_of_bounds = circuit.push_not(index_less_than_array_len);
-                circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, *meta);
-                array
-            }
             ExprEnum::TupleLiteral(tuple) => {
                 let mut wires = Vec::with_capacity(ty.size_in_bits_for_defs(prg));
                 for value in tuple {
@@ -658,49 +605,6 @@ impl Expr {
                         expr
                     }
                 }
-            }
-            ExprEnum::Fold(array, init, closure) => {
-                let array = array.compile(prg, env, circuit);
-                let mut init = init.compile(prg, env, circuit);
-
-                let ParamDef(init_identifier, init_ty) = &closure.params[0];
-                let ParamDef(elem_identifier, elem_ty) = &closure.params[1];
-                let elem_bits = elem_ty.size_in_bits_for_defs(prg);
-                extend_to_bits(&mut init, init_ty, init_ty.size_in_bits_for_defs(prg));
-
-                let mut acc = init;
-                let mut i = 0;
-                while i < array.len() {
-                    let elem = &array[i..i + elem_bits];
-                    env.push();
-                    env.let_in_current_scope(init_identifier.clone(), acc);
-                    env.let_in_current_scope(elem_identifier.clone(), elem.to_vec());
-                    acc = closure.body.compile(prg, env, circuit);
-                    env.pop();
-                    i += elem_bits;
-                }
-                acc
-            }
-            ExprEnum::Map(array, closure) => {
-                let array = array.compile(prg, env, circuit);
-
-                let ParamDef(elem_identifier, elem_ty) = &closure.params[0];
-                let elem_in_bits = elem_ty.size_in_bits_for_defs(prg);
-                let elem_out_bits = closure.ty.size_in_bits_for_defs(prg);
-                let size = array.len() / elem_in_bits;
-
-                let mut i = 0;
-                let mut result = Vec::with_capacity(elem_out_bits * size);
-                while i < array.len() {
-                    let elem_in = &array[i..i + elem_in_bits];
-                    env.push();
-                    env.let_in_current_scope(elem_identifier.clone(), elem_in.to_vec());
-                    let elem_out = closure.body.compile(prg, env, circuit);
-                    result.extend(elem_out);
-                    env.pop();
-                    i += elem_in_bits;
-                }
-                result
             }
             ExprEnum::Range((from, elem_ty), (to, _)) => {
                 let size = (to - from) as usize;

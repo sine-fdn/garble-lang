@@ -4,9 +4,8 @@ use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        Closure, EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum,
-        PreliminaryType, Program, Stmt, StmtEnum, StructDef, UnaryOp, Variant, VariantExpr,
-        VariantExprEnum,
+        EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, PreliminaryType,
+        Program, Stmt, StmtEnum, StructDef, UnaryOp, Variant, VariantExpr, VariantExprEnum,
     },
     scan::Tokens,
     token::{MetaInfo, SignedNumType, Token, TokenEnum, UnsignedNumType},
@@ -24,8 +23,6 @@ pub enum ParseErrorEnum {
     InvalidTopLevelDef,
     /// Arrays of the specified size are not supported.
     InvalidArraySize,
-    /// The method name is none of the supported (hardcoded) method names.
-    InvalidMethodName,
     /// The min or max value of the range expression is invalid.
     InvalidRangeExpr,
     /// The pattern is not valid.
@@ -57,9 +54,6 @@ impl std::fmt::Display for ParseErrorEnum {
                 f.write_fmt(format_args!(
                     "Invalid array size (must be a constant number <= {max})"
                 ))
-            }
-            ParseErrorEnum::InvalidMethodName => {
-                f.write_str("Invalid method name (only .map, .fold and .update are supported)")
             }
             ParseErrorEnum::InvalidRangeExpr => f.write_str("Invalid range expression"),
             ParseErrorEnum::InvalidPattern => f.write_str("Invalid pattern"),
@@ -1196,116 +1190,11 @@ impl Parser {
     }
 
     fn parse_method_call_or_struct_access(&mut self, recv: Expr) -> Result<Expr, ()> {
-        let (method_name, call_start) = self.expect_identifier()?;
-        match method_name.as_str() {
-            "map" => {
-                // .map(|<param>: <type>| -> <ret_ty> { <body> })
-                self.expect(&TokenEnum::LeftParen)?;
-
-                let closure_start = self.expect(&TokenEnum::Bar)?;
-                let (param_name, _) = self.expect_identifier()?;
-                self.expect(&TokenEnum::Colon)?;
-                let (param_ty, _) = self.parse_type()?;
-                self.expect(&TokenEnum::Bar)?;
-                self.expect(&TokenEnum::Arrow)?;
-                let (ret_ty, _) = self.parse_type()?;
-                self.expect(&TokenEnum::LeftBrace)?;
-                let body = self.parse_block_as_expr()?;
-                let closure_end = self.expect(&TokenEnum::RightBrace)?;
-
-                let closure_meta = join_meta(closure_start, closure_end);
-                let closure = Closure {
-                    ty: ret_ty,
-                    params: vec![ParamDef(false, param_name, param_ty)],
-                    body,
-                    meta: closure_meta,
-                };
-
-                if self.next_matches(&TokenEnum::Comma).is_some() {
-                    // ignore the trailing comma
-                }
-
-                let call_end = self.expect(&TokenEnum::RightParen)?;
-                let meta = join_meta(call_start, call_end);
-                Ok(Expr(ExprEnum::Map(Box::new(recv), Box::new(closure)), meta))
-            }
-            "fold" => {
-                // .fold(<init>, |<param1>: <type1>, <param1>: <type1>| -> <ret_ty> { <body> })
-                self.expect(&TokenEnum::LeftParen)?;
-
-                let init = self.parse_expr()?;
-                self.expect(&TokenEnum::Comma)?;
-
-                let closure_start = self.expect(&TokenEnum::Bar)?;
-
-                let (param1_name, _) = self.expect_identifier()?;
-                self.expect(&TokenEnum::Colon)?;
-                let (param1_ty, _) = self.parse_type()?;
-
-                self.expect(&TokenEnum::Comma)?;
-
-                let (param2_name, _) = self.expect_identifier()?;
-                self.expect(&TokenEnum::Colon)?;
-                let (param2_ty, _) = self.parse_type()?;
-
-                self.expect(&TokenEnum::Bar)?;
-                self.expect(&TokenEnum::Arrow)?;
-                let (ret_ty, _) = self.parse_type()?;
-                self.expect(&TokenEnum::LeftBrace)?;
-                let body = self.parse_block_as_expr()?;
-                let closure_end = self.expect(&TokenEnum::RightBrace)?;
-
-                let closure_meta = join_meta(closure_start, closure_end);
-                let closure = Closure {
-                    ty: ret_ty,
-                    params: vec![
-                        ParamDef(false, param1_name, param1_ty),
-                        ParamDef(false, param2_name, param2_ty),
-                    ],
-                    body,
-                    meta: closure_meta,
-                };
-
-                if self.next_matches(&TokenEnum::Comma).is_some() {
-                    // ignore the trailing comma
-                }
-
-                let call_end = self.expect(&TokenEnum::RightParen)?;
-                let meta = join_meta(call_start, call_end);
-                Ok(Expr(
-                    ExprEnum::Fold(Box::new(recv), Box::new(init), Box::new(closure)),
-                    meta,
-                ))
-            }
-            "update" => {
-                // .update(<index>, <expr>)
-                self.expect(&TokenEnum::LeftParen)?;
-
-                let index = self.parse_expr()?;
-                self.expect(&TokenEnum::Comma)?;
-
-                let replacement = self.parse_expr()?;
-
-                if self.next_matches(&TokenEnum::Comma).is_some() {
-                    // ignore the trailing comma
-                }
-
-                let end = self.expect(&TokenEnum::RightParen)?;
-                let meta = join_meta(call_start, end);
-                Ok(Expr(
-                    ExprEnum::ArrayAssignment(
-                        Box::new(recv),
-                        Box::new(index),
-                        Box::new(replacement),
-                    ),
-                    meta,
-                ))
-            }
-            field => Ok(Expr(
-                ExprEnum::StructAccess(Box::new(recv), field.to_string()),
-                call_start,
-            )),
-        }
+        let (field, call_start) = self.expect_identifier()?;
+        Ok(Expr(
+            ExprEnum::StructAccess(Box::new(recv), field.to_string()),
+            call_start,
+        ))
     }
 
     fn parse_type(&mut self) -> Result<(PreliminaryType, MetaInfo), ()> {

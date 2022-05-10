@@ -223,8 +223,6 @@ pub enum ExprEnum {
     ArrayRepeatLiteral(Box<Expr>, usize),
     /// Access of an array at the specified index, returning its element.
     ArrayAccess(Box<Expr>, Box<Expr>),
-    /// Purely functional array update, returns a new array with the element at the index replaced.
-    ArrayAssignment(Box<Expr>, Box<Expr>, Box<Expr>),
     /// Tuple literal containing the specified fields.
     TupleLiteral(Vec<Expr>),
     /// Access of a tuple at the specified position.
@@ -249,10 +247,6 @@ pub enum ExprEnum {
     If(Box<Expr>, Box<Expr>, Box<Expr>),
     /// Explicit cast of an expression to the specified type.
     Cast(Type, Box<Expr>),
-    /// `fold`s the specified array, with the specified initial value and a 2-param closure.
-    Fold(Box<Expr>, Box<Expr>, Box<Closure>),
-    /// `map`s the specified array with the specified 1-param closure.
-    Map(Box<Expr>, Box<Closure>),
     /// Range of numbers from the specified min (inclusive) to the specified max (exclusive).
     Range((u128, UnsignedNumType), (u128, UnsignedNumType)),
 }
@@ -390,18 +384,4 @@ pub enum PatternEnum {
     UnsignedInclusiveRange(u128, u128),
     /// Matches any number inside the signed range between min (inclusive) and max (inclusive).
     SignedInclusiveRange(i128, i128),
-}
-
-/// A non-first-flass closure, used only by [`ExprEnum::Map`] and [`ExprEnum::Fold`].
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Closure {
-    /// The return type of the closure.
-    pub ty: Type,
-    /// The parameters (name and type) of the closure.
-    pub params: Vec<ParamDef>,
-    /// The expression that the closures evaluates to.
-    pub body: Expr,
-    /// The location in the source code.
-    pub meta: MetaInfo,
 }

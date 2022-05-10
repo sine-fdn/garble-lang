@@ -162,7 +162,8 @@ pub fn main(i: usize) -> i32 {
 fn panic_on_out_of_bounds_update() -> Result<(), String> {
     let prg = "
 pub fn main(i: usize) -> i32 {
-    let updated = [1i32, 2i32, 3i32].update(i, 0i32);
+    let mut updated = [1i32, 2i32, 3i32];
+    updated[i] = 0i32;
     updated[0]
 }
 ";

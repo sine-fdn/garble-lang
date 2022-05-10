@@ -1,5 +1,10 @@
 use garble::{
-    compile, eval::Evaluator, literal::Literal, token::{UnsignedNumType, SignedNumType}, typed_ast::Type, Error,
+    compile,
+    eval::Evaluator,
+    literal::Literal,
+    token::{SignedNumType, UnsignedNumType},
+    typed_ast::Type,
+    Error,
 };
 
 fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
@@ -836,8 +841,8 @@ fn compile_array_assignment() -> Result<(), Error> {
     let prg = &format!(
         "
 pub fn main(x: i8, i: usize, j: usize) -> i8 {{
-    let arr = [x; {}];
-    let arr = arr.update(i, x * 2i8);
+    let mut arr = [x; {}];
+    arr[i] = x * 2i8;
     arr[j]
 }}
 ",
@@ -868,10 +873,12 @@ fn compile_fold() -> Result<(), Error> {
     let prg = &format!(
         "
 pub fn main(x: i8) -> i8 {{
-    let arr = [x; {}];
-    arr.fold(0i8, |acc: i8, x: i8| -> i8 {{
-        acc + x
-    }})
+    let mut arr = [x; {}];
+    let mut acc = 0i8;
+    for elem in arr {{
+        acc = acc + elem;
+    }}
+    acc
 }}
 ",
         array_size
@@ -895,12 +902,13 @@ fn compile_map() -> Result<(), Error> {
     let prg = &format!(
         "
 pub fn main(x: i8, i: usize) -> i8 {{
-    let arr = [x; {}];
-    let arr = arr.map(|x: i8| -> i8 {{x * 2i8}});
+    let mut arr = [x; {array_size}];
+    for j in 0usize..{array_size}usize {{
+        arr[j] = arr[j] * 2i8;
+    }}
     arr[i]
 }}
-",
-        array_size
+"
     );
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
     for x in -10..10 {
@@ -1005,9 +1013,11 @@ fn compile_range() -> Result<(), Error> {
     let prg = "
 pub fn main(_x: u8) -> i16 {
     let arr = 1u8..101u8;
-    arr.fold(0i16, |acc: i16, x: u8| -> i16 {
-        acc + (x as i16)
-    })
+    let mut acc = 0i16;
+    for i in arr {{
+        acc = acc + i as i16;
+    }}
+    acc
 }
 ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
@@ -1348,12 +1358,15 @@ pub fn main(i: usize) -> i32 {
 fn compile_main_with_array_io() -> Result<(), Error> {
     let prg = "
 pub fn main(nums: [u8; 5]) -> [u8; 5] {
-    let sum = nums.fold(0u16, |acc: u16, n: u8| -> u16 {
-        acc + (n as u16)
-    });
-    nums.map(|n: u8| -> u8 {
-        sum as u8
-    })
+    let mut sum = 0u16;
+    for n in nums {
+        sum = sum + n as u16;
+    }
+    let mut nums = [0u8; 5];
+    for i in 0usize..5usize {
+        nums[i] = sum as u8;
+    }
+    nums
 }
 ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
