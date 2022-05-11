@@ -1550,6 +1550,31 @@ pub fn main(x: (i32, i32)) -> i32 {
 }
 
 #[test]
+fn compile_struct_sugar() -> Result<(), Error> {
+    let prg = "
+struct FooBar {
+    foo: i32,
+    bar: i32,
+}
+
+pub fn main(x: (i32, i32)) -> i32 {
+    let (foo, bar) = x;
+    let foobar = FooBar { foo, bar };
+    match foobar {
+        FooBar { foo: 0i32, .. } => 1i32,
+        FooBar { foo, .. } => foo,
+    }
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    eval.parse_literal("(2i32, 3i32)")?;
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, 2);
+    Ok(())
+}
+
+#[test]
 fn compile_struct_shorthand() -> Result<(), Error> {
     let prg = "
 struct FooBar {
@@ -1711,6 +1736,30 @@ pub fn main(x: i32) -> i32 {
 }
 
 #[test]
+fn compile_for_loop_over_array() -> Result<(), Error> {
+    let prg = "
+pub fn main(_x: i32) -> i32 {
+    let mut sum = 0i32;
+    for i in [2i32, 4i32, 6i32, 8i32] {
+        sum = sum + i
+    }
+    sum
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    for x in 0..110 {
+        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        eval.set_i32(x);
+        let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+        assert_eq!(
+            i32::try_from(output).map_err(|e| pretty_print(e, prg))?,
+            2 + 4 + 6 + 8,
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn compile_array_assign_inside_for_loop() -> Result<(), Error> {
     let prg = "
 pub fn main(_x: i32) -> [i32; 5] {
@@ -1732,5 +1781,34 @@ pub fn main(_x: i32) -> [i32; 5] {
         "[0i32, 2i32, 4i32, 6i32, 8i32]",
     )?;
     assert_eq!(r, expected);
+    Ok(())
+}
+
+#[test]
+fn compile_arrays_copied_by_value() -> Result<(), Error> {
+    let prg = "
+pub fn main(replacement: i32) -> [i32; 4] {
+    let mut array1 = [10i32, 20i32, 30i32, 40i32];
+    let second_val = array1[1]; // will be `20i32`
+    let mut array2 = array1;
+    array2[1] = replacement;
+    let second_val1 = array1[1]; // will still be `20i32`
+    let second_val2 = array2[1]; // will be equal to the value of `replacement`
+    array2
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    for x in 0..110 {
+        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        eval.set_i32(x);
+        let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+        let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
+        let expected = Literal::parse(
+            &typed_prg,
+            &Type::Array(Box::new(Type::Signed(SignedNumType::I32)), 4),
+            &format!("[10i32, {x}i32, 30i32, 40i32]"),
+        )?;
+        assert_eq!(r, expected);
+    }
     Ok(())
 }
