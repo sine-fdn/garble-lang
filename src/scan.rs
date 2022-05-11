@@ -133,6 +133,8 @@ impl<'a> Scanner<'a> {
                 '>' => {
                     if self.next_matches('>') {
                         self.push_token(TokenEnum::DoubleGreaterThan);
+                    } else if self.next_matches('=') {
+                        self.push_token(TokenEnum::GreaterThanEquals);
                     } else {
                         self.push_token(TokenEnum::GreaterThan);
                     }
@@ -140,6 +142,8 @@ impl<'a> Scanner<'a> {
                 '<' => {
                     if self.next_matches('<') {
                         self.push_token(TokenEnum::DoubleLessThan);
+                    } else if self.next_matches('=') {
+                        self.push_token(TokenEnum::LessThanEquals);
                     } else {
                         self.push_token(TokenEnum::LessThan);
                     }

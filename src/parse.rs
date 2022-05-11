@@ -471,18 +471,27 @@ impl Parser {
     }
 
     fn parse_comparison(&mut self) -> Result<Expr, ()> {
-        // >, <
-        let ops = vec![TokenEnum::LessThan, TokenEnum::GreaterThan];
+        // >, <, <=, >=
+        let ops = vec![TokenEnum::LessThan, TokenEnum::GreaterThan, TokenEnum::LessThanEquals, TokenEnum::GreaterThanEquals];
         let mut x = self.parse_or()?;
         while let Some((token, _)) = self.next_matches_one_of(&ops) {
             let y = self.parse_or()?;
             let meta = join_expr_meta(&x, &y);
-            let op = match token {
-                TokenEnum::LessThan => Op::LessThan,
-                TokenEnum::GreaterThan => Op::GreaterThan,
+            x = match token {
+                TokenEnum::LessThan => Expr(ExprEnum::Op(Op::LessThan, Box::new(x), Box::new(y)), meta),
+                TokenEnum::GreaterThan => Expr(ExprEnum::Op(Op::GreaterThan, Box::new(x), Box::new(y)), meta),
+                TokenEnum::LessThanEquals => {
+                    let lt = Expr(ExprEnum::Op(Op::LessThan, Box::new(x.clone()), Box::new(y.clone())), meta);
+                    let eq = Expr(ExprEnum::Op(Op::Eq, Box::new(x), Box::new(y)), meta);
+                    Expr(ExprEnum::Op(Op::BitOr, Box::new(lt), Box::new(eq)), meta)
+                }
+                TokenEnum::GreaterThanEquals => {
+                    let lt = Expr(ExprEnum::Op(Op::GreaterThan, Box::new(x.clone()), Box::new(y.clone())), meta);
+                    let eq = Expr(ExprEnum::Op(Op::Eq, Box::new(x), Box::new(y)), meta);
+                    Expr(ExprEnum::Op(Op::BitOr, Box::new(lt), Box::new(eq)), meta)
+                }
                 _ => unreachable!(),
-            };
-            x = Expr(ExprEnum::Op(op, Box::new(x), Box::new(y)), meta);
+            }
         }
         Ok(x)
     }
