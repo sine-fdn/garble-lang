@@ -8,8 +8,8 @@ use crate::{
     env::Env,
     token::{SignedNumType, UnsignedNumType},
     typed_ast::{
-        EnumDef, Expr, ExprEnum, FnDef, ParamDef, Pattern, PatternEnum, Program, Stmt, StructDef,
-        Type, VariantExpr, VariantExprEnum, StmtEnum,
+        EnumDef, Expr, ExprEnum, FnDef, ParamDef, Pattern, PatternEnum, Program, Stmt, StmtEnum,
+        StructDef, Type, VariantExpr, VariantExprEnum,
     },
 };
 

@@ -404,7 +404,8 @@ impl Parser {
                 stmts.push(stmt);
             } else {
                 has_error = true;
-                let balanced = self.consume_until_one_of(&[TokenEnum::Semicolon, TokenEnum::RightBrace]);
+                let balanced =
+                    self.consume_until_one_of(&[TokenEnum::Semicolon, TokenEnum::RightBrace]);
                 if balanced {
                     self.advance();
                 }
