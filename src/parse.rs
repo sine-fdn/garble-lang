@@ -1401,7 +1401,7 @@ impl Parser {
             }
             self.tokens.next();
         }
-        return balanced;
+        balanced
     }
 
     fn next_matches_one_of(&mut self, options: &[TokenEnum]) -> Option<(TokenEnum, MetaInfo)> {
