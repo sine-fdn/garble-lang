@@ -12,10 +12,12 @@ pub struct Token(pub TokenEnum, pub MetaInfo);
 pub enum TokenEnum {
     /// Identifier of alphanumeric chars.
     Identifier(String),
-    /// Usigned number.
-    UnsignedNum(u128, Option<UnsignedNumType>),
+    /// Constant unsigned number used to index arrays / tuples.
+    ConstantIndexOrSize(u32),
+    /// Unsigned number.
+    UnsignedNum(u128, UnsignedNumType),
     /// Signed number.
-    SignedNum(i128, Option<SignedNumType>),
+    SignedNum(i128, SignedNumType),
     /// `enum` keyword.
     KeywordEnum,
     /// `struct` keyword.
@@ -38,6 +40,8 @@ pub enum TokenEnum {
     Dot,
     /// `..`.
     DoubleDot,
+    /// `..=`.
+    DoubleDotEquals,
     /// `,`.
     Comma,
     /// `;`.
@@ -104,20 +108,9 @@ impl std::fmt::Display for TokenEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             TokenEnum::Identifier(s) => f.write_str(s),
-            TokenEnum::UnsignedNum(num, suffix) => {
-                if let Some(suffix) = suffix {
-                    f.write_fmt(format_args!("{num}{suffix}"))
-                } else {
-                    f.write_fmt(format_args!("{num}"))
-                }
-            }
-            TokenEnum::SignedNum(num, suffix) => {
-                if let Some(suffix) = suffix {
-                    f.write_fmt(format_args!("{num}{suffix}"))
-                } else {
-                    f.write_fmt(format_args!("{num}"))
-                }
-            }
+            TokenEnum::ConstantIndexOrSize(num) => f.write_fmt(format_args!("{num}")),
+            TokenEnum::UnsignedNum(num, suffix) => f.write_fmt(format_args!("{num}{suffix}")),
+            TokenEnum::SignedNum(num, suffix) => f.write_fmt(format_args!("{num}{suffix}")),
             TokenEnum::KeywordStruct => f.write_str("struct"),
             TokenEnum::KeywordEnum => f.write_str("enum"),
             TokenEnum::KeywordFn => f.write_str("fn"),
@@ -129,6 +122,7 @@ impl std::fmt::Display for TokenEnum {
             TokenEnum::KeywordPub => f.write_str("pub"),
             TokenEnum::Dot => f.write_str("."),
             TokenEnum::DoubleDot => f.write_str(".."),
+            TokenEnum::DoubleDotEquals => f.write_str("..="),
             TokenEnum::Comma => f.write_str(","),
             TokenEnum::Semicolon => f.write_str(";"),
             TokenEnum::Colon => f.write_str(":"),

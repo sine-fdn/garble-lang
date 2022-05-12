@@ -106,9 +106,9 @@ pub enum ExprEnum {
     /// Literal `false`.
     False,
     /// Unsigned number literal.
-    NumUnsigned(u128, Option<UnsignedNumType>),
+    NumUnsigned(u128, UnsignedNumType),
     /// Signed number literal.
-    NumSigned(i128, Option<SignedNumType>),
+    NumSigned(i128, SignedNumType),
     /// Identifier (either a variable or a function).
     Identifier(String),
     /// Array literal which explicitly specifies all of its elements.
@@ -150,7 +150,7 @@ pub enum ExprEnum {
     /// `map`s the specified array with the specified 1-param closure.
     Map(Box<Expr>, Box<Closure>),
     /// Range of numbers from the specified min (inclusive) to the specified max (exclusive).
-    Range(usize, usize),
+    Range((u128, UnsignedNumType), (u128, UnsignedNumType)),
 }
 
 /// A variant literal, used by [`ExprEnum::EnumLiteral`], with its location in the source code.
@@ -184,9 +184,9 @@ pub enum PatternEnum {
     /// Matches `false`.
     False,
     /// Matches the specified unsigned number.
-    NumUnsigned(u128, Option<UnsignedNumType>),
+    NumUnsigned(u128, UnsignedNumType),
     /// Matches the specified signed number.
-    NumSigned(i128, Option<SignedNumType>),
+    NumSigned(i128, SignedNumType),
     /// Matches a tuple if all of its fields match their respective patterns.
     Tuple(Vec<Pattern>),
     /// Matches a struct if all of its fields match their respective patterns.
@@ -198,9 +198,9 @@ pub enum PatternEnum {
     /// Matches an enum with the specified name and variant, if all fields match.
     EnumTuple(String, String, Vec<Pattern>),
     /// Matches any number inside the unsigned range between min (inclusive) and max (inclusive).
-    UnsignedInclusiveRange(u128, u128, Option<UnsignedNumType>),
+    UnsignedInclusiveRange(u128, u128, UnsignedNumType),
     /// Matches any number inside the signed range between min (inclusive) and max (inclusive).
-    SignedInclusiveRange(i128, i128, Option<SignedNumType>),
+    SignedInclusiveRange(i128, i128, SignedNumType),
 }
 
 /// A non-first-flass closure, used only by [`ExprEnum::Map`] and [`ExprEnum::Fold`].

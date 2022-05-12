@@ -12,11 +12,11 @@ pub fn log_interest(website_visit: WebsiteVisit, state: UserState) -> LogResult 
     if is_signature_ok(state, website_visit.key) {
         let interests = state.interests;
         let user_interest = website_visit.interest;
-        let updated_interests = 0..16.map(|i: usize| -> UserInterest {
-            if i == 0 {
+        let updated_interests = 0usize..16usize.map(|i: usize| -> UserInterest {
+            if i == 0usize {
                 user_interest
             } else {
-                interests[i - 1]
+                interests[i - 1usize]
             }
         });
         let updated_signature = sign(updated_interests, website_visit.key);
@@ -37,14 +37,14 @@ pub fn decide_ad(website_key: SigningKey, state: UserState) -> AdDecisionResult 
         let sums = interests.fold(sums, |sums: [u8; 6], interest: UserInterest| -> [u8; 6] {
             match interest {
                 UserInterest::None => sums,
-                UserInterest::Luxury => sums.update(1, sums[1] + 1),
-                UserInterest::Cars => sums.update(2, sums[2] + 1),
-                UserInterest::Politics => sums.update(3, sums[3] + 1),
-                UserInterest::Sports => sums.update(4, sums[4] + 1),
-                UserInterest::Arts => sums.update(5, sums[5] + 1),
+                UserInterest::Luxury => sums.update(1usize, sums[1] + 1u8),
+                UserInterest::Cars => sums.update(2usize, sums[2] + 1u8),
+                UserInterest::Politics => sums.update(3usize, sums[3] + 1u8),
+                UserInterest::Sports => sums.update(4usize, sums[4] + 1u8),
+                UserInterest::Arts => sums.update(5usize, sums[5] + 1u8),
             }
         });
-        let max_interest = 0..6.fold(
+        let max_interest = 0usize..6usize.fold(
             MaxInterest {
                 visits: 0u8,
                 index_of_variant: 0usize,
@@ -61,12 +61,12 @@ pub fn decide_ad(website_key: SigningKey, state: UserState) -> AdDecisionResult 
             },
         );
         AdDecisionResult::Ok(match max_interest.index_of_variant {
-            0 => UserInterest::None,
-            1 => UserInterest::Luxury,
-            2 => UserInterest::Cars,
-            3 => UserInterest::Politics,
-            4 => UserInterest::Sports,
-            5 => UserInterest::Arts,
+            0u8 => UserInterest::None,
+            1u8 => UserInterest::Luxury,
+            2u8 => UserInterest::Cars,
+            3u8 => UserInterest::Politics,
+            4u8 => UserInterest::Sports,
+            5u8 => UserInterest::Arts,
             _ => UserInterest::None,
         })
     } else {
@@ -129,9 +129,9 @@ fn round(st: [u32; 12], round_key: u32) -> [u32; 12] {
     //    e[i] = rotate_right(st[i] ^ st[i + 4] ^ st[i + 8], 18);
     //    e[i] ^= rotate_right(e[i], 9);
     // }
-    let e = 0..4.map(|i: usize| -> u32 {
-        let e = rotate_right(st[i] ^ st[i + 4] ^ st[i + 8], 18);
-        let e = e ^ rotate_right(e, 9);
+    let e = 0usize..4usize.map(|i: usize| -> u32 {
+        let e = rotate_right(st[i] ^ st[i + 4usize] ^ st[i + 8usize], 18u8);
+        let e = e ^ rotate_right(e, 9u8);
         e
     });
 
@@ -153,10 +153,10 @@ fn round(st: [u32; 12], round_key: u32) -> [u32; 12] {
         st[11] ^ e[2],
     ];
 
-    let st = swap(st, 7, 4);
-    let st = swap(st, 7, 5);
-    let st = swap(st, 7, 6);
-    let st = st.update(0, st[0] ^ round_key);
+    let st = swap(st, 7usize, 4usize);
+    let st = swap(st, 7usize, 5usize);
+    let st = swap(st, 7usize, 6usize);
+    let st = st.update(0usize, st[0] ^ round_key);
 
     // for i in 0..4 {
     //     let a = st[i];
@@ -166,18 +166,18 @@ fn round(st: [u32; 12], round_key: u32) -> [u32; 12] {
     //     st[i + 4] = ((a & !c) ^ b).rotate_right(31);
     //     st[i] ^= c & !b;
     // }
-    let st = 0..4.fold(st, |st: [u32; 12], i: usize| -> [u32; 12] {
+    let st = 0usize..4usize.fold(st, |st: [u32; 12], i: usize| -> [u32; 12] {
         let a = st[i];
-        let b = st[i + 4];
-        let c = rotate_right(st[i + 8], 21);
-        let st = st.update(i + 8, rotate_right((b & !a) ^ c, 24));
-        let st = st.update(i + 4, rotate_right((a & !c) ^ b, 31));
+        let b = st[i + 4usize];
+        let c = rotate_right(st[i + 8usize], 21u8);
+        let st = st.update(i + 8usize, rotate_right((b & !a) ^ c, 24u8));
+        let st = st.update(i + 4usize, rotate_right((a & !c) ^ b, 31u8));
         let st = st.update(i, st[i] ^ (c & !b));
         st
     });
 
-    let st = swap(st, 8, 10);
-    let st = swap(st, 9, 11);
+    let st = swap(st, 8usize, 10usize);
+    let st = swap(st, 9usize, 11usize);
 
     st
 }
@@ -187,7 +187,7 @@ fn permute(st: [u32; 12]) -> [u32; 12] {
         88u32, 56u32, 960u32, 208u32, 288u32, 20u32, 96u32, 44u32, 896u32, 240u32, 416u32, 18u32,
     ];
 
-    0..12.fold(st, |st: [u32; 12], i: usize| -> [u32; 12] {
+    0usize..12usize.fold(st, |st: [u32; 12], i: usize| -> [u32; 12] {
         round(st, ROUND_KEYS[i])
     })
 }
@@ -197,96 +197,96 @@ fn squeeze(st: [u8; 48]) -> [u8; 16] {
     let st = permute(st);
     [
         st[0] as u8,
-        (st[0] >> 8) as u8,
-        (st[0] >> 16) as u8,
-        (st[0] >> 24) as u8,
+        (st[0] >> 8u8) as u8,
+        (st[0] >> 16u8) as u8,
+        (st[0] >> 24u8) as u8,
         st[1] as u8,
-        (st[1] >> 8) as u8,
-        (st[1] >> 16) as u8,
-        (st[1] >> 24) as u8,
+        (st[1] >> 8u8) as u8,
+        (st[1] >> 16u8) as u8,
+        (st[1] >> 24u8) as u8,
         st[2] as u8,
-        (st[2] >> 8) as u8,
-        (st[2] >> 16) as u8,
-        (st[2] >> 24) as u8,
+        (st[2] >> 8u8) as u8,
+        (st[2] >> 16u8) as u8,
+        (st[2] >> 24u8) as u8,
         st[3] as u8,
-        (st[3] >> 8) as u8,
-        (st[3] >> 16) as u8,
-        (st[3] >> 24) as u8,
+        (st[3] >> 8u8) as u8,
+        (st[3] >> 16u8) as u8,
+        (st[3] >> 24u8) as u8,
     ]
 }
 
 fn down(st: [u8; 48], bin: [u8; 16], cd: u8) -> [u8; 48] {
     let st = add_bytes(st, bin);
-    let st = add_byte(st, 1u8, 16);
-    add_byte(st, cd, 47)
+    let st = add_byte(st, 1u8, 16usize);
+    add_byte(st, cd, 47usize)
 }
 
 fn rotate_right(val: u32, rotation: u8) -> u32 {
-    (val >> rotation) ^ (val << (32 - rotation))
+    (val >> rotation) ^ (val << (32u8 - rotation))
 }
 
 fn u8_to_u32_arr(st: [u8; 48]) -> [u32; 12] {
-    0..12.map(|i: usize| -> u32 { u8_to_u32(st, i * 4) })
+    0usize..12usize.map(|i: usize| -> u32 { u8_to_u32(st, i * 4usize) })
 }
 
 fn u32_to_u8_arr(st: [u32; 12]) -> [u8; 48] {
     [
         st[0] as u8,
-        (st[0] >> 8) as u8,
-        (st[0] >> 16) as u8,
-        (st[0] >> 24) as u8,
+        (st[0] >> 8u8) as u8,
+        (st[0] >> 16u8) as u8,
+        (st[0] >> 24u8) as u8,
         st[1] as u8,
-        (st[1] >> 8) as u8,
-        (st[1] >> 16) as u8,
-        (st[1] >> 24) as u8,
+        (st[1] >> 8u8) as u8,
+        (st[1] >> 16u8) as u8,
+        (st[1] >> 24u8) as u8,
         st[2] as u8,
-        (st[2] >> 8) as u8,
-        (st[2] >> 16) as u8,
-        (st[2] >> 24) as u8,
+        (st[2] >> 8u8) as u8,
+        (st[2] >> 16u8) as u8,
+        (st[2] >> 24u8) as u8,
         st[3] as u8,
-        (st[3] >> 8) as u8,
-        (st[3] >> 16) as u8,
-        (st[3] >> 24) as u8,
+        (st[3] >> 8u8) as u8,
+        (st[3] >> 16u8) as u8,
+        (st[3] >> 24u8) as u8,
         st[4] as u8,
-        (st[4] >> 8) as u8,
-        (st[4] >> 16) as u8,
-        (st[4] >> 24) as u8,
+        (st[4] >> 8u8) as u8,
+        (st[4] >> 16u8) as u8,
+        (st[4] >> 24u8) as u8,
         st[5] as u8,
-        (st[5] >> 8) as u8,
-        (st[5] >> 16) as u8,
-        (st[5] >> 24) as u8,
+        (st[5] >> 8u8) as u8,
+        (st[5] >> 16u8) as u8,
+        (st[5] >> 24u8) as u8,
         st[6] as u8,
-        (st[6] >> 8) as u8,
-        (st[6] >> 16) as u8,
-        (st[6] >> 24) as u8,
+        (st[6] >> 8u8) as u8,
+        (st[6] >> 16u8) as u8,
+        (st[6] >> 24u8) as u8,
         st[7] as u8,
-        (st[7] >> 8) as u8,
-        (st[7] >> 16) as u8,
-        (st[7] >> 24) as u8,
+        (st[7] >> 8u8) as u8,
+        (st[7] >> 16u8) as u8,
+        (st[7] >> 24u8) as u8,
         st[8] as u8,
-        (st[8] >> 8) as u8,
-        (st[8] >> 16) as u8,
-        (st[8] >> 24) as u8,
+        (st[8] >> 8u8) as u8,
+        (st[8] >> 16u8) as u8,
+        (st[8] >> 24u8) as u8,
         st[9] as u8,
-        (st[9] >> 8) as u8,
-        (st[9] >> 16) as u8,
-        (st[9] >> 24) as u8,
+        (st[9] >> 8u8) as u8,
+        (st[9] >> 16u8) as u8,
+        (st[9] >> 24u8) as u8,
         st[10] as u8,
-        (st[10] >> 8) as u8,
-        (st[10] >> 16) as u8,
-        (st[10] >> 24) as u8,
+        (st[10] >> 8u8) as u8,
+        (st[10] >> 16u8) as u8,
+        (st[10] >> 24u8) as u8,
         st[11] as u8,
-        (st[11] >> 8) as u8,
-        (st[11] >> 16) as u8,
-        (st[11] >> 24) as u8,
+        (st[11] >> 8u8) as u8,
+        (st[11] >> 16u8) as u8,
+        (st[11] >> 24u8) as u8,
     ]
 }
 
 fn u8_to_u32(st: [u8; 48], base_idx: usize) -> u32 {
     st[base_idx] as u32
-        ^ ((st[base_idx + 1] as u32) << 8)
-        ^ ((st[base_idx + 2] as u32) << 16)
-        ^ ((st[base_idx + 3] as u32) << 24)
+        ^ ((st[base_idx + 1usize] as u32) << 8u8)
+        ^ ((st[base_idx + 2usize] as u32) << 16u8)
+        ^ ((st[base_idx + 3usize] as u32) << 24u8)
 }
 
 fn add_byte(st: [u8; 48], byte: u8, offset: usize) -> [u8; 48] {
@@ -294,7 +294,7 @@ fn add_byte(st: [u8; 48], byte: u8, offset: usize) -> [u8; 48] {
 }
 
 fn add_bytes(st: [u8; 48], chunk: [u8; 16]) -> [u8; 48] {
-    0..16.fold(st, |st: [u8; 48], i: usize| -> [u8; 48] {
+    0usize..16usize.fold(st, |st: [u8; 48], i: usize| -> [u8; 48] {
         add_byte(st, chunk[i], i)
     })
 }

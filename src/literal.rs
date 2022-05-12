@@ -10,7 +10,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    check::{coerce_type, Defs, TopLevelTypes, TypedFns},
+    check::{check_type, Defs, TopLevelTypes, TypedFns},
     circuit::EvalPanic,
     compile::{enum_max_size, enum_tag_number, enum_tag_size, signed_to_bits, unsigned_to_bits},
     env::Env,
@@ -45,7 +45,7 @@ pub enum Literal {
     /// Enum literal of the specified variant, possibly with fields.
     Enum(String, String, VariantLiteral),
     /// Range of numbers from the specified min (inclusive) to the specified max (exclusive).
-    Range(usize, usize),
+    Range((u128, UnsignedNumType), (u128, UnsignedNumType)),
 }
 
 /// A variant literal (either of unit type or containing fields), used by [`Literal::EnumLiteral`].
@@ -79,7 +79,7 @@ impl Literal {
                 errs.sort();
                 errs
             })?;
-        coerce_type(&mut expr, ty)?;
+        check_type(&mut expr, ty)?;
         expr.1 = ty.clone();
         Ok(expr.into_literal())
     }
@@ -147,8 +147,8 @@ impl Literal {
                 }
                 false
             }
-            (Literal::Range(min, max), Type::Array(elem_ty, size)) => {
-                elem_ty.as_ref() == &Type::Unsigned(UnsignedNumType::Usize) && max - min == *size
+            (Literal::Range((min, min_ty), (max, _)), Type::Array(elem_ty, size)) => {
+                elem_ty.as_ref() == &Type::Unsigned(*min_ty) && max - min == *size as u128
             }
             _ => false,
         }
@@ -376,10 +376,9 @@ impl Literal {
                 }
                 wires
             }
-            Literal::Range(min, max) => {
-                let elems: Vec<usize> = (*min..*max).into_iter().collect();
-                let elem_size =
-                    Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(checked);
+            Literal::Range((min, min_ty), (max, _)) => {
+                let elems: Vec<usize> = (*min as usize..*max as usize).into_iter().collect();
+                let elem_size = Type::Unsigned(*min_ty).size_in_bits_for_defs(checked);
                 let mut bits = Vec::with_capacity(elems.len() * elem_size);
                 for elem in elems {
                     unsigned_to_bits(elem as u128, elem_size, &mut bits);
@@ -452,7 +451,9 @@ impl Display for Literal {
                     write!(f, ")")
                 }
             },
-            Literal::Range(min, max) => write!(f, "{}..{}", min, max),
+            Literal::Range((min, min_ty), (max, max_ty)) => {
+                write!(f, "{min}{min_ty}..{max}{max_ty}")
+            }
         }
     }
 }

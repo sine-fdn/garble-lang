@@ -23,8 +23,6 @@ pub enum ParseErrorEnum {
     InvalidTopLevelDef,
     /// Arrays of the specified size are not supported.
     InvalidArraySize,
-    /// Tuples of the specified size are not supported.
-    InvalidTupleIndexSize,
     /// The method name is none of the supported (hardcoded) method names.
     InvalidMethodName,
     /// The min or max value of the range expression is invalid.
@@ -57,7 +55,6 @@ impl std::fmt::Display for ParseErrorEnum {
                     "Invalid array size (must be a constant number <= {max})"
                 ))
             }
-            ParseErrorEnum::InvalidTupleIndexSize => f.write_str("Invalid tuple index"),
             ParseErrorEnum::InvalidMethodName => {
                 f.write_str("Invalid method name (only .map, .fold and .update are supported)")
             }
@@ -682,7 +679,9 @@ impl Parser {
                     let type_suffix = *type_suffix;
                     let meta = *meta;
                     self.tokens.next();
-                    if self.next_matches(&TokenEnum::DoubleDot).is_some() {
+                    if self.peek(&TokenEnum::DoubleDot) || self.peek(&TokenEnum::DoubleDotEquals) {
+                        let is_inclusive = self.peek(&TokenEnum::DoubleDotEquals);
+                        self.tokens.next();
                         if let Some(Token(
                             TokenEnum::UnsignedNum(range_end, type_suffix_end),
                             meta_end,
@@ -697,7 +696,11 @@ impl Parser {
                                 Ok(Pattern(
                                     PatternEnum::UnsignedInclusiveRange(
                                         n,
-                                        range_end - 1,
+                                        if is_inclusive {
+                                            range_end
+                                        } else {
+                                            range_end - 1
+                                        },
                                         type_suffix,
                                     ),
                                     meta,
@@ -719,7 +722,9 @@ impl Parser {
                     let meta = *meta;
                     let type_suffix = *type_suffix;
                     self.tokens.next();
-                    if self.next_matches(&TokenEnum::DoubleDot).is_some() {
+                    if self.peek(&TokenEnum::DoubleDot) || self.peek(&TokenEnum::DoubleDotEquals) {
+                        let is_inclusive = self.peek(&TokenEnum::DoubleDotEquals);
+                        self.tokens.next();
                         if let Some(Token(
                             TokenEnum::SignedNum(range_end, type_suffix_end),
                             meta_end,
@@ -734,7 +739,11 @@ impl Parser {
                                 Ok(Pattern(
                                     PatternEnum::SignedInclusiveRange(
                                         n,
-                                        range_end - 1,
+                                        if is_inclusive {
+                                            range_end
+                                        } else {
+                                            range_end - 1
+                                        },
                                         type_suffix,
                                     ),
                                     meta,
@@ -834,29 +843,34 @@ impl Parser {
             return Err(());
         };
         while self.next_matches(&TokenEnum::LeftBracket).is_some() {
-            let index = self.parse_expr()?;
-            let end = self.expect(&TokenEnum::RightBracket)?;
-            let meta = join_meta(expr.1, end);
-            expr = Expr(ExprEnum::ArrayAccess(Box::new(expr), Box::new(index)), meta);
+            if let Some(Token(TokenEnum::ConstantIndexOrSize(i), meta)) = self.tokens.peek() {
+                let i = *i;
+                let meta = *meta;
+                self.tokens.next();
+                let index = Expr(
+                    ExprEnum::NumUnsigned(i as u128, UnsignedNumType::Usize),
+                    meta,
+                );
+                let end = self.expect(&TokenEnum::RightBracket)?;
+                let meta = join_meta(expr.1, end);
+                expr = Expr(ExprEnum::ArrayAccess(Box::new(expr), Box::new(index)), meta);
+            } else {
+                let index = self.parse_expr()?;
+                let end = self.expect(&TokenEnum::RightBracket)?;
+                let meta = join_meta(expr.1, end);
+                expr = Expr(ExprEnum::ArrayAccess(Box::new(expr), Box::new(index)), meta);
+            }
         }
         while self.next_matches(&TokenEnum::Dot).is_some() {
             let peeked = self.tokens.peek();
             if let Some(Token(TokenEnum::Identifier(_), _)) = peeked {
                 expr = self.parse_method_call_or_struct_access(expr)?;
-            } else if let Some(Token(
-                TokenEnum::UnsignedNum(i, Some(UnsignedNumType::Usize) | None),
-                meta_index,
-            )) = peeked
-            {
+            } else if let Some(Token(TokenEnum::ConstantIndexOrSize(i), meta_index)) = peeked {
                 let i = *i;
                 let meta_index = *meta_index;
-                if i <= usize::MAX as u128 {
-                    self.tokens.next();
-                    let meta = join_meta(expr.1, meta_index);
-                    expr = Expr(ExprEnum::TupleAccess(Box::new(expr), i as usize), meta)
-                } else {
-                    self.push_error_for_next(ParseErrorEnum::InvalidTupleIndexSize);
-                }
+                self.tokens.next();
+                let meta = join_meta(expr.1, meta_index);
+                expr = Expr(ExprEnum::TupleAccess(Box::new(expr), i as usize), meta)
             } else {
                 self.push_error_for_next(ParseErrorEnum::ExpectedMethodCallOrFieldAccess);
                 return Err(());
@@ -955,27 +969,23 @@ impl Parser {
                     }
                 }
             },
-            TokenEnum::UnsignedNum(n, type_suffix) => {
+            TokenEnum::UnsignedNum(n, n_suffix) => {
                 if self.next_matches(&TokenEnum::DoubleDot).is_some() {
-                    if let Some(Token(TokenEnum::UnsignedNum(range_end, _), meta_end)) =
+                    if let Some(Token(TokenEnum::UnsignedNum(range_end, range_end_suffix), meta_end)) =
                         self.tokens.peek()
                     {
                         let range_end = *range_end;
+                        let range_end_suffix = *range_end_suffix;
                         let meta_end = *meta_end;
                         self.tokens.next();
-                        if n < usize::MAX as u128 && range_end < usize::MAX as u128 {
-                            let meta = join_meta(meta, meta_end);
-                            Expr(ExprEnum::Range(n as usize, range_end as usize), meta)
-                        } else {
-                            self.push_error(ParseErrorEnum::InvalidRangeExpr, meta_end);
-                            return Err(());
-                        }
+                        let meta = join_meta(meta, meta_end);
+                        Expr(ExprEnum::Range((n, n_suffix), (range_end, range_end_suffix)), meta)
                     } else {
                         self.push_error_for_next(ParseErrorEnum::InvalidRangeExpr);
                         return Err(());
                     }
                 } else {
-                    Expr(ExprEnum::NumUnsigned(n, type_suffix), meta)
+                    Expr(ExprEnum::NumUnsigned(n, n_suffix), meta)
                 }
             }
             TokenEnum::SignedNum(n, type_suffix) => Expr(ExprEnum::NumSigned(n, type_suffix), meta),
@@ -1018,18 +1028,12 @@ impl Parser {
                 };
                 if self.peek(&TokenEnum::Semicolon) {
                     self.expect(&TokenEnum::Semicolon)?;
-                    let size = if let Some(Token(TokenEnum::UnsignedNum(n, None), meta)) =
+                    let size = if let Some(Token(TokenEnum::ConstantIndexOrSize(n), _)) =
                         self.tokens.peek()
                     {
                         let n = *n;
-                        let meta = *meta;
                         self.tokens.next();
-                        if n <= usize::MAX as u128 {
-                            n as usize
-                        } else {
-                            self.push_error(ParseErrorEnum::InvalidArraySize, meta);
-                            return Err(());
-                        }
+                        n as usize
                     } else {
                         self.push_error_for_next(ParseErrorEnum::InvalidArraySize);
                         return Err(());
@@ -1192,15 +1196,11 @@ impl Parser {
         } else if let Some(meta) = self.next_matches(&TokenEnum::LeftBracket) {
             let (ty, _) = self.parse_type()?;
             self.expect(&TokenEnum::Semicolon)?;
-            let size = if let Some(Token(TokenEnum::UnsignedNum(n, None), _)) = self.tokens.peek() {
+            let size = if let Some(Token(TokenEnum::ConstantIndexOrSize(n), _)) = self.tokens.peek()
+            {
                 let n = *n;
-                if n <= usize::MAX as u128 {
-                    self.tokens.next();
-                    n as usize
-                } else {
-                    self.push_error_for_next(ParseErrorEnum::InvalidArraySize);
-                    return Err(());
-                }
+                self.tokens.next();
+                n as usize
             } else {
                 self.push_error_for_next(ParseErrorEnum::InvalidArraySize);
                 return Err(());

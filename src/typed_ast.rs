@@ -180,9 +180,9 @@ pub enum ExprEnum {
     /// Literal `false`.
     False,
     /// Unsigned number literal.
-    NumUnsigned(u128, Option<UnsignedNumType>),
+    NumUnsigned(u128, UnsignedNumType),
     /// Signed number literal.
-    NumSigned(i128, Option<SignedNumType>),
+    NumSigned(i128, SignedNumType),
     /// Identifier (either a variable or a function).
     Identifier(String),
     /// Array literal which explicitly specifies all of its elements.
@@ -224,7 +224,7 @@ pub enum ExprEnum {
     /// `map`s the specified array with the specified 1-param closure.
     Map(Box<Expr>, Box<Closure>),
     /// Range of numbers from the specified min (inclusive) to the specified max (exclusive).
-    Range(usize, usize),
+    Range((u128, UnsignedNumType), (u128, UnsignedNumType)),
 }
 
 /// A variant literal, used by [`ExprEnum::EnumLiteral`], with type and location in the source code.

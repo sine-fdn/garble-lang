@@ -9,7 +9,7 @@ use garble::{
 fn panic_on_unsigned_add_with_overflow() -> Result<(), String> {
     let prg = "
 pub fn main(x: u8) -> u8 {
-    x + 255
+    x + 255u8
 }";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| e.prettify(prg))?;
     let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
@@ -23,7 +23,7 @@ pub fn main(x: u8) -> u8 {
 fn panic_on_signed_add_with_overflow() -> Result<(), String> {
     let prg = "
 pub fn main(x: i8) -> i8 {
-    x + -100
+    x + -100i8
 }";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| e.prettify(prg))?;
     let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
@@ -37,7 +37,7 @@ pub fn main(x: i8) -> i8 {
 fn panic_on_sub_with_overflow() -> Result<(), String> {
     let prg = "
 pub fn main(x: i8) -> i8 {
-    x - 100
+    x - 100i8
 }";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| e.prettify(prg))?;
     let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
@@ -51,7 +51,7 @@ pub fn main(x: i8) -> i8 {
 fn panic_on_div_by_zero() -> Result<(), String> {
     let prg = "
 pub fn main(x: u8) -> u8 {
-    x / 0
+    x / 0u8
 }";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| e.prettify(prg))?;
     let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
@@ -66,9 +66,9 @@ fn panic_in_branch_of_if_expr() -> Result<(), String> {
     let prg = "
 pub fn main(b: bool) -> i32 {
     if b {
-        1
+        1i32
     } else {
-        1 / 0
+        1i32 / 0i32
     }
 }";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| e.prettify(prg))?;
@@ -89,11 +89,11 @@ fn panic_in_branch_of_match_expr() -> Result<(), String> {
     let prg = "
 pub fn main(x: i32) -> i32 {
     match x {
-        0 => 0,
-        1 => 1 / 0,
-        2 => 2,
-        3 => (200u8 + 200u8) as i32,
-        _ => 3,
+        0i32 => 0i32,
+        1i32 => 1i32 / 0i32,
+        2i32 => 2i32,
+        3i32 => (200u8 + 200u8) as i32,
+        _ => 3i32,
     }
 }";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| e.prettify(prg))?;
@@ -130,7 +130,7 @@ pub fn main(x: i32) -> i32 {
 fn panic_on_out_of_bounds_access() -> Result<(), String> {
     let prg = "
 pub fn main(i: usize) -> i32 {
-    [1, 2, 3][i]
+    [1i32, 2i32, 3i32][i]
 }
 ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| e.prettify(prg))?;
@@ -162,7 +162,7 @@ pub fn main(i: usize) -> i32 {
 fn panic_on_out_of_bounds_update() -> Result<(), String> {
     let prg = "
 pub fn main(i: usize) -> i32 {
-    let updated = [1, 2, 3].update(i, 0);
+    let updated = [1i32, 2i32, 3i32].update(i, 0i32);
     updated[0]
 }
 ";
@@ -243,7 +243,7 @@ pub fn main(b: bool) -> bool {
 
     let prg = "
 pub fn main(b: bool) -> bool {
-    (0 / 0 == 1) && [true; 0][1]
+    (0i32 / 0i32 == 1i32) && [true; 0][1]
 }
 ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
@@ -311,7 +311,7 @@ pub fn main(b: bool) -> bool {
 
     let prg = "
 pub fn main(b: bool) -> bool {
-    (0 / 0 == 1) || [true; 0][1]
+    (0i32 / 0i32 == 1i32) || [true; 0][1]
 }
 ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;

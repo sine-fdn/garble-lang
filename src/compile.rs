@@ -601,13 +601,13 @@ impl Expr {
                 }
                 result
             }
-            ExprEnum::Range(from, to) => {
-                let size = to - from;
-                let elem_bits = Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(prg);
+            ExprEnum::Range((from, elem_ty), (to, _)) => {
+                let size = (to - from) as usize;
+                let elem_bits = Type::Unsigned(*elem_ty).size_in_bits_for_defs(prg);
                 let mut array = Vec::with_capacity(elem_bits * size);
                 for i in *from..*to {
                     for b in (0..elem_bits).rev() {
-                        array.push((i >> b) & 1);
+                        array.push((i as usize >> b) & 1);
                     }
                 }
                 array

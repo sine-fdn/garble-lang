@@ -19,7 +19,7 @@ pub fn main(values: (u8, u8), op: Op) -> OpResult {
         (Op::Mul, (x, y)) => OpResult::Ok(x * y),
         (Op::Min, (x, y)) => OpResult::Ok(if x < y { x } else { y }),
         (Op::Max, (x, y)) => OpResult::Ok(if x > y { x } else { y }),
-        (Op::Div, (x, 0)) => OpResult::DivByZero,
+        (Op::Div, (x, 0u8)) => OpResult::DivByZero,
         (Op::Div, (x, y)) => OpResult::Ok(x / y),
     }
 }

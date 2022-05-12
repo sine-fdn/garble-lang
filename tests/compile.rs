@@ -41,7 +41,7 @@ fn compile_add() -> Result<(), Error> {
         let prg = format!(
             "
 pub fn main(x: u8) -> u8 {{
-    x + {}
+    x + {}u8
 }}
 ",
             y
@@ -67,7 +67,7 @@ fn compile_add_with_int_coercion() -> Result<(), Error> {
         let prg = format!(
             "
 pub fn main(x: u16) -> u16 {{
-    x + {}
+    x + {}u16
 }}
 ",
             y
@@ -91,8 +91,8 @@ pub fn main(x: u16) -> u16 {{
 fn compile_let_expr() -> Result<(), Error> {
     let prg = "
 pub fn main(x: u16) -> u16 {
-    let y = x + 1;
-    y + 1
+    let y = x + 1u16;
+    y + 1u16
 }
 ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
@@ -114,7 +114,7 @@ pub fn main(x: u16) -> u16 {
 }
 
 fn inc(x: u16) -> u16 {
-    add(x, 1)
+    add(x, 1u16)
 }
 
 fn add(x: u16, y: u16) -> u16 {
@@ -161,7 +161,7 @@ pub fn main(x: bool) -> u8 {
 fn compile_bit_ops_for_numbers() -> Result<(), Error> {
     let prg = "
 pub fn main(x: u16, y: u16, z: u16) -> u16 {
-    x | (y & (z ^ 2))
+    x | (y & (z ^ 2u16))
 }
 ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
@@ -188,7 +188,7 @@ pub fn main(x: u16, y: u16, z: u16) -> u16 {
 fn compile_greater_than_and_less_than() -> Result<(), Error> {
     let prg = "
 pub fn main(x: u16, y: u16) -> bool {
-    (x > y) & (x < 10)
+    (x > y) & (x < 10u16)
 }
 ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
@@ -212,7 +212,7 @@ pub fn main(x: u16, y: u16) -> bool {
 fn compile_equals_and_not_equals() -> Result<(), Error> {
     let prg = "
 pub fn main(x: u16, y: u16) -> bool {
-    (x == y) & (x != 0)
+    (x == y) & (x != 0u16)
 }
 ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
@@ -400,7 +400,7 @@ pub fn main(x: i8, y: i8) -> i8 {
 fn compile_bit_ops_for_signed_numbers() -> Result<(), Error> {
     let prg = "
 pub fn main(x: i16, y: i16, z: i16) -> i16 {
-    x | (y & (z ^ 2))
+    x | (y & (z ^ 2i16))
 }
 ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
@@ -497,7 +497,7 @@ pub fn main(mode: bool, x: i16, y: u8) -> i16 {
 fn compile_add_with_signed_int_coercion() -> Result<(), Error> {
     let prg = "
 pub fn main(x: i16) -> i16 {
-    x + -10
+    x + -10i16
 }
 ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
@@ -837,7 +837,7 @@ fn compile_array_assignment() -> Result<(), Error> {
         "
 pub fn main(x: i8, i: usize, j: usize) -> i8 {{
     let arr = [x; {}];
-    let arr = arr.update(i, x * 2);
+    let arr = arr.update(i, x * 2i8);
     arr[j]
 }}
 ",
@@ -869,7 +869,7 @@ fn compile_fold() -> Result<(), Error> {
         "
 pub fn main(x: i8) -> i8 {{
     let arr = [x; {}];
-    arr.fold(0, |acc: i8, x: i8| -> i8 {{
+    arr.fold(0i8, |acc: i8, x: i8| -> i8 {{
         acc + x
     }})
 }}
@@ -896,7 +896,7 @@ fn compile_map() -> Result<(), Error> {
         "
 pub fn main(x: i8, i: usize) -> i8 {{
     let arr = [x; {}];
-    let arr = arr.map(|x: i8| -> i8 {{x * 2}});
+    let arr = arr.map(|x: i8| -> i8 {{x * 2i8}});
     arr[i]
 }}
 ",
@@ -1004,8 +1004,8 @@ fn compile_signed_casts() -> Result<(), Error> {
 fn compile_range() -> Result<(), Error> {
     let prg = "
 pub fn main(_x: u8) -> i16 {
-    let arr = 1..101;
-    arr.fold(0, |acc: i16, x: usize| -> i16 {
+    let arr = 1u8..101u8;
+    arr.fold(0i16, |acc: i16, x: u8| -> i16 {
         acc + (x as i16)
     })
 }
@@ -1027,7 +1027,7 @@ fn compile_tuple() -> Result<(), Error> {
         let prg = &format!(
             "
 pub fn main(x: bool) -> {} {{
-    let t = (-3, -2i16, -1i8, true, false);
+    let t = (-3i32, -2i16, -1i8, true, false);
     t.{}
 }}
 ",
@@ -1071,11 +1071,11 @@ pub fn main(b: bool) -> i32 {
         Foobar::Foo
     };
     match choice {
-        Foobar::Bar(false, false) => 1,
-        Foobar::Bar(false, true) => 2,
-        Foobar::Bar(_, false) => 3,
-        Foobar::Bar(true, true) => 4,
-        Foobar::Foo => 5,
+        Foobar::Bar(false, false) => 1i32,
+        Foobar::Bar(false, true) => 2i32,
+        Foobar::Bar(_, false) => 3i32,
+        Foobar::Bar(true, true) => 4i32,
+        Foobar::Foo => 5i32,
     }
 }
 ";
@@ -1105,12 +1105,12 @@ enum Foobar {
 
 pub fn main(b: bool) -> u8 {
     let choice = if b {
-        Foobar::Bar(6)
+        Foobar::Bar(6u8)
     } else {
         Foobar::Foo
     };
     match choice {
-        Foobar::Foo => 5 as u8,
+        Foobar::Foo => 5u8,
         Foobar::Bar(x) => x
     }
 }
@@ -1138,14 +1138,14 @@ enum Ops {
 }
 
 pub fn main(choice: u8, x: u8, y: u8) -> u8 {
-    let op = if choice == 0 {
+    let op = if choice == 0u8 {
         Ops::Mul(x, y)
     } else {
         Ops::Div(x, y)
     };
 
     match op {
-        Ops::Div(x, 0) => 42 as u8,
+        Ops::Div(x, 0u8) => 42u8,
         Ops::Div(x, y) => x / y,
         Ops::Mul(x, y) => x * y,
     }
@@ -1182,13 +1182,13 @@ fn compile_exhaustive_range_pattern() -> Result<(), Error> {
     let prg = "
 pub fn main(x: u8) -> u8 {
     match x {
-        0..10 => 1,
-        10 => 2,
-        11 => 2,
-        13 => 2,
-        12..100 => 2,
-        100..256 => 3,
-    } as u8
+        0u8..10u8 => 1u8,
+        10u8 => 2u8,
+        11u8 => 2u8,
+        13u8 => 2u8,
+        12u8..100u8 => 2u8,
+        100u8..=255u8 => 3u8,
+    }
 }
 ";
     for x in 0..255 {
@@ -1216,10 +1216,10 @@ pub fn main(x: u8) -> u8 {
 fn compile_exhaustive_tuple_pattern() -> Result<(), Error> {
     let prg = "
 pub fn main(x: u8) -> u8 {
-    let x = (false, x, -5);
+    let x = (false, x, -5i32);
     match x {
         (true, x, y) => 1u8,
-        (false, 0, y) => 2u8,
+        (false, 0u8, y) => 2u8,
         (false, x, y) => x,
     }
 }
@@ -1243,12 +1243,12 @@ pub fn main(x: u8) -> u8 {
 fn compile_exhaustive_nested_pattern() -> Result<(), Error> {
     let prg = "
 pub fn main(x: u8) -> u8 {
-    let x = (x, (x * 2, 1 as u8));
+    let x = (x, (x * 2u8, 1u8));
     match x {
-        (0, _) => 1u8,
-        (1..256, (x_twice, 1)) => x_twice,
-        (1..256, (_, 1..256)) => 2u8,
-        (1..256, (_, 0)) => 3u8,
+        (0u8, _) => 1u8,
+        (1u8..=255u8, (x_twice, 1u8)) => x_twice,
+        (1u8..=255u8, (_, 1u8..=255u8)) => 2u8,
+        (1u8..=255u8, (_, 0u8)) => 3u8,
     }
 }
 ";
@@ -1271,7 +1271,7 @@ pub fn main(x: u8) -> u8 {
 fn compile_main_with_tuple_io() -> Result<(), Error> {
     let prg = "
 pub fn main(values: (u8, u8)) -> (u8, u8) {
-    (values.0 + 1, values.1 + 1)
+    (values.0 + 1u8, values.1 + 1u8)
 }
 ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
@@ -1305,7 +1305,7 @@ enum OpResult {
 
 pub fn main(op: Op) -> OpResult {
     match op {
-        Op::Zero => OpResult::Ok(0),
+        Op::Zero => OpResult::Ok(0u8),
         Op::Div(x, 0u8) => OpResult::DivByZero,
         Op::Div(x, y) => OpResult::Ok(x / y),
     }
@@ -1320,7 +1320,7 @@ pub fn main(op: Op) -> OpResult {
     eval.set_literal(input)?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-    let expected = Literal::parse(&typed_prg, &ty_out, "OpResult::Ok(5)")?;
+    let expected = Literal::parse(&typed_prg, &ty_out, "OpResult::Ok(5u8)")?;
     assert_eq!(r, expected);
     Ok(())
 }
@@ -1329,7 +1329,7 @@ pub fn main(op: Op) -> OpResult {
 fn compile_array_literal_access() -> Result<(), Error> {
     let prg = "
 pub fn main(i: usize) -> i32 {
-    [-2, -1, 0, 1, 2][i]
+    [-2i32, -1i32, 0i32, 1i32, 2i32][i]
 }";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
     for i in 0..5 {
@@ -1348,7 +1348,7 @@ pub fn main(i: usize) -> i32 {
 fn compile_main_with_array_io() -> Result<(), Error> {
     let prg = "
 pub fn main(nums: [u8; 5]) -> [u8; 5] {
-    let sum = nums.fold(0, |acc: u16, n: u8| -> u16 {
+    let sum = nums.fold(0u16, |acc: u16, n: u8| -> u16 {
         acc + (n as u16)
     });
     nums.map(|n: u8| -> u8 {
@@ -1373,12 +1373,12 @@ pub fn main(nums: [u8; 5]) -> [u8; 5] {
 fn compile_if_elseif_else() -> Result<(), Error> {
     let prg = "
 pub fn main(x: i8) -> i8 {
-    if x < 0 {
-        -1
-    } else if x == 0 {
-        0 as i8
+    if x < 0i8 {
+        -1i8
+    } else if x == 0i8 {
+        0i8
     } else {
-        1 as i8
+        1i8
     }
 }
     ";
@@ -1406,9 +1406,9 @@ pub fn main(x: i8) -> i8 {
 fn compile_lexically_scoped_block() -> Result<(), Error> {
     let prg = "
 pub fn main(x: i32) -> i32 {
-    let y = x + 1;
+    let y = x + 1i32;
     let z = {
-        let y = x + 10;
+        let y = x + 10i32;
         y
     };
     y
@@ -1434,7 +1434,7 @@ struct FooBar {
 }
 
 pub fn main(x: i32) -> i32 {
-    let foobar = FooBar { foo: x, bar: 2 };
+    let foobar = FooBar { foo: x, bar: 2i32 };
     foobar.bar
 }
 ";
@@ -1459,11 +1459,11 @@ struct FooBarBaz {
 
 pub fn main(x: FooBarBaz) -> FooBarBaz {
     match x {
-        FooBarBaz { foo: 1, bar: 0, baz: false } => FooBarBaz { baz: true, foo: 1, bar: 1 },
-        FooBarBaz { foo: 1, baz, bar: 0 } => FooBarBaz { foo: 1, bar: 1, baz },
+        FooBarBaz { foo: 1i32, bar: 0u8, baz: false } => FooBarBaz { baz: true, foo: 1i32, bar: 1u8 },
+        FooBarBaz { foo: 1i32, baz, bar: 0u8 } => FooBarBaz { foo: 1i32, bar: 1u8, baz },
         FooBarBaz { bar, baz: false, foo } => FooBarBaz { foo, bar, baz: true },
-        FooBarBaz { foo, bar, baz } => FooBarBaz { foo, bar: 1, baz },
-        FooBarBaz { foo, .. } => FooBarBaz { foo, bar: 1, baz: true },
+        FooBarBaz { foo, bar, baz } => FooBarBaz { foo, bar: 1u8, baz },
+        FooBarBaz { foo, .. } => FooBarBaz { foo, bar: 1u8, baz: true },
     }
 }
 ";
@@ -1471,11 +1471,11 @@ pub fn main(x: FooBarBaz) -> FooBarBaz {
 
     let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
     let ty = Type::Struct("FooBarBaz".to_string());
-    let input = Literal::parse(&typed_prg, &ty, "FooBarBaz { foo: 1, bar: 0u8, baz: true }")?;
+    let input = Literal::parse(&typed_prg, &ty, "FooBarBaz { foo: 1i32, bar: 0u8, baz: true }")?;
     eval.set_literal(input)?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-    let expected = Literal::parse(&typed_prg, &ty, "FooBarBaz { foo: 1, bar: 1u8, baz: true }")?;
+    let expected = Literal::parse(&typed_prg, &ty, "FooBarBaz { foo: 1i32, bar: 1u8, baz: true }")?;
     assert_eq!(r, expected);
     Ok(())
 }
@@ -1491,7 +1491,7 @@ fn unused_fn(x: ...) -> ... {
  */
 pub fn main(x: u16) -> u16 {
     // comment including '/*'
-    x + /* ... */ 1
+    x + /* ... */ 1u16
 }
 ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
@@ -1513,8 +1513,8 @@ struct FooBar {
 pub fn main(x: (i32, i32)) -> i32 {
     let (a, b) = x;
 
-    let bar = (0, 0);
-    let foobar = FooBar { foo: 0, bar };
+    let bar = (0i32, 0i32);
+    let foobar = FooBar { foo: 0i32, bar };
     let FooBar { bar, .. } = foobar;
     let (y, z) = bar;
     a + y
@@ -1522,7 +1522,7 @@ pub fn main(x: (i32, i32)) -> i32 {
 ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
     let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
-    eval.parse_literal("(1, 2)")?;
+    eval.parse_literal("(1i32, 2i32)")?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, 1);
     Ok(())
@@ -1539,16 +1539,16 @@ struct FooBar {
 
 pub fn main(x: i32) -> i32 {
     let foobar = FooBar {
-        foo: 1,
-        bar: (2, 3),
-        baz: (4, 5, 6),
+        foo: 1i32,
+        bar: (2i32, 3i32),
+        baz: (4i32, 5i32, 6i32),
     };
     match x {
-        0 => {
+        0i32 => {
             let FooBar { foo, .. } = foobar;
             foo
         },
-        1 => {
+        1i32 => {
             let FooBar { bar, .. } = foobar;
             let (x, y) = bar;
             y
