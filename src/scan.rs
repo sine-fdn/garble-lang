@@ -30,6 +30,7 @@ impl std::fmt::Display for ScanErrorEnum {
 }
 
 /// A stream of tokens.
+#[derive(Debug, Clone)]
 pub struct Tokens(pub Vec<Token>);
 
 /// Splits the source code into tokens (or returns scan errors).
@@ -155,6 +156,9 @@ impl<'a> Scanner<'a> {
                                 level += 1;
                             } else if self.next_matches('*') && self.next_matches('/') {
                                 level -= 1;
+                            } else if self.next_matches('\n') {
+                                self.line += 1;
+                                self.column = 0;
                             } else if !self.peek('*') && !self.peek('/') {
                                 self.advance();
                             }
@@ -279,9 +283,12 @@ impl<'a> Scanner<'a> {
                             "let" => self.push_token(TokenEnum::KeywordLet),
                             "if" => self.push_token(TokenEnum::KeywordIf),
                             "else" => self.push_token(TokenEnum::KeywordElse),
+                            "mut" => self.push_token(TokenEnum::KeywordMut),
                             "match" => self.push_token(TokenEnum::KeywordMatch),
                             "as" => self.push_token(TokenEnum::KeywordAs),
                             "pub" => self.push_token(TokenEnum::KeywordPub),
+                            "for" => self.push_token(TokenEnum::KeywordFor),
+                            "in" => self.push_token(TokenEnum::KeywordIn),
                             _ => self.push_token(TokenEnum::Identifier(identifier)),
                         }
                     } else {

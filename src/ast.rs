@@ -62,15 +62,15 @@ pub struct FnDef {
     /// The parameters of the function.
     pub params: Vec<ParamDef>,
     /// The body expression that the function evaluates to.
-    pub body: Expr,
+    pub body: Vec<Stmt>,
     /// The location in the source code.
     pub meta: MetaInfo,
 }
 
-/// A parameter definition (parameter name and type).
+/// A parameter definition (mutability flag, parameter name and type).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct ParamDef(pub String, pub PreliminaryType);
+pub struct ParamDef(pub bool, pub String, pub PreliminaryType);
 
 /// Either a concrete type or a struct/enum that needs to be looked up in the definitions.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -90,6 +90,27 @@ pub enum PreliminaryType {
     Tuple(Vec<PreliminaryType>),
     /// A struct or an enum, depending on the top level definitions.
     StructOrEnum(String, MetaInfo),
+}
+
+/// A statement and its location in the source code.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct Stmt(pub StmtEnum, pub MetaInfo);
+
+/// The different kinds of statements.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum StmtEnum {
+    /// Let expression, binds variables to exprs.
+    Let(Pattern, Expr),
+    /// Mutable let expression, bind a single variable to an expr.
+    LetMut(String, Expr),
+    /// Assignment of a (previously as mutable declared) variable.
+    VarAssign(String, Expr),
+    /// Assignment of an index in a (mutable) array.
+    ArrayAssign(String, Expr, Expr),
+    /// Binds an identifier to each value of an array expr, evaluating the body.
+    ForEachLoop(String, Expr, Vec<Stmt>),
+    /// An expression (all expressions are statements, but not all statements expressions).
+    Expr(Expr),
 }
 
 /// An expression and its location in the source code.
@@ -117,8 +138,6 @@ pub enum ExprEnum {
     ArrayRepeatLiteral(Box<Expr>, usize),
     /// Access of an array at the specified index, returning its element.
     ArrayAccess(Box<Expr>, Box<Expr>),
-    /// Purely functional array update, returns a new array with the element at the index replaced.
-    ArrayAssignment(Box<Expr>, Box<Expr>, Box<Expr>),
     /// Tuple literal containing the specified fields.
     TupleLiteral(Vec<Expr>),
     /// Access of a tuple at the specified position.
@@ -136,19 +155,13 @@ pub enum ExprEnum {
     /// Application of a binary operator.
     Op(Op, Box<Expr>, Box<Expr>),
     /// A block that lexically scopes any bindings introduced within it.
-    LexicallyScopedBlock(Box<Expr>),
-    /// Let expression, binds variables to expressions and evaluates the body with them in scope.
-    Let(Vec<(Pattern, Expr)>, Box<Expr>),
+    Block(Vec<Stmt>),
     /// Call of the specified function with a list of arguments.
     FnCall(String, Vec<Expr>),
     /// If-else expression for the specified condition, if-expr and else-expr.
     If(Box<Expr>, Box<Expr>, Box<Expr>),
     /// Explicit cast of an expression to the specified type.
     Cast(PreliminaryType, Box<Expr>),
-    /// `fold`s the specified array, with the specified initial value and a 2-param closure.
-    Fold(Box<Expr>, Box<Expr>, Box<Closure>),
-    /// `map`s the specified array with the specified 1-param closure.
-    Map(Box<Expr>, Box<Closure>),
     /// Range of numbers from the specified min (inclusive) to the specified max (exclusive).
     Range((u128, UnsignedNumType), (u128, UnsignedNumType)),
 }
@@ -201,20 +214,6 @@ pub enum PatternEnum {
     UnsignedInclusiveRange(u128, u128, UnsignedNumType),
     /// Matches any number inside the signed range between min (inclusive) and max (inclusive).
     SignedInclusiveRange(i128, i128, SignedNumType),
-}
-
-/// A non-first-flass closure, used only by [`ExprEnum::Map`] and [`ExprEnum::Fold`].
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Closure {
-    /// The return type of the closure.
-    pub ty: PreliminaryType,
-    /// The parameters (name and type) of the closure.
-    pub params: Vec<ParamDef>,
-    /// The expression that the closures evaluates to.
-    pub body: Expr,
-    /// The location in the source code.
-    pub meta: MetaInfo,
 }
 
 /// The different kinds of unary operator.

@@ -233,7 +233,7 @@ pub fn main(x: i32) -> i32 {
 fn assert_single_type_error(e: Result<Program, Vec<TypeError>>) -> TypeErrorEnum {
     if let Err(mut e) = e {
         if e.len() == 1 {
-            return e.pop().unwrap().0;
+            e.pop().unwrap().0
         } else {
             panic!("Expected a single type error, but found {e:?}");
         }

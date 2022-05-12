@@ -5,7 +5,7 @@ Garble is a simple programming language for [Secure Multi-Party Computation](htt
 All programs written in Garble are deliberately Turing-incomplete (only supporting bounded recursion), guaranteeing that they can be compiled to circuits using only `AND`, `XOR` and `NOT` gates (without any kind of stateful latches or registers). Here's an example of solving the [Millionaire's Problem](https://en.wikipedia.org/wiki/Yao%27s_Millionaires%27_problem) in Garble:
 
 ```rust
-// A function for solving Yao's Millionaire's problem:
+// A function for solving Yao's Millionaires' problem:
 
 enum Richest {
     IsA,
@@ -46,8 +46,8 @@ Richest::Tie
 
 The Garble compiler is relatively straightforward and turns a program `&str` into a `circuit::Circuit` (or aborts with a scan/parse/type error). The different steps and their modules are as follows (with steps 1-4 happening during compile time, step 5 during run time):
 
-  1. `scan.rs` splits a program `&str` into a sequence of `token::Token`s.
-  2. `parse.rs` parses a sequence of `token::Token`s into an untyped `ast::Program`.
+  1. `scan.rs` splits a program `&str` into a `token::Token` sequence.
+  2. `parse.rs` parses a `token::Token` sequence into an untyped `ast::Program`.
   3. `check.rs` type-checks an untyped `ast::Program`, returning a `typed_ast::Program`.
   4. `compile.rs` converts a well-typed `typed_ast::Program` into a `circuit::Circuit`.
   5. `eval.rs` executes a `circuit::Circuit` with locally supplied inputs.

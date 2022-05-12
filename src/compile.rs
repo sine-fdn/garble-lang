@@ -8,8 +8,8 @@ use crate::{
     env::Env,
     token::{SignedNumType, UnsignedNumType},
     typed_ast::{
-        EnumDef, Expr, ExprEnum, FnDef, ParamDef, Pattern, PatternEnum, Program, StructDef, Type,
-        VariantExpr, VariantExprEnum,
+        EnumDef, Expr, ExprEnum, FnDef, ParamDef, Pattern, PatternEnum, Program, Stmt, StructDef,
+        Type, VariantExpr, VariantExprEnum, StmtEnum,
     },
 };
 
@@ -48,13 +48,125 @@ impl Program {
                     wire += 1;
                 }
                 input_gates.push(type_size);
-                env.set(identifier.clone(), wires);
+                env.let_in_current_scope(identifier.clone(), wires);
             }
             let mut circuit = CircuitBuilder::new(input_gates);
-            let output_gates = fn_def.body.compile(self, &mut env, &mut circuit);
+            let output_gates = compile_block(&fn_def.body, self, &mut env, &mut circuit);
             Ok((circuit.build(output_gates), fn_def))
         } else {
             Err(CompilerError::FnNotFound(fn_name.to_string()))
+        }
+    }
+}
+
+fn compile_block(
+    stmts: &[Stmt],
+    prg: &Program,
+    env: &mut Env<Vec<GateIndex>>,
+    circuit: &mut CircuitBuilder,
+) -> Vec<GateIndex> {
+    env.push();
+    let mut expr = vec![];
+    for stmt in stmts {
+        expr = stmt.compile(prg, env, circuit);
+    }
+    env.pop();
+    expr
+}
+
+impl Stmt {
+    fn compile(
+        &self,
+        prg: &Program,
+        env: &mut Env<Vec<GateIndex>>,
+        circuit: &mut CircuitBuilder,
+    ) -> Vec<GateIndex> {
+        match &self.0 {
+            StmtEnum::Let(pattern, binding) => {
+                let binding = binding.compile(prg, env, circuit);
+                pattern.compile(&binding, prg, env, circuit);
+                vec![]
+            }
+            StmtEnum::Expr(expr) => expr.compile(prg, env, circuit),
+            StmtEnum::LetMut(identifier, binding) => {
+                let binding = binding.compile(prg, env, circuit);
+                env.let_in_current_scope(identifier.clone(), binding);
+                vec![]
+            }
+            StmtEnum::VarAssign(identifier, value) => {
+                let value = value.compile(prg, env, circuit);
+                env.assign_mut(identifier.clone(), value);
+                vec![]
+            }
+            StmtEnum::ArrayAssign(identifier, index, value) => {
+                let elem_bits = value.1.size_in_bits_for_defs(prg);
+                let mut array = env.get(identifier).unwrap();
+                let size = array.len() / elem_bits;
+                let mut index = index.compile(prg, env, circuit);
+                let value = value.compile(prg, env, circuit);
+                let index_bits = Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(prg);
+                extend_to_bits(
+                    &mut index,
+                    &Type::Unsigned(UnsignedNumType::Usize),
+                    index_bits,
+                );
+
+                let mut index_negated = vec![0; index.len()];
+                for (i, index) in index.iter().copied().enumerate() {
+                    index_negated[i] = circuit.push_not(index);
+                }
+                // for each array element...
+                for i in 0..size {
+                    // ...and each bit of that array element...
+                    for b in 0..elem_bits {
+                        // ...use a index-length chain of mux, select the value if index == i
+                        let mut x1 = value[b];
+                        for s in 0..index.len() {
+                            let s_must_be_negated = ((i >> (index.len() - s - 1)) & 1) > 0;
+                            let s = if s_must_be_negated {
+                                index_negated[s]
+                            } else {
+                                index[s]
+                            };
+                            // x0 is selected by the mux-chain whenever a single bit of index != i
+                            let x0 = array[i * elem_bits + b];
+                            // x1 is value[b] only if index == i in all bits
+                            x1 = circuit.push_mux(s, x0, x1);
+                        }
+                        array[i * elem_bits + b] = x1;
+                    }
+                }
+                let mut array_len = Vec::with_capacity(index_bits);
+                unsigned_to_bits(size as u128, index_bits, &mut array_len);
+                let array_len: Vec<usize> = array_len.into_iter().map(|b| b as usize).collect();
+                let (index_less_than_array_len, _) =
+                    circuit.push_comparator_circuit(index_bits, &index, false, &array_len, false);
+                let out_of_bounds = circuit.push_not(index_less_than_array_len);
+                circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, self.1);
+                env.assign_mut(identifier.clone(), array);
+                vec![]
+            }
+            StmtEnum::ForEachLoop(var, array, body) => {
+                let elem_in_bits = match &array.1 {
+                    Type::Array(elem_ty, _size) => elem_ty.size_in_bits_for_defs(prg),
+                    _ => panic!("Found a non-array value in an array access expr"),
+                };
+                env.push();
+                let array = array.compile(prg, env, circuit);
+
+                let mut i = 0;
+                while i < array.len() {
+                    let binding = &array[i..i + elem_in_bits];
+                    env.let_in_current_scope(var.clone(), binding.to_vec());
+
+                    for stmt in body {
+                        stmt.compile(prg, env, circuit);
+                    }
+                    i += elem_in_bits;
+                }
+                env.pop();
+                vec![]
+            }
         }
     }
 }
@@ -152,59 +264,6 @@ impl Expr {
                 } else {
                     array
                 }
-            }
-            ExprEnum::ArrayAssignment(array, index, value) => {
-                let (elem_ty, size) = match ty {
-                    Type::Array(elem_ty, size) => (elem_ty, size),
-                    _ => panic!(
-                        "Expected array assignment to have an array type, but found {:?}",
-                        ty
-                    ),
-                };
-                let mut array = array.compile(prg, env, circuit);
-                let mut index = index.compile(prg, env, circuit);
-                let value = value.compile(prg, env, circuit);
-                let index_bits = Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(prg);
-                extend_to_bits(
-                    &mut index,
-                    &Type::Unsigned(UnsignedNumType::Usize),
-                    index_bits,
-                );
-                let elem_bits = elem_ty.size_in_bits_for_defs(prg);
-
-                let mut index_negated = vec![0; index.len()];
-                for (i, index) in index.iter().copied().enumerate() {
-                    index_negated[i] = circuit.push_not(index);
-                }
-                // for each array element...
-                for i in 0..*size {
-                    // ...and each bit of that array element...
-                    for b in 0..elem_bits {
-                        // ...use a index-length chain of mux, select the value if index == i
-                        let mut x1 = value[b];
-                        for s in 0..index.len() {
-                            let s_must_be_negated = ((i >> (index.len() - s - 1)) & 1) > 0;
-                            let s = if s_must_be_negated {
-                                index_negated[s]
-                            } else {
-                                index[s]
-                            };
-                            // x0 is selected by the mux-chain whenever a single bit of index != i
-                            let x0 = array[i * elem_bits + b];
-                            // x1 is value[b] only if index == i in all bits
-                            x1 = circuit.push_mux(s, x0, x1);
-                        }
-                        array[i * elem_bits + b] = x1;
-                    }
-                }
-                let mut array_len = Vec::with_capacity(index_bits);
-                unsigned_to_bits(*size as u128, index_bits, &mut array_len);
-                let array_len: Vec<usize> = array_len.into_iter().map(|b| b as usize).collect();
-                let (index_less_than_array_len, _) =
-                    circuit.push_comparator_circuit(index_bits, &index, false, &array_len, false);
-                let out_of_bounds = circuit.push_not(index_less_than_array_len);
-                circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, *meta);
-                array
             }
             ExprEnum::TupleLiteral(tuple) => {
                 let mut wires = Vec::with_capacity(ty.size_in_bits_for_defs(prg));
@@ -488,22 +547,7 @@ impl Expr {
                     }
                 }
             }
-            ExprEnum::LexicallyScopedBlock(expr) => {
-                env.push();
-                let expr = expr.compile(prg, env, circuit);
-                env.pop();
-                expr
-            }
-            ExprEnum::Let(bindings, body) => {
-                env.push();
-                for (pattern, binding) in bindings {
-                    let binding = binding.compile(prg, env, circuit);
-                    pattern.compile(&binding, prg, env, circuit);
-                }
-                let body = body.compile(prg, env, circuit);
-                env.pop();
-                body
-            }
+            ExprEnum::Block(stmts) => compile_block(stmts, prg, env, circuit),
             ExprEnum::FnCall(identifier, args) => {
                 let fn_def = prg.fn_defs.get(identifier).unwrap();
                 let mut bindings = Vec::with_capacity(fn_def.params.len());
@@ -515,9 +559,9 @@ impl Expr {
                 }
                 env.push();
                 for (var, binding) in bindings {
-                    env.set(var.clone(), binding);
+                    env.let_in_current_scope(var.clone(), binding);
                 }
-                let body = fn_def.body.compile(prg, env, circuit);
+                let body = compile_block(&fn_def.body, prg, env, circuit);
                 env.pop();
                 body
             }
@@ -527,12 +571,16 @@ impl Expr {
 
                 assert_eq!(condition.len(), 1);
                 let condition = condition[0];
+                let mut env_if_true = env.clone();
+                let mut env_if_false = env.clone();
 
-                let case_true = case_true.compile(prg, env, circuit);
+                let case_true = case_true.compile(prg, &mut env_if_true, circuit);
                 let panic_if_true = circuit.replace_panic_with(panic_before_branches.clone());
 
-                let case_false = case_false.compile(prg, env, circuit);
+                let case_false = case_false.compile(prg, &mut env_if_false, circuit);
                 let panic_if_false = circuit.replace_panic_with(panic_before_branches);
+
+                *env = circuit.mux_envs(condition, env_if_true, env_if_false);
 
                 let muxed_panic = circuit.mux_panic(condition, &panic_if_true, &panic_if_false);
                 circuit.replace_panic_with(muxed_panic);
@@ -557,49 +605,6 @@ impl Expr {
                         expr
                     }
                 }
-            }
-            ExprEnum::Fold(array, init, closure) => {
-                let array = array.compile(prg, env, circuit);
-                let mut init = init.compile(prg, env, circuit);
-
-                let ParamDef(init_identifier, init_ty) = &closure.params[0];
-                let ParamDef(elem_identifier, elem_ty) = &closure.params[1];
-                let elem_bits = elem_ty.size_in_bits_for_defs(prg);
-                extend_to_bits(&mut init, init_ty, init_ty.size_in_bits_for_defs(prg));
-
-                let mut acc = init;
-                let mut i = 0;
-                while i < array.len() {
-                    let elem = &array[i..i + elem_bits];
-                    env.push();
-                    env.set(init_identifier.clone(), acc);
-                    env.set(elem_identifier.clone(), elem.to_vec());
-                    acc = closure.body.compile(prg, env, circuit);
-                    env.pop();
-                    i += elem_bits;
-                }
-                acc
-            }
-            ExprEnum::Map(array, closure) => {
-                let array = array.compile(prg, env, circuit);
-
-                let ParamDef(elem_identifier, elem_ty) = &closure.params[0];
-                let elem_in_bits = elem_ty.size_in_bits_for_defs(prg);
-                let elem_out_bits = closure.ty.size_in_bits_for_defs(prg);
-                let size = array.len() / elem_in_bits;
-
-                let mut i = 0;
-                let mut result = Vec::with_capacity(elem_out_bits * size);
-                while i < array.len() {
-                    let elem_in = &array[i..i + elem_in_bits];
-                    env.push();
-                    env.set(elem_identifier.clone(), elem_in.to_vec());
-                    let elem_out = closure.body.compile(prg, env, circuit);
-                    result.extend(elem_out);
-                    env.pop();
-                    i += elem_in_bits;
-                }
-                result
             }
             ExprEnum::Range((from, elem_ty), (to, _)) => {
                 let size = (to - from) as usize;
@@ -641,27 +646,32 @@ impl Expr {
                 let mut has_prev_match = 0;
                 let mut muxed_ret_expr = vec![0; bits];
                 let mut muxed_panic = circuit.peek_panic().clone();
+                let mut muxed_env = env.clone();
 
                 for (pattern, ret_expr) in clauses {
+                    let mut env = env.clone();
                     env.push();
 
                     circuit.replace_panic_with(PanicResult::ok());
 
-                    let is_match = pattern.compile(&expr, prg, env, circuit);
-                    let ret_expr = ret_expr.compile(prg, env, circuit);
+                    let is_match = pattern.compile(&expr, prg, &mut env, circuit);
+                    let ret_expr = ret_expr.compile(prg, &mut env, circuit);
 
                     let no_prev_match = circuit.push_not(has_prev_match);
                     let s = circuit.push_and(no_prev_match, is_match);
 
+                    env.pop();
+
                     muxed_panic = circuit.mux_panic(s, &circuit.peek_panic().clone(), &muxed_panic);
+                    muxed_env = circuit.mux_envs(s, env, muxed_env);
                     for i in 0..bits {
                         let x0 = ret_expr[i];
                         let x1 = muxed_ret_expr[i];
                         muxed_ret_expr[i] = circuit.push_mux(s, x0, x1);
                     }
                     has_prev_match = circuit.push_or(has_prev_match, is_match);
-                    env.pop();
                 }
+                *env = muxed_env;
                 circuit.replace_panic_with(muxed_panic);
                 muxed_ret_expr
             }
@@ -707,7 +717,7 @@ impl Pattern {
         let Pattern(pattern, ty, _) = self;
         match pattern {
             PatternEnum::Identifier(s) => {
-                env.set(s.clone(), match_expr.to_vec());
+                env.let_in_current_scope(s.clone(), match_expr.to_vec());
                 1
             }
             PatternEnum::True => {
