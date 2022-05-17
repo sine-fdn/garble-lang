@@ -10,7 +10,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    check::{check_type, Defs, TopLevelTypes, TypedFns},
+    check::{check_type, Defs, TopLevelTypes, TypeError, TypedFns},
     circuit::EvalPanic,
     compile::{enum_max_size, enum_tag_number, enum_tag_size, signed_to_bits, unsigned_to_bits},
     env::Env,
@@ -75,11 +75,13 @@ impl Literal {
         let mut expr = scan(literal)?
             .parse_literal()?
             .type_check(&top_level_defs, &mut env, &mut fns, &defs)
-            .map_err(|mut errs| {
+            .map_err(|errs| {
+                let mut errs: Vec<TypeError> = errs.into_iter().flatten().collect();
                 errs.sort();
                 errs
             })?;
-        check_type(&mut expr, ty)?;
+        check_type(&mut expr, ty)
+            .map_err(|errs| errs.into_iter().flatten().collect::<Vec<TypeError>>())?;
         expr.1 = ty.clone();
         Ok(expr.into_literal())
     }
