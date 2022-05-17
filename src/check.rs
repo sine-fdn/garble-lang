@@ -553,12 +553,22 @@ impl Stmt {
         let meta = self.1;
         match &self.0 {
             ast::StmtEnum::Let(pattern, binding) => {
-                let binding = binding.type_check(top_level_defs, env, fns, defs)?;
-                let pattern = pattern.type_check(env, fns, defs, binding.1.clone())?;
-                Ok(typed_ast::Stmt(
-                    typed_ast::StmtEnum::Let(pattern, binding),
-                    meta,
-                ))
+                match binding.type_check(top_level_defs, env, fns, defs) {
+                    Ok(binding) => {
+                        let pattern =
+                            pattern.type_check(env, fns, defs, Some(binding.1.clone()))?;
+                        Ok(typed_ast::Stmt(
+                            typed_ast::StmtEnum::Let(pattern, binding),
+                            meta,
+                        ))
+                    }
+                    Err(mut errors) => {
+                        if let Err(e) = pattern.type_check(env, fns, defs, None) {
+                            errors.extend(e);
+                        }
+                        Err(errors)
+                    }
+                }
             }
             ast::StmtEnum::LetMut(identifier, binding) => {
                 match binding.type_check(top_level_defs, env, fns, defs) {
@@ -1093,7 +1103,7 @@ impl Expr {
 
                 for (pattern, expr) in clauses {
                     env.push();
-                    let pattern = pattern.type_check(env, fns, defs, ty.clone());
+                    let pattern = pattern.type_check(env, fns, defs, Some(ty.clone()));
                     let expr = expr.type_check(top_level_defs, env, fns, defs);
                     env.pop();
                     match (pattern, expr) {
@@ -1211,73 +1221,104 @@ impl Pattern {
         env: &mut Env<(Option<Type>, Mutability)>,
         fns: &mut TypedFns,
         defs: &Defs,
-        ty: Type,
+        ty: Option<Type>,
     ) -> Result<typed_ast::Pattern, TypeErrors> {
         let Pattern(pattern, meta) = self;
         let meta = *meta;
         let pattern = match pattern {
             PatternEnum::Identifier(s) => {
-                env.let_in_current_scope(s.clone(), (Some(ty.clone()), Mutability::Immutable));
+                env.let_in_current_scope(s.clone(), (ty.clone(), Mutability::Immutable));
                 typed_ast::PatternEnum::Identifier(s.clone())
             }
-            PatternEnum::True => {
-                if ty == Type::Bool {
-                    typed_ast::PatternEnum::True
-                } else {
+            PatternEnum::True => match &ty {
+                Some(Type::Bool) => typed_ast::PatternEnum::True,
+                Some(ty) => {
                     let e = TypeErrorEnum::UnexpectedType {
                         expected: Type::Bool,
-                        actual: ty,
+                        actual: ty.clone(),
                     };
                     return Err(vec![Some(TypeError(e, meta))]);
                 }
-            }
-            PatternEnum::False => {
-                if ty == Type::Bool {
-                    typed_ast::PatternEnum::False
-                } else {
+                None => {
+                    return Err(vec![None]);
+                }
+            },
+            PatternEnum::False => match &ty {
+                Some(Type::Bool) => typed_ast::PatternEnum::False,
+                Some(ty) => {
                     let e = TypeErrorEnum::UnexpectedType {
                         expected: Type::Bool,
-                        actual: ty,
+                        actual: ty.clone(),
                     };
                     return Err(vec![Some(TypeError(e, meta))]);
                 }
-            }
+                None => {
+                    return Err(vec![None]);
+                }
+            },
             PatternEnum::NumUnsigned(n, _) => {
-                expect_num_type(&ty, meta)?;
-                typed_ast::PatternEnum::NumUnsigned(*n)
+                if let Some(ty) = &ty {
+                    expect_num_type(ty, meta)?;
+                    typed_ast::PatternEnum::NumUnsigned(*n)
+                } else {
+                    return Err(vec![None]);
+                }
             }
             PatternEnum::NumSigned(n, _) => {
-                expect_signed_num_type(&ty, meta)?;
-                typed_ast::PatternEnum::NumSigned(*n)
+                if let Some(ty) = &ty {
+                    expect_signed_num_type(ty, meta)?;
+                    typed_ast::PatternEnum::NumSigned(*n)
+                } else {
+                    return Err(vec![None]);
+                }
             }
             PatternEnum::UnsignedInclusiveRange(from, to, _) => {
-                expect_num_type(&ty, meta)?;
-                typed_ast::PatternEnum::UnsignedInclusiveRange(*from, *to)
+                if let Some(ty) = &ty {
+                    expect_num_type(ty, meta)?;
+                    typed_ast::PatternEnum::UnsignedInclusiveRange(*from, *to)
+                } else {
+                    return Err(vec![None]);
+                }
             }
             PatternEnum::SignedInclusiveRange(from, to, _) => {
-                expect_signed_num_type(&ty, meta)?;
-                typed_ast::PatternEnum::SignedInclusiveRange(*from, *to)
+                if let Some(ty) = &ty {
+                    expect_signed_num_type(ty, meta)?;
+                    typed_ast::PatternEnum::SignedInclusiveRange(*from, *to)
+                } else {
+                    return Err(vec![None]);
+                }
             }
             PatternEnum::Tuple(fields) => {
-                let field_types = expect_tuple_type(&ty, meta)?;
-                if field_types.len() != fields.len() {
-                    let e = TypeErrorEnum::UnexpectedEnumVariantArity {
-                        expected: field_types.len(),
-                        actual: fields.len(),
-                    };
-                    return Err(vec![Some(TypeError(e, meta))]);
-                }
-                let mut errors = vec![];
-                let mut typed_fields = Vec::with_capacity(fields.len());
-                for (field, ty) in fields.iter().zip(field_types) {
-                    match field.type_check(env, fns, defs, ty) {
-                        Ok(typed_field) => typed_fields.push(typed_field),
-                        Err(e) => errors.extend(e),
+                if let Some(ty) = &ty {
+                    let field_types = expect_tuple_type(ty, meta)?;
+                    if field_types.len() != fields.len() {
+                        let e = TypeErrorEnum::UnexpectedEnumVariantArity {
+                            expected: field_types.len(),
+                            actual: fields.len(),
+                        };
+                        return Err(vec![Some(TypeError(e, meta))]);
                     }
-                }
-                if errors.is_empty() {
-                    typed_ast::PatternEnum::Tuple(typed_fields)
+                    let mut errors = vec![];
+                    let mut typed_fields = Vec::with_capacity(fields.len());
+                    for (field, ty) in fields.iter().zip(field_types) {
+                        match field.type_check(env, fns, defs, Some(ty)) {
+                            Ok(typed_field) => typed_fields.push(typed_field),
+                            Err(e) => errors.extend(e),
+                        }
+                    }
+                    if errors.is_empty() {
+                        typed_ast::PatternEnum::Tuple(typed_fields)
+                    } else {
+                        return Err(errors);
+                    }
                 } else {
+                    let mut errors = vec![None];
+                    for field in fields.iter() {
+                        match field.type_check(env, fns, defs, ty.clone()) {
+                            Ok(_) => {}
+                            Err(e) => errors.extend(e),
+                        }
+                    }
                     return Err(errors);
                 }
             }
@@ -1285,20 +1326,22 @@ impl Pattern {
             | PatternEnum::StructIgnoreRemaining(struct_name, fields) => {
                 let ignore_remaining_fields =
                     matches!(pattern, PatternEnum::StructIgnoreRemaining(_, _));
-                let struct_def_name = expect_struct_type(&ty, meta)?;
-                if &struct_def_name != struct_name {
-                    let e = TypeErrorEnum::UnexpectedType {
-                        expected: ty,
-                        actual: Type::Struct(struct_name.clone()),
-                    };
-                    return Err(vec![Some(TypeError(e, meta))]);
+                if let Some(ty) = &ty {
+                    let struct_def_name = expect_struct_type(ty, meta)?;
+                    if &struct_def_name != struct_name {
+                        let e = TypeErrorEnum::UnexpectedType {
+                            expected: ty.clone(),
+                            actual: Type::Struct(struct_name.clone()),
+                        };
+                        return Err(vec![Some(TypeError(e, meta))]);
+                    }
                 }
-                if let Some((_, struct_def)) = defs.structs.get(struct_def_name.as_str()) {
+                if let Some((_, struct_def)) = defs.structs.get(struct_name.as_str()) {
                     let mut errors = vec![];
                     let mut typed_fields = Vec::with_capacity(fields.len());
                     for (field_name, field_value) in fields {
                         if let Some(field_type) = struct_def.get(field_name.as_str()) {
-                            match field_value.type_check(env, fns, defs, field_type.clone()) {
+                            match field_value.type_check(env, fns, defs, Some(field_type.clone())) {
                                 Ok(typed_field) => {
                                     typed_fields.push((field_name.clone(), typed_field))
                                 }
@@ -1324,25 +1367,27 @@ impl Pattern {
                         }
                     }
                     if errors.is_empty() {
-                        typed_ast::PatternEnum::Struct(struct_def_name, typed_fields)
+                        typed_ast::PatternEnum::Struct(struct_name.clone(), typed_fields)
                     } else {
                         return Err(errors);
                     }
                 } else {
-                    let e = TypeErrorEnum::UnknownStruct(struct_def_name.to_string());
+                    let e = TypeErrorEnum::UnknownStruct(struct_name.clone());
                     return Err(vec![Some(TypeError(e, meta))]);
                 }
             }
             PatternEnum::EnumUnit(enum_name, variant_name)
             | PatternEnum::EnumTuple(enum_name, variant_name, _) => {
-                match &ty {
-                    Type::Enum(enum_def_name) if enum_def_name == enum_name => {}
-                    _ => {
-                        let e = TypeErrorEnum::UnexpectedType {
-                            expected: Type::Enum(enum_name.clone()),
-                            actual: ty.clone(),
-                        };
-                        return Err(vec![Some(TypeError(e, meta))]);
+                if let Some(ty) = &ty {
+                    match &ty {
+                        Type::Enum(enum_def_name) if enum_def_name == enum_name => {}
+                        _ => {
+                            let e = TypeErrorEnum::UnexpectedType {
+                                expected: Type::Enum(enum_name.clone()),
+                                actual: ty.clone(),
+                            };
+                            return Err(vec![Some(TypeError(e, meta))]);
+                        }
                     }
                 }
                 if let Some(enum_def) = defs.enums.get(enum_name.as_str()) {
@@ -1365,7 +1410,7 @@ impl Pattern {
                                 let mut errors = vec![];
                                 let mut typed_fields = Vec::with_capacity(fields.len());
                                 for (field, ty) in fields.iter().zip(field_types) {
-                                    match field.type_check(env, fns, defs, ty.clone()) {
+                                    match field.type_check(env, fns, defs, Some(ty.clone())) {
                                         Ok(typed_field) => typed_fields.push(typed_field),
                                         Err(e) => errors.extend(e),
                                     }
@@ -1403,7 +1448,11 @@ impl Pattern {
                 }
             }
         };
-        Ok(typed_ast::Pattern(pattern, ty, meta))
+        if let Some(ty) = ty {
+            Ok(typed_ast::Pattern(pattern, ty, meta))
+        } else {
+            Err(vec![None])
+        }
     }
 }
 
