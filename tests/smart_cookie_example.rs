@@ -48,7 +48,7 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
                 "key".to_string(),
                 Literal::Array(
                     key.iter()
-                        .map(|byte| Literal::NumUnsigned(*byte as u128, UnsignedNumType::U8))
+                        .map(|byte| Literal::NumUnsigned(*byte as u64, UnsignedNumType::U8))
                         .collect(),
                 ),
             )],

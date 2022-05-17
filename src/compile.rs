@@ -137,7 +137,7 @@ impl Stmt {
                     }
                 }
                 let mut array_len = Vec::with_capacity(index_bits);
-                unsigned_to_bits(size as u128, index_bits, &mut array_len);
+                unsigned_to_bits(size as u64, index_bits, &mut array_len);
                 let array_len: Vec<usize> = array_len.into_iter().map(|b| b as usize).collect();
                 let (index_less_than_array_len, _) =
                     circuit.push_comparator_circuit(index_bits, &index, false, &array_len, false);
@@ -251,7 +251,7 @@ impl Expr {
                     array = muxed_array;
                 }
                 let mut array_len = Vec::with_capacity(index_bits);
-                unsigned_to_bits(num_elems as u128, index_bits, &mut array_len);
+                unsigned_to_bits(num_elems as u64, index_bits, &mut array_len);
                 let array_len: Vec<usize> = array_len.into_iter().map(|b| b as usize).collect();
                 let (index_less_than_array_len, _) =
                     circuit.push_comparator_circuit(index_bits, &index, false, &array_len, false);
@@ -361,7 +361,6 @@ impl Expr {
                     16 => 4,
                     32 => 5,
                     64 => 6,
-                    128 => 7,
                     bits => panic!("Unexpected number of bits to be shifted: {bits}"),
                 };
                 let mut overflow = 0;
@@ -811,7 +810,7 @@ impl Pattern {
                 let tag_actual = &match_expr[0..tag_size];
 
                 let tag_expected =
-                    unsigned_as_wires(enum_tag_number(enum_def, variant_name) as u128, tag_size);
+                    unsigned_as_wires(enum_tag_number(enum_def, variant_name) as u64, tag_size);
 
                 let mut is_match = 1;
                 for i in 0..tag_size {
@@ -853,7 +852,6 @@ impl Type {
             Type::Unsigned(UnsignedNumType::U16) | Type::Signed(SignedNumType::I16) => 16,
             Type::Unsigned(UnsignedNumType::U32) | Type::Signed(SignedNumType::I32) => 32,
             Type::Unsigned(UnsignedNumType::U64) | Type::Signed(SignedNumType::I64) => 64,
-            Type::Unsigned(UnsignedNumType::U128) | Type::Signed(SignedNumType::I128) => 128,
             Type::Array(elem, size) => elem.size_in_bits_for_defs(prg) * size,
             Type::Tuple(values) => {
                 let mut size = 0;
@@ -908,34 +906,34 @@ pub(crate) fn enum_max_size(enum_def: &EnumDef, prg: &Program) -> usize {
     max + enum_tag_size(enum_def)
 }
 
-pub(crate) fn unsigned_to_bits(n: u128, size: usize, bits: &mut Vec<bool>) {
+pub(crate) fn unsigned_to_bits(n: u64, size: usize, bits: &mut Vec<bool>) {
     for i in 0..size {
         bits.push((n >> (size - 1 - i) & 1) == 1);
     }
 }
 
-pub(crate) fn signed_to_bits(n: i128, size: usize, bits: &mut Vec<bool>) {
+pub(crate) fn signed_to_bits(n: i64, size: usize, bits: &mut Vec<bool>) {
     for i in 0..size {
         bits.push((n >> (size - 1 - i) & 1) == 1);
     }
 }
 
-pub(crate) fn unsigned_as_wires(n: u128, size: usize) -> Vec<usize> {
+pub(crate) fn unsigned_as_wires(n: u64, size: usize) -> Vec<usize> {
     let mut bits = Vec::with_capacity(size);
     unsigned_to_bits(n, size, &mut bits);
     bits.into_iter().map(|b| b as usize).collect()
 }
 
-pub(crate) fn signed_as_wires(n: i128, size: usize) -> Vec<usize> {
+pub(crate) fn signed_as_wires(n: i64, size: usize) -> Vec<usize> {
     let mut bits = Vec::with_capacity(size);
     signed_to_bits(n, size, &mut bits);
     bits.into_iter().map(|b| b as usize).collect()
 }
 
-pub(crate) fn wires_as_unsigned(wires: &[bool]) -> u128 {
+pub(crate) fn wires_as_unsigned(wires: &[bool]) -> u64 {
     let mut n = 0;
     for (i, output) in wires.iter().copied().enumerate() {
-        n += (output as u128) << (wires.len() - 1 - i);
+        n += (output as u64) << (wires.len() - 1 - i);
     }
     n
 }

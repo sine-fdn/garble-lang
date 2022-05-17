@@ -1016,7 +1016,7 @@ impl Parser {
                     let meta = *meta;
                     self.advance();
                     let index = Expr(
-                        ExprEnum::NumUnsigned(i as u128, UnsignedNumType::Usize),
+                        ExprEnum::NumUnsigned(i as u64, UnsignedNumType::Usize),
                         meta,
                     );
                     let end = self.expect(&TokenEnum::RightBracket)?;
@@ -1285,12 +1285,10 @@ impl Parser {
                 "u16" => PreliminaryType::Unsigned(UnsignedNumType::U16),
                 "u32" => PreliminaryType::Unsigned(UnsignedNumType::U32),
                 "u64" => PreliminaryType::Unsigned(UnsignedNumType::U64),
-                "u128" => PreliminaryType::Unsigned(UnsignedNumType::U128),
                 "i8" => PreliminaryType::Signed(SignedNumType::I8),
                 "i16" => PreliminaryType::Signed(SignedNumType::I16),
                 "i32" => PreliminaryType::Signed(SignedNumType::I32),
                 "i64" => PreliminaryType::Signed(SignedNumType::I64),
-                "i128" => PreliminaryType::Signed(SignedNumType::I128),
                 identifier => PreliminaryType::StructOrEnum(identifier.to_string(), meta),
             };
             Ok((ty, meta))
