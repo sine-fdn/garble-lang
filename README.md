@@ -51,7 +51,3 @@ The Garble compiler is relatively straightforward and turns a program `&str` int
   3. `check.rs` type-checks an untyped `ast::Program`, returning a `typed_ast::Program`.
   4. `compile.rs` converts a well-typed `typed_ast::Program` into a `circuit::Circuit`.
   5. `eval.rs` executes a `circuit::Circuit` with locally supplied inputs.
-
-## Rough Edges
-
-Garble is still in a very early stage. The core language is usable, but the user experience leaves a lot to be desired. Some of the error messages can be cryptic and especially in the case of type errors the first error may produce quite a few unrelated subsequent errors. Additionally, Garble does not support type coercion for integers, so you have to manually specify the bit width of each number (`2u8` for the unsigned number 2 with 8 bits, `3i32` for the signed number 3 with 32 bits, etc.)
