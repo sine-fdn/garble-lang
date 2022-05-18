@@ -12,8 +12,32 @@ use parse::ParseError;
 use scan::{scan, ScanError};
 use token::MetaInfo;
 
+use ast::{Expr, FnDef, Pattern, Program, Stmt, Type, VariantExpr};
 use circuit::Circuit;
-use typed_ast::{FnDef, Program};
+
+/// [`crate::ast::Program`] without any associated type information.
+pub type UntypedProgram = Program<()>;
+/// [`crate::ast::FnDef`] without any associated type information.
+pub type UntypedFnDef = FnDef<()>;
+/// [`crate::ast::Stmt`] without any associated type information.
+pub type UntypedStmt = Stmt<()>;
+/// [`crate::ast::Expr`] without any associated type information.
+pub type UntypedExpr = Expr<()>;
+/// [`crate::ast::Pattern`] without any associated type information.
+pub type UntypedPattern = Pattern<()>;
+
+/// [`crate::ast::Program`] after typechecking.
+pub type TypedProgram = Program<Type>;
+/// [`crate::ast::FnDef`] after typechecking.
+pub type TypedFnDef = FnDef<Type>;
+/// [`crate::ast::Stmt`] after typechecking.
+pub type TypedStmt = Stmt<Type>;
+/// [`crate::ast::Expr`] after typechecking.
+pub type TypedExpr = Expr<Type>;
+/// [`crate::ast::Pattern`] after typechecking.
+pub type TypedPattern = Pattern<Type>;
+/// [`crate::ast::VariantExpr`] after typechecking.
+pub type TypedVariantExpr = VariantExpr<Type>;
 
 pub mod ast;
 pub mod check;
@@ -25,15 +49,14 @@ pub mod literal;
 pub mod parse;
 pub mod scan;
 pub mod token;
-pub mod typed_ast;
 
 /// Scans, parses and type-checks a program.
-pub fn check(prg: &str) -> Result<Program, Error> {
+pub fn check(prg: &str) -> Result<TypedProgram, Error> {
     Ok(scan(prg)?.parse()?.type_check()?)
 }
 
 /// Scans, parses, type-checks and then compiles a program to a circuit of gates.
-pub fn compile(prg: &str, fn_name: &str) -> Result<(Program, FnDef, Circuit), Error> {
+pub fn compile(prg: &str, fn_name: &str) -> Result<(TypedProgram, TypedFnDef, Circuit), Error> {
     let program = check(prg)?;
     let (circuit, main_fn) = program.compile(fn_name)?;
     let main_fn = main_fn.clone();

@@ -10,6 +10,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    ast::{Expr, ExprEnum, Type, Variant, VariantExpr, VariantExprEnum},
     check::{check_type, Defs, TopLevelTypes, TypeError, TypedFns},
     circuit::EvalPanic,
     compile::{enum_max_size, enum_tag_number, enum_tag_size, signed_to_bits, unsigned_to_bits},
@@ -17,8 +18,7 @@ use crate::{
     eval::EvalError,
     scan::scan,
     token::{SignedNumType, UnsignedNumType},
-    typed_ast::{Expr, ExprEnum, Program, Type, Variant, VariantExpr, VariantExprEnum},
-    CompileTimeError,
+    CompileTimeError, TypedExpr, TypedProgram, TypedVariantExpr,
 };
 
 /// A subset of [`crate::typed_ast::Expr`] that is used as input / output by an
@@ -60,7 +60,11 @@ pub enum VariantLiteral {
 
 impl Literal {
     /// Parses the str as a literal of the specified type, looking up enum defs in the program.
-    pub fn parse(checked: &Program, ty: &Type, literal: &str) -> Result<Self, CompileTimeError> {
+    pub fn parse(
+        checked: &TypedProgram,
+        ty: &Type,
+        literal: &str,
+    ) -> Result<Self, CompileTimeError> {
         let mut struct_names = HashSet::with_capacity(checked.struct_defs.len());
         let mut enum_names = HashSet::with_capacity(checked.enum_defs.len());
         struct_names.extend(checked.struct_defs.keys());
@@ -82,12 +86,12 @@ impl Literal {
             })?;
         check_type(&mut expr, ty)
             .map_err(|errs| errs.into_iter().flatten().collect::<Vec<TypeError>>())?;
-        expr.1 = ty.clone();
+        expr.2 = ty.clone();
         Ok(expr.into_literal())
     }
 
     /// Checks whether the literal is of the specified types, looking up enum defs in the program.
-    pub fn is_of_type(&self, checked: &Program, ty: &Type) -> bool {
+    pub fn is_of_type(&self, checked: &TypedProgram, ty: &Type) -> bool {
         match (self, ty) {
             (Literal::True, Type::Bool) => true,
             (Literal::False, Type::Bool) => true,
@@ -162,7 +166,7 @@ impl Literal {
     /// `bits` must include the _panic portion of the circuit_, meaning all wires carrying panic
     /// information must be included in the bits.
     pub fn from_result_bits(
-        checked: &Program,
+        checked: &TypedProgram,
         ty: &Type,
         bits: &[bool],
     ) -> Result<Self, EvalError> {
@@ -179,7 +183,7 @@ impl Literal {
     /// want to parse a circuit output that might have panicked, use
     /// [`from_output`] instead.
     pub fn from_unwrapped_bits(
-        checked: &Program,
+        checked: &TypedProgram,
         ty: &Type,
         bits: &[bool],
     ) -> Result<Self, EvalError> {
@@ -305,11 +309,14 @@ impl Literal {
                 }
             }
             Type::Fn(_, _) => panic!("Fn types cannot be directly mapped to bits"),
+            Type::UntypedTopLevelDefinition(name, _) => {
+                panic!("Untyped top level type '{name}' should have been typechecked at this point")
+            }
         }
     }
 
     /// Encodes the literal as bits, looking up enum defs in the program.
-    pub fn as_bits(&self, checked: &Program) -> Vec<bool> {
+    pub fn as_bits(&self, checked: &TypedProgram) -> Vec<bool> {
         match self {
             Literal::True => vec![true],
             Literal::False => vec![false],
@@ -459,9 +466,9 @@ impl Display for Literal {
     }
 }
 
-impl Expr {
+impl TypedExpr {
     fn into_literal(self) -> Literal {
-        let Expr(expr_enum, ty, _) = self;
+        let Expr(expr_enum, _, ty) = self;
         match expr_enum {
             ExprEnum::True => Literal::True,
             ExprEnum::False => Literal::False,
@@ -509,7 +516,7 @@ impl Expr {
     }
 }
 
-impl VariantExpr {
+impl TypedVariantExpr {
     fn into_literal(self) -> VariantLiteral {
         let VariantExpr(_, variant, _) = self;
         match variant {

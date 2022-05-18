@@ -1,10 +1,10 @@
 use garble::{
     ast::Op::{self, *},
+    ast::Type,
     compile,
     eval::{EvalError, Evaluator},
     literal::Literal::{self, NumSigned, NumUnsigned},
     token::{SignedNumType::*, UnsignedNumType::*},
-    typed_ast::Type,
     Error,
 };
 use quickcheck::Arbitrary;

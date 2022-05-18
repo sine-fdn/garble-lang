@@ -3,15 +3,20 @@
 use std::{cmp::max, collections::HashMap};
 
 use crate::{
-    ast::{Op, UnaryOp},
+    ast::{
+        EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, Program, Stmt,
+        StmtEnum, StructDef, Type, UnaryOp, VariantExpr, VariantExprEnum,
+    },
     circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, PanicResult, USIZE_BITS},
     env::Env,
     token::{SignedNumType, UnsignedNumType},
-    typed_ast::{
-        EnumDef, Expr, ExprEnum, FnDef, ParamDef, Pattern, PatternEnum, Program, Stmt, StmtEnum,
-        StructDef, Type, VariantExpr, VariantExprEnum,
-    },
 };
+
+type TypedProgram = Program<Type>;
+type TypedFnDef = FnDef<Type>;
+type TypedStmt = Stmt<Type>;
+type TypedExpr = Expr<Type>;
+type TypedPattern = Pattern<Type>;
 
 /// An error that occurred during compilation.
 #[derive(Debug, Clone)]
@@ -30,17 +35,17 @@ impl std::fmt::Display for CompilerError {
     }
 }
 
-impl Program {
+impl TypedProgram {
     /// Compiles the (type-checked) program, producing a circuit of gates.
     ///
     /// Assumes that the input program has been correctly type-checked and **panics** if
     /// incompatible types are found that should have been caught by the type-checker.
-    pub fn compile(&self, fn_name: &str) -> Result<(Circuit, &FnDef), CompilerError> {
+    pub fn compile(&self, fn_name: &str) -> Result<(Circuit, &TypedFnDef), CompilerError> {
         let mut env = Env::new();
         let mut input_gates = vec![];
         let mut wire = 2;
         if let Some(fn_def) = self.fn_defs.get(fn_name) {
-            for ParamDef(identifier, ty) in fn_def.params.iter() {
+            for ParamDef(_, identifier, ty) in fn_def.params.iter() {
                 let type_size = ty.size_in_bits_for_defs(self);
                 let mut wires = Vec::with_capacity(type_size);
                 for _ in 0..type_size {
@@ -60,8 +65,8 @@ impl Program {
 }
 
 fn compile_block(
-    stmts: &[Stmt],
-    prg: &Program,
+    stmts: &[TypedStmt],
+    prg: &TypedProgram,
     env: &mut Env<Vec<GateIndex>>,
     circuit: &mut CircuitBuilder,
 ) -> Vec<GateIndex> {
@@ -74,10 +79,10 @@ fn compile_block(
     expr
 }
 
-impl Stmt {
+impl TypedStmt {
     fn compile(
         &self,
-        prg: &Program,
+        prg: &TypedProgram,
         env: &mut Env<Vec<GateIndex>>,
         circuit: &mut CircuitBuilder,
     ) -> Vec<GateIndex> {
@@ -99,7 +104,7 @@ impl Stmt {
                 vec![]
             }
             StmtEnum::ArrayAssign(identifier, index, value) => {
-                let elem_bits = value.1.size_in_bits_for_defs(prg);
+                let elem_bits = value.2.size_in_bits_for_defs(prg);
                 let mut array = env.get(identifier).unwrap();
                 let size = array.len() / elem_bits;
                 let mut index = index.compile(prg, env, circuit);
@@ -147,7 +152,7 @@ impl Stmt {
                 vec![]
             }
             StmtEnum::ForEachLoop(var, array, body) => {
-                let elem_in_bits = match &array.1 {
+                let elem_in_bits = match &array.2 {
                     Type::Array(elem_ty, _size) => elem_ty.size_in_bits_for_defs(prg),
                     _ => panic!("Found a non-array value in an array access expr"),
                 };
@@ -171,14 +176,14 @@ impl Stmt {
     }
 }
 
-impl Expr {
+impl TypedExpr {
     fn compile(
         &self,
-        prg: &Program,
+        prg: &TypedProgram,
         env: &mut Env<Vec<GateIndex>>,
         circuit: &mut CircuitBuilder,
     ) -> Vec<GateIndex> {
-        let Expr(expr, ty, meta) = self;
+        let Expr(expr, meta, ty) = self;
         match expr {
             ExprEnum::True => {
                 vec![1]
@@ -205,7 +210,7 @@ impl Expr {
                 wires
             }
             ExprEnum::ArrayRepeatLiteral(elem, size) => {
-                let elem_ty = elem.1.clone();
+                let elem_ty = elem.2.clone();
                 let mut elem = elem.compile(prg, env, circuit);
                 extend_to_bits(&mut elem, &elem_ty, elem_ty.size_in_bits_for_defs(prg));
                 let bits = ty.size_in_bits_for_defs(prg);
@@ -216,7 +221,7 @@ impl Expr {
                 array
             }
             ExprEnum::ArrayAccess(array, index) => {
-                let num_elems = match &array.1 {
+                let num_elems = match &array.2 {
                     Type::Array(_, size) => *size,
                     _ => panic!("Found a non-array value in an array access expr"),
                 };
@@ -273,7 +278,7 @@ impl Expr {
                 wires
             }
             ExprEnum::TupleAccess(tuple, index) => {
-                let (wires_before, wires_at_index) = match &tuple.1 {
+                let (wires_before, wires_at_index) = match &tuple.2 {
                     Type::Tuple(values) => {
                         let mut wires_before = 0;
                         for v in values[0..*index].iter() {
@@ -323,7 +328,7 @@ impl Expr {
                 vec![circuit.push_or(x[0], y[0])]
             }
             ExprEnum::Op(op @ (Op::ShiftLeft | Op::ShiftRight), x, y) => {
-                let x_is_signed = is_signed(&x.1);
+                let x_is_signed = is_signed(&x.2);
                 let x = x.compile(prg, env, circuit);
                 let y = y.compile(prg, env, circuit);
                 assert_eq!(y.len(), 8);
@@ -371,8 +376,8 @@ impl Expr {
                 bits_unshifted
             }
             ExprEnum::Op(op, x, y) => {
-                let ty_x = &x.1;
-                let ty_y = &y.1;
+                let ty_x = &x.2;
+                let ty_y = &y.2;
                 let mut x = x.compile(prg, env, circuit);
                 let mut y = y.compile(prg, env, circuit);
                 let bits = max(x.len(), y.len());
@@ -550,7 +555,7 @@ impl Expr {
             ExprEnum::FnCall(identifier, args) => {
                 let fn_def = prg.fn_defs.get(identifier).unwrap();
                 let mut bindings = Vec::with_capacity(fn_def.params.len());
-                for (ParamDef(identifier, _), arg) in fn_def.params.iter().zip(args) {
+                for (ParamDef(_, identifier, _), arg) in fn_def.params.iter().zip(args) {
                     env.push();
                     let arg = arg.compile(prg, env, circuit);
                     bindings.push((identifier, arg));
@@ -592,7 +597,7 @@ impl Expr {
                 gate_indexes
             }
             ExprEnum::Cast(ty, expr) => {
-                let ty_expr = &expr.1;
+                let ty_expr = &expr.2;
                 let mut expr = expr.compile(prg, env, circuit);
                 let size_after_cast = ty.size_in_bits_for_defs(prg);
 
@@ -675,7 +680,7 @@ impl Expr {
                 muxed_ret_expr
             }
             ExprEnum::StructAccess(struct_expr, field) => {
-                if let Type::Struct(name) = &struct_expr.1 {
+                if let Type::Struct(name) = &struct_expr.2 {
                     let struct_expr = struct_expr.compile(prg, env, circuit);
                     let struct_def = prg.struct_defs.get(name.as_str()).unwrap();
                     let mut bits = 0;
@@ -705,15 +710,15 @@ impl Expr {
     }
 }
 
-impl Pattern {
+impl TypedPattern {
     fn compile(
         &self,
         match_expr: &[GateIndex],
-        prg: &Program,
+        prg: &TypedProgram,
         env: &mut Env<Vec<GateIndex>>,
         circuit: &mut CircuitBuilder,
     ) -> GateIndex {
-        let Pattern(pattern, ty, _) = self;
+        let Pattern(pattern, _, ty) = self;
         match pattern {
             PatternEnum::Identifier(s) => {
                 env.let_in_current_scope(s.clone(), match_expr.to_vec());
@@ -727,7 +732,7 @@ impl Pattern {
                 assert_eq!(match_expr.len(), 1);
                 circuit.push_not(match_expr[0])
             }
-            PatternEnum::NumUnsigned(n) => {
+            PatternEnum::NumUnsigned(n, _) => {
                 let bits = ty.size_in_bits_for_defs(prg);
                 let n = unsigned_as_wires(*n, bits);
                 let mut acc = 1;
@@ -737,7 +742,7 @@ impl Pattern {
                 }
                 acc
             }
-            PatternEnum::NumSigned(n) => {
+            PatternEnum::NumSigned(n, _) => {
                 let bits = ty.size_in_bits_for_defs(prg);
                 let n = signed_as_wires(*n, bits);
                 let mut acc = 1;
@@ -747,7 +752,7 @@ impl Pattern {
                 }
                 acc
             }
-            PatternEnum::UnsignedInclusiveRange(min, max) => {
+            PatternEnum::UnsignedInclusiveRange(min, max, _) => {
                 let bits = ty.size_in_bits_for_defs(prg);
                 let min = unsigned_as_wires(*min, bits);
                 let max = unsigned_as_wires(*max, bits);
@@ -760,7 +765,7 @@ impl Pattern {
                 let not_gt_max = circuit.push_not(gt_max);
                 circuit.push_and(not_lt_min, not_gt_max)
             }
-            PatternEnum::SignedInclusiveRange(min, max) => {
+            PatternEnum::SignedInclusiveRange(min, max, _) => {
                 let bits = ty.size_in_bits_for_defs(prg);
                 let min = signed_as_wires(*min, bits);
                 let max = signed_as_wires(*max, bits);
@@ -777,7 +782,7 @@ impl Pattern {
                 let mut is_match = 1;
                 let mut w = 0;
                 for field in fields {
-                    let Pattern(_, field_type, _) = field;
+                    let Pattern(_, _, field_type) = field;
                     let field_bits = field_type.size_in_bits_for_defs(prg);
                     let match_expr = &match_expr[w..w + field_bits];
                     let is_field_match = field.compile(match_expr, prg, env, circuit);
@@ -844,7 +849,7 @@ impl Pattern {
 }
 
 impl Type {
-    pub(crate) fn size_in_bits_for_defs(&self, prg: &Program) -> usize {
+    pub(crate) fn size_in_bits_for_defs(&self, prg: &TypedProgram) -> usize {
         match self {
             Type::Bool => 1,
             Type::Unsigned(UnsignedNumType::Usize) => USIZE_BITS,
@@ -863,11 +868,14 @@ impl Type {
             Type::Fn(_, _) => panic!("Fn types cannot be directly mapped to bits"),
             Type::Struct(name) => struct_size(prg.struct_defs.get(name).unwrap(), prg),
             Type::Enum(name) => enum_max_size(prg.enum_defs.get(name).unwrap(), prg),
+            Type::UntypedTopLevelDefinition(_, _) => {
+                unreachable!("Untyped top level types should have been typechecked at this point")
+            }
         }
     }
 }
 
-pub(crate) fn struct_size(struct_def: &StructDef, prg: &Program) -> usize {
+pub(crate) fn struct_size(struct_def: &StructDef, prg: &TypedProgram) -> usize {
     let mut total_size = 0;
     for (_, field_ty) in struct_def.fields.iter() {
         total_size += field_ty.size_in_bits_for_defs(prg);
@@ -892,7 +900,7 @@ pub(crate) fn enum_tag_size(enum_def: &EnumDef) -> usize {
     bits
 }
 
-pub(crate) fn enum_max_size(enum_def: &EnumDef, prg: &Program) -> usize {
+pub(crate) fn enum_max_size(enum_def: &EnumDef, prg: &TypedProgram) -> usize {
     let mut max = 0;
     for variant in enum_def.variants.iter() {
         let mut sum = 0;

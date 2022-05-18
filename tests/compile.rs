@@ -1,9 +1,9 @@
 use garble::{
+    ast::Type,
     compile,
     eval::Evaluator,
     literal::Literal,
     token::{SignedNumType, UnsignedNumType},
-    typed_ast::Type,
     Error,
 };
 
