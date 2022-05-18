@@ -1,4 +1,4 @@
-//! The circuit representation used by the compiler.
+//! The [`Circuit`] representation used by the compiler.
 
 use crate::{compile::wires_as_unsigned, env::Env, token::MetaInfo};
 use std::collections::HashMap;
@@ -26,6 +26,45 @@ pub enum Gate {
 }
 
 /// Representation of a circuit evaluated by an S-MPC engine.
+///
+/// Each circuit consists of 3 parts:
+///
+///   1. `input_gates`, specifying how many input bits each party must provide
+///   2. `gates`, XOR/AND/NOT
+///   3. `output_gates`, specifying which gates should be exposed as outputs (and in which order)
+///
+/// Conceptually, a circuit is a sequence of input or intermediate (XOR/AND/NOT) gates, with all
+/// input gates at the beginning of the sequence, followed by all intermediate gates. The index of a
+/// gate in the sequence determines its "wire". For example, in a circuit with two input gates (1
+/// bit for party A, 1 bit for party B), followed by three intermediate gates (an XOR of the two
+/// input gates, an AND of the two input gates, and an XOR of these two intermediate XOR/AND gates),
+/// the input gates would be the wires 0 and 1, the XOR of these two input gates would be specified
+/// as `Gate::Xor(0, 1)` and have the wire 2, the AND of the two input gates would be specified as
+/// `Gate::And(0, 1)` and have the wire 3, and the XOR of the two intermediate gates would be
+/// specified as `Gate::Xor(2, 3)` and have the wire 4:
+///
+/// ```text
+/// Input A (Wire 0) ----+----------+
+///                      |          |
+/// Input B (Wire 1) ----|-----+----|-----+
+///                      |     |    |     |
+///         (Wire 2)     +-XOR-+    |     |
+///                         |       |     |
+///         (Wire 3)        |       +-AND-+
+///                         |          |
+///         (Wire 4)        +---XOR----+
+///                              |
+/// ```
+///
+/// The input gates of different parties cannot be interleaved: Each party must supply all of their
+/// inputs before the next party's inputs can start. Consequently, a circuit with 16 input bits from
+/// party A, 8 input bits from party B and 1 input bit from party C would be specified as an
+/// `input_gates` field of `vec![16, 8, 1]`.
+///
+/// At least 1 input bit must be specified, not just because a circuit without inputs would not be
+/// very useful, but also because the first two intermediate gates of every circuit are constant
+/// true and constant false, specified as `Gate::Xor(0, 0)` with wire `n` and `Gate::Not(n)` (and
+/// thus depend on the first input bit for their specifications).
 #[derive(Debug, Clone)]
 pub struct Circuit {
     /// The different parties, with `usize` at index `i` as the number of input bits for party `i`.
