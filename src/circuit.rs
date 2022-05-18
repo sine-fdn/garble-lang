@@ -3,11 +3,12 @@
 use crate::{compile::wires_as_unsigned, env::Env, token::MetaInfo};
 use std::collections::HashMap;
 
-// This module currently implements 4 very basic types of circuit optimizations:
+// This module currently implements a few basic kinds of circuit optimizations:
 //
 // 1. Constant evaluation (e.g. x ^ 0 == x; x & 1 == x; x & 0 == 0)
 // 2. Sub-expression sharing (wires are re-used if a gate with the same type and inputs exists)
 // 3. Pruning of useless gates (gates that are not part of the output nor used by other gates)
+
 const PRINT_OPTIMIZATION_RATIO: bool = false;
 
 /// Data type to uniquely identify gates.
