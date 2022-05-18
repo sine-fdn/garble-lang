@@ -48,12 +48,12 @@ pub enum Gate {
 ///                      |          |
 /// Input B (Wire 1) ----|-----+----|-----+
 ///                      |     |    |     |
-///         (Wire 2)     +-XOR-+    |     |
-///                         |       |     |
-///         (Wire 3)        |       +-AND-+
-///                         |          |
-///         (Wire 4)        +---XOR----+
-///                              |
+///                      +-XOR-+    |     |
+///         (Wire 2) =====> |       |     |
+///                         |       +-AND-+
+///         (Wire 3) =======|========> |
+///                         +---XOR----+
+///         (Wire 4) ==========> |
 /// ```
 ///
 /// The input gates of different parties cannot be interleaved: Each party must supply all of their
