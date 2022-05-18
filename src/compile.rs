@@ -1,4 +1,4 @@
-//! Compiles a [`crate::typed_ast::Program`] to a [`crate::circuit::Circuit`].
+//! Compiles a [`crate::ast::Program`] to a [`crate::circuit::Circuit`].
 
 use std::{cmp::max, collections::HashMap};
 
