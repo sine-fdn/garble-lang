@@ -1,6 +1,6 @@
 //! The circuit representation used by the compiler.
 
-use crate::{compile::wires_as_unsigned, token::MetaInfo, env::Env};
+use crate::{compile::wires_as_unsigned, env::Env, token::MetaInfo};
 use std::collections::HashMap;
 
 // This module currently implements 4 very basic types of circuit optimizations:
@@ -512,7 +512,12 @@ impl CircuitBuilder {
         panic_gates
     }
 
-    pub fn mux_envs(&mut self, condition: usize, a: Env<Vec<GateIndex>>, b: Env<Vec<GateIndex>>) -> Env<Vec<GateIndex>> {
+    pub fn mux_envs(
+        &mut self,
+        condition: usize,
+        a: Env<Vec<GateIndex>>,
+        b: Env<Vec<GateIndex>>,
+    ) -> Env<Vec<GateIndex>> {
         if a.0.len() != b.0.len() {
             panic!("Cannot mux environments with different scopes: {a:?} vs. {b:?}");
         }
@@ -528,7 +533,8 @@ impl CircuitBuilder {
                     panic!("Bindings of variable '{identifier}' have different lengths: {binding_a:?} vs {binding_b:?}");
                 }
                 let mut binding = vec![0; binding_a.len()];
-                for (i, (&if_true, &if_false)) in binding_a.iter().zip(binding_b.iter()).enumerate() {
+                for (i, (&if_true, &if_false)) in binding_a.iter().zip(binding_b.iter()).enumerate()
+                {
                     binding[i] = self.push_mux(condition, if_true, if_false);
                 }
                 muxed.let_in_current_scope(identifier.clone(), binding);

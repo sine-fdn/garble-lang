@@ -165,12 +165,12 @@ impl CompileTimeError {
         let mut msg = "".to_string();
         for (err_type, err, meta) in errs_for_display {
             msg += &format!(
-                "{} on line {}:{}.\n",
+                "\n{} on line {}:{}.\n",
                 err_type,
                 meta.start.0 + 1,
                 meta.start.1 + 1
             );
-            msg += &format!("{}:\n\n", err);
+            msg += &format!("{}:\n", err);
             msg += &prettify_meta(prg, meta);
         }
         msg

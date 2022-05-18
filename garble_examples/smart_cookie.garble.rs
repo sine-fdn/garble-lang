@@ -149,6 +149,13 @@ fn absorb_cont(st: [u8; 48], bin: [u8; 16]) -> [u8; 48] {
     down(st3, bin, 0u8)
 }
 
+fn down(mut st: [u8; 48], bin: [u8; 16], cd: u8) -> [u8; 48] {
+    st = add_bytes(st, bin);
+    st = add_byte(st, 1u8, 16usize);
+    st = add_byte(st, cd, 47usize);
+    st
+}
+
 fn swap(st: [u32; 12], a: usize, b: usize) -> [u32; 12] {
     let mut st_updated = st;
     st_updated[a] = st[b];
@@ -218,13 +225,6 @@ fn squeeze(st: [u8; 48]) -> [u8; 16] {
         (st[3] >> 16u8) as u8,
         (st[3] >> 24u8) as u8,
     ]
-}
-
-fn down(mut st: [u8; 48], bin: [u8; 16], cd: u8) -> [u8; 48] {
-    st = add_bytes(st, bin);
-    st = add_byte(st, 1u8, 16usize);
-    st = add_byte(st, cd, 47usize);
-    st
 }
 
 fn rotate_right(val: u32, rotation: u8) -> u32 {
