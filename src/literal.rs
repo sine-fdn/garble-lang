@@ -31,9 +31,9 @@ pub enum Literal {
     /// Literal `false`.
     False,
     /// Unsigned number literal.
-    NumUnsigned(u128, UnsignedNumType),
+    NumUnsigned(u64, UnsignedNumType),
     /// Signed number literal.
-    NumSigned(i128, SignedNumType),
+    NumSigned(i64, SignedNumType),
     /// Array "repeat expression", which specifies 1 element, to be repeated a number of times.
     ArrayRepeat(Box<Literal>, usize),
     /// Array literal which explicitly specifies all of its elements.
@@ -45,7 +45,7 @@ pub enum Literal {
     /// Enum literal of the specified variant, possibly with fields.
     Enum(String, String, VariantLiteral),
     /// Range of numbers from the specified min (inclusive) to the specified max (exclusive).
-    Range((u128, UnsignedNumType), (u128, UnsignedNumType)),
+    Range((u64, UnsignedNumType), (u64, UnsignedNumType)),
 }
 
 /// A variant literal (either of unit type or containing fields), used by [`Literal::EnumLiteral`].
@@ -150,7 +150,7 @@ impl Literal {
                 false
             }
             (Literal::Range((min, min_ty), (max, _)), Type::Array(elem_ty, size)) => {
-                elem_ty.as_ref() == &Type::Unsigned(*min_ty) && max - min == *size as u128
+                elem_ty.as_ref() == &Type::Unsigned(*min_ty) && max - min == *size as u64
             }
             _ => false,
         }
@@ -203,7 +203,7 @@ impl Literal {
                 if bits.len() == size {
                     let mut n = 0;
                     for (i, output) in bits.iter().copied().enumerate() {
-                        n |= (output as u128) << (size - 1 - i);
+                        n |= (output as u64) << (size - 1 - i);
                     }
                     Ok(Literal::NumUnsigned(n, *unsigned_ty))
                 } else {
@@ -218,13 +218,12 @@ impl Literal {
                 if bits.len() == size {
                     let mut n = 0;
                     for (i, output) in bits.iter().copied().enumerate() {
-                        n |= (output as i128) << (size - 1 - i);
+                        n |= (output as i64) << (size - 1 - i);
                     }
                     let n = match size {
-                        8 => (n as i8) as i128,
-                        16 => (n as i16) as i128,
-                        32 => (n as i32) as i128,
-                        64 => (n as i64) as i128,
+                        8 => (n as i8) as i64,
+                        16 => (n as i16) as i64,
+                        32 => (n as i32) as i64,
                         _ => n,
                     };
                     Ok(Literal::NumSigned(n, *signed_ty))
@@ -383,7 +382,7 @@ impl Literal {
                 let elem_size = Type::Unsigned(*min_ty).size_in_bits_for_defs(checked);
                 let mut bits = Vec::with_capacity(elems.len() * elem_size);
                 for elem in elems {
-                    unsigned_to_bits(elem as u128, elem_size, &mut bits);
+                    unsigned_to_bits(elem as u64, elem_size, &mut bits);
                 }
                 bits
             }
@@ -470,14 +469,14 @@ impl Expr {
                 if let Type::Unsigned(ty) = ty {
                     Literal::NumUnsigned(n, ty)
                 } else if let Type::Signed(ty) = ty {
-                    Literal::NumSigned(n as i128, ty)
+                    Literal::NumSigned(n as i64, ty)
                 } else {
                     panic!("Literal type is not a number type: {:?}", ty)
                 }
             }
             ExprEnum::NumSigned(n, _) => {
                 if let Type::Unsigned(ty) = ty {
-                    Literal::NumUnsigned(n as u128, ty)
+                    Literal::NumUnsigned(n as u64, ty)
                 } else if let Type::Signed(ty) = ty {
                     Literal::NumSigned(n, ty)
                 } else {
@@ -534,60 +533,48 @@ impl From<bool> for Literal {
 
 impl From<u8> for Literal {
     fn from(n: u8) -> Self {
-        Literal::NumUnsigned(n as u128, UnsignedNumType::U8)
+        Literal::NumUnsigned(n as u64, UnsignedNumType::U8)
     }
 }
 
 impl From<u16> for Literal {
     fn from(n: u16) -> Self {
-        Literal::NumUnsigned(n as u128, UnsignedNumType::U16)
+        Literal::NumUnsigned(n as u64, UnsignedNumType::U16)
     }
 }
 
 impl From<u32> for Literal {
     fn from(n: u32) -> Self {
-        Literal::NumUnsigned(n as u128, UnsignedNumType::U32)
+        Literal::NumUnsigned(n as u64, UnsignedNumType::U32)
     }
 }
 
 impl From<u64> for Literal {
     fn from(n: u64) -> Self {
-        Literal::NumUnsigned(n as u128, UnsignedNumType::U64)
-    }
-}
-
-impl From<u128> for Literal {
-    fn from(n: u128) -> Self {
-        Literal::NumUnsigned(n, UnsignedNumType::U128)
+        Literal::NumUnsigned(n as u64, UnsignedNumType::U64)
     }
 }
 
 impl From<i8> for Literal {
     fn from(n: i8) -> Self {
-        Literal::NumSigned(n as i128, SignedNumType::I8)
+        Literal::NumSigned(n as i64, SignedNumType::I8)
     }
 }
 
 impl From<i16> for Literal {
     fn from(n: i16) -> Self {
-        Literal::NumSigned(n as i128, SignedNumType::I16)
+        Literal::NumSigned(n as i64, SignedNumType::I16)
     }
 }
 
 impl From<i32> for Literal {
     fn from(n: i32) -> Self {
-        Literal::NumSigned(n as i128, SignedNumType::I32)
+        Literal::NumSigned(n as i64, SignedNumType::I32)
     }
 }
 
 impl From<i64> for Literal {
     fn from(n: i64) -> Self {
-        Literal::NumSigned(n as i128, SignedNumType::I64)
-    }
-}
-
-impl From<i128> for Literal {
-    fn from(n: i128) -> Self {
-        Literal::NumSigned(n, SignedNumType::I128)
+        Literal::NumSigned(n as i64, SignedNumType::I64)
     }
 }

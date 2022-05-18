@@ -137,7 +137,7 @@ pub fn main(_x: i32) -> i32 {
 
 ## Primitive Types
 
-Garble supports a number of primitive types: Booleans (`bool`), unsigned integers of different bit lengths (`u8`, `u16`, `u32`, `u64`, `u128`, `usize`) and signed integers of different bit lengths (`i8`, `i16`, `i32`, `i64`, `i128`). Note that in contrast to Rust, the type suffix of a number must always be specified (and there is no automatic type coercion), except for tuple/array sizes or indexes (see below). Primitive types support the usual logical, bitwise and arithmetic operations:
+Garble supports a number of primitive types: Booleans (`bool`), unsigned integers of different bit lengths (`u8`, `u16`, `u32`, `u64`, `usize`) and signed integers of different bit lengths (`i8`, `i16`, `i32`, `i64`). Note that in contrast to Rust, the type suffix of a number must always be specified (and there is no automatic type coercion), except for tuple/array sizes or indexes (see below). Primitive types support the usual logical, bitwise and arithmetic operations:
 
 ```rust
 pub fn main(_a: i32, _b: i32) -> () {
@@ -241,8 +241,8 @@ pub fn main(_a: i32) -> [usize; 5] {
 Tuples can hold a fixed number of elements of heterogeneous types. Tuple fields are accessed using `.` followed by an index (without type suffix) or using let-destructuring (tuples are immutable, so it is not possible to reassign a tuple field):
 
 ```rust
-pub fn main(a: i32, b: u64) -> (i32, u64, i128) {
-    let sum = (a as i128) + (b as i128);
+pub fn main(a: i32, b: u64) -> (i32, u64, i64) {
+    let sum = (a as i64) + (b as i64);
     let tuple = (a, b, sum);
     let a = tuple.0;
     let b = tuple.1;

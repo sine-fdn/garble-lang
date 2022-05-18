@@ -104,7 +104,7 @@ pub enum TypeErrorEnum {
     /// The specified range has different min and max types.
     RangeTypeMismatch(UnsignedNumType, UnsignedNumType),
     /// The specified range has invalid min or max values.
-    InvalidRange(u128, u128),
+    InvalidRange(u64, u64),
     /// The specified pattern does not match the type of the matched expression.
     PatternDoesNotMatchType(Type),
     /// The patterns do not cover all possible cases.
@@ -349,7 +349,6 @@ impl Program {
             let meta = struct_def.meta;
             let mut fields = Vec::with_capacity(struct_def.fields.len());
             for (name, ty) in struct_def.fields.iter() {
-                // TODO
                 match ty.as_concrete_type(&top_level_defs) {
                     Ok(ty) => fields.push((name.clone(), ty)),
                     Err(e) => errors.extend(e),
@@ -369,7 +368,6 @@ impl Program {
                     ast::Variant::Tuple(variant_name, variant_fields) => {
                         let mut fields = Vec::with_capacity(variant_fields.len());
                         for field in variant_fields.iter() {
-                            // TODO
                             match field.as_concrete_type(&top_level_defs) {
                                 Ok(field) => fields.push(field),
                                 Err(e) => errors.extend(e),
@@ -897,7 +895,6 @@ impl Expr {
                         let mut arg_exprs = Vec::with_capacity(args.len());
                         for arg in args.iter() {
                             match arg.type_check(top_level_defs, env, fns, defs) {
-                                // TODO
                                 Ok(arg) => {
                                     let typed_ast::Expr(_, ty, meta) = &arg;
                                     arg_types.push(ty.clone());
@@ -986,7 +983,7 @@ impl Expr {
                 (typed_ast::ExprEnum::Cast(ty.clone(), Box::new(expr)), ty)
             }
             ExprEnum::Range((from, from_suffix), (to, to_suffix)) => {
-                if from >= to || (to - from) > u32::MAX as u128 {
+                if from >= to || (to - from) > u32::MAX as u64 {
                     let e = TypeErrorEnum::InvalidRange(*from, *to);
                     return Err(vec![Some(TypeError(e, meta))]);
                 }
@@ -1485,8 +1482,8 @@ fn check_exhaustiveness(
 enum Ctor {
     True,
     False,
-    UnsignedInclusiveRange(UnsignedNumType, u128, u128),
-    SignedInclusiveRange(SignedNumType, i128, i128),
+    UnsignedInclusiveRange(UnsignedNumType, u64, u64),
+    SignedInclusiveRange(SignedNumType, i64, i64),
     Tuple(Vec<Type>),
     Struct(String, Vec<(String, Type)>),
     Variant(String, String, Option<Vec<Type>>),
@@ -1529,13 +1526,13 @@ fn specialize(ctor: &Ctor, pattern: &[typed_ast::Pattern]) -> Vec<PatternStack> 
         Ctor::SignedInclusiveRange(_, min, max) => match head_enum {
             typed_ast::PatternEnum::Identifier(_) => vec![tail.collect()],
             typed_ast::PatternEnum::NumUnsigned(n)
-                if *min >= 0 && *max >= 0 && *n == *min as u128 && *n == *max as u128 =>
+                if *min >= 0 && *max >= 0 && *n == *min as u64 && *n == *max as u64 =>
             {
                 vec![tail.collect()]
             }
             typed_ast::PatternEnum::NumSigned(n) if n == min && n == max => vec![tail.collect()],
             typed_ast::PatternEnum::UnsignedInclusiveRange(n_min, n_max)
-                if *min >= 0 && *max >= 0 && *n_min <= *min as u128 && *max as u128 <= *n_max =>
+                if *min >= 0 && *max >= 0 && *n_min <= *min as u64 && *max as u64 <= *n_max =>
             {
                 vec![tail.collect()]
             }
@@ -1610,21 +1607,19 @@ fn specialize(ctor: &Ctor, pattern: &[typed_ast::Pattern]) -> Vec<PatternStack> 
 fn split_unsigned_range(
     ty: UnsignedNumType,
     patterns: &[PatternStack],
-    min: u128,
-    max: u128,
+    min: u64,
+    max: u64,
 ) -> Vec<Ctor> {
-    // TODO: the following does not work correctly for u128::MAX, perhaps u128 types should be
-    // removed from the language altogether?
-    let mut split_points = vec![min, if max == u128::MAX { max } else { max + 1 }];
+    let mut split_points = vec![min as u128, max as u128 + 1];
     for p in patterns {
         let head = p.first().unwrap();
         let typed_ast::Pattern(head_enum, _, _) = head;
         match head_enum {
-            typed_ast::PatternEnum::NumUnsigned(n) => split_points.push(*n),
+            typed_ast::PatternEnum::NumUnsigned(n) => split_points.push(*n as u128),
             typed_ast::PatternEnum::NumSigned(n) if *n >= 0 => split_points.push(*n as u128),
             typed_ast::PatternEnum::UnsignedInclusiveRange(min, max) => {
-                split_points.push(*min);
-                split_points.push(*max + 1);
+                split_points.push(*min as u128);
+                split_points.push(*max as u128 + 1);
             }
             typed_ast::PatternEnum::SignedInclusiveRange(min, max) => {
                 if *min >= 0 {
@@ -1642,13 +1637,25 @@ fn split_unsigned_range(
     let mut ranges = vec![];
     for range in split_points.windows(2) {
         if range[0] < range[1] - 1 {
-            ranges.push(Ctor::UnsignedInclusiveRange(ty, range[0], range[0]));
+            ranges.push(Ctor::UnsignedInclusiveRange(
+                ty,
+                range[0] as u64,
+                range[0] as u64,
+            ));
         }
-        if range[0] >= min && range[1] - 1 <= max {
+        if range[0] >= min as u128 && range[1] - 1 <= max as u128 {
             if range[0] < range[1] - 1 {
-                ranges.push(Ctor::UnsignedInclusiveRange(ty, range[0] + 1, range[1] - 1));
+                ranges.push(Ctor::UnsignedInclusiveRange(
+                    ty,
+                    range[0] as u64 + 1,
+                    range[1] as u64 - 1,
+                ));
             } else {
-                ranges.push(Ctor::UnsignedInclusiveRange(ty, range[0], range[1] - 1));
+                ranges.push(Ctor::UnsignedInclusiveRange(
+                    ty,
+                    range[0] as u64,
+                    range[1] as u64 - 1,
+                ));
             }
         }
     }
@@ -1658,28 +1665,26 @@ fn split_unsigned_range(
 fn split_signed_range(
     ty: SignedNumType,
     patterns: &[PatternStack],
-    min: i128,
-    max: i128,
+    min: i64,
+    max: i64,
 ) -> Vec<Ctor> {
-    // TODO: the following does not work correctly for i128::MAX, perhaps i128 types should be
-    // removed from the language altogether?
-    let mut split_points = vec![min, if max == i128::MAX { max } else { max + 1 }];
+    let mut split_points = vec![min as i128, max as i128 + 1];
     for p in patterns {
         let head = p.first().unwrap();
         let typed_ast::Pattern(head_enum, _, _) = head;
         match head_enum {
             typed_ast::PatternEnum::NumUnsigned(n) => split_points.push(*n as i128),
-            typed_ast::PatternEnum::NumSigned(n) if *n >= 0 => split_points.push(*n),
+            typed_ast::PatternEnum::NumSigned(n) if *n >= 0 => split_points.push(*n as i128),
             typed_ast::PatternEnum::UnsignedInclusiveRange(min, max) => {
                 split_points.push(*min as i128);
                 split_points.push(*max as i128 + 1);
             }
             typed_ast::PatternEnum::SignedInclusiveRange(min, max) => {
                 if *min >= 0 {
-                    split_points.push(*min);
+                    split_points.push(*min as i128);
                 }
                 if *max >= 0 {
-                    split_points.push(*max + 1);
+                    split_points.push(*max as i128 + 1);
                 }
             }
             _ => {}
@@ -1690,10 +1695,18 @@ fn split_signed_range(
     let mut ranges = vec![];
     for range in split_points.windows(2) {
         if range[0] < range[1] - 1 {
-            ranges.push(Ctor::SignedInclusiveRange(ty, range[0], range[0]));
+            ranges.push(Ctor::SignedInclusiveRange(
+                ty,
+                range[0] as i64,
+                range[0] as i64,
+            ));
         }
-        if range[0] >= min && range[1] - 1 <= max {
-            ranges.push(Ctor::SignedInclusiveRange(ty, range[0], range[1] - 1));
+        if range[0] >= min as i128 && range[1] - 1 <= max as i128 {
+            ranges.push(Ctor::SignedInclusiveRange(
+                ty,
+                range[0] as i64,
+                range[1] as i64 - 1,
+            ));
         }
     }
     ranges
@@ -1721,11 +1734,11 @@ fn split_ctor(patterns: &[PatternStack], q: &[typed_ast::Pattern], defs: &Defs) 
                 vec![Ctor::SignedInclusiveRange(*ty, ty.min(), ty.max())]
             }
             typed_ast::PatternEnum::NumUnsigned(n) => {
-                vec![Ctor::SignedInclusiveRange(*ty, *n as i128, *n as i128)]
+                vec![Ctor::SignedInclusiveRange(*ty, *n as i64, *n as i64)]
             }
             typed_ast::PatternEnum::NumSigned(n) => vec![Ctor::SignedInclusiveRange(*ty, *n, *n)],
             typed_ast::PatternEnum::UnsignedInclusiveRange(min, max) => {
-                split_signed_range(*ty, patterns, *min as i128, *max as i128)
+                split_signed_range(*ty, patterns, *min as i64, *max as i64)
             }
             typed_ast::PatternEnum::SignedInclusiveRange(min, max) => {
                 split_signed_range(*ty, patterns, *min, *max)

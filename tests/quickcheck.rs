@@ -42,12 +42,10 @@ impl Arbitrary for OperatorTestCase {
             Type::Unsigned(U16),
             Type::Unsigned(U32),
             Type::Unsigned(U64),
-            Type::Unsigned(U128),
             Type::Signed(I8),
             Type::Signed(I16),
             Type::Signed(I32),
             Type::Signed(I64),
-            Type::Signed(I128),
         ];
         let (x, ty_x, y, ty_y, result, ty_result, op) = match op {
             Add | Sub | Mul | Div | Mod | BitAnd | BitXor | BitOr => {
@@ -69,7 +67,7 @@ impl Arbitrary for OperatorTestCase {
                 let ty_u8 = Type::Unsigned(U8);
                 let x = arbitrary_literal_of_ty(g, ty);
                 let y_u8 = u8::arbitrary(g);
-                let y = NumUnsigned(y_u8 as u128, U8);
+                let y = NumUnsigned(y_u8 as u64, U8);
                 let result = match x {
                     NumUnsigned(x, unsigned_ty) => match unsigned_ty {
                         Usize => unreachable!("usize types must not be tested"),
@@ -77,14 +75,12 @@ impl Arbitrary for OperatorTestCase {
                         U16 => (x as u16).checked_shl(y_u8 as u32).map(|z| z.into()),
                         U32 => (x as u32).checked_shl(y_u8 as u32).map(|z| z.into()),
                         U64 => (x as u64).checked_shl(y_u8 as u32).map(|z| z.into()),
-                        U128 => x.checked_shl(y_u8 as u32).map(|z| z.into()),
                     },
                     NumSigned(x, signed_ty) => match signed_ty {
                         I8 => (x as i8).checked_shl(y_u8 as u32).map(|z| z.into()),
                         I16 => (x as i16).checked_shl(y_u8 as u32).map(|z| z.into()),
                         I32 => (x as i32).checked_shl(y_u8 as u32).map(|z| z.into()),
                         I64 => (x as i64).checked_shl(y_u8 as u32).map(|z| z.into()),
-                        I128 => x.checked_shl(y_u8 as u32).map(|z| z.into()),
                     },
                     _ => unreachable!("shift expects a num type"),
                 };
@@ -95,7 +91,7 @@ impl Arbitrary for OperatorTestCase {
                 let ty_u8 = Type::Unsigned(U8);
                 let x = arbitrary_literal_of_ty(g, ty);
                 let y_u8 = u8::arbitrary(g);
-                let y = NumUnsigned(y_u8 as u128, U8);
+                let y = NumUnsigned(y_u8 as u64, U8);
                 let result = match x {
                     NumUnsigned(x, unsigned_ty) => match unsigned_ty {
                         Usize => unreachable!("usize types must not be tested"),
@@ -103,14 +99,12 @@ impl Arbitrary for OperatorTestCase {
                         U16 => (x as u16).checked_shr(y_u8 as u32).map(|z| z.into()),
                         U32 => (x as u32).checked_shr(y_u8 as u32).map(|z| z.into()),
                         U64 => (x as u64).checked_shr(y_u8 as u32).map(|z| z.into()),
-                        U128 => x.checked_shr(y_u8 as u32).map(|z| z.into()),
                     },
                     NumSigned(x, signed_ty) => match signed_ty {
                         I8 => (x as i8).checked_shr(y_u8 as u32).map(|z| z.into()),
                         I16 => (x as i16).checked_shr(y_u8 as u32).map(|z| z.into()),
                         I32 => (x as i32).checked_shr(y_u8 as u32).map(|z| z.into()),
                         I64 => (x as i64).checked_shr(y_u8 as u32).map(|z| z.into()),
-                        I128 => x.checked_shr(y_u8 as u32).map(|z| z.into()),
                     },
                     _ => unreachable!("shift expects a num type"),
                 };
@@ -127,18 +121,16 @@ fn arbitrary_literal_of_ty(g: &mut quickcheck::Gen, ty: &Type) -> Literal {
     match ty {
         Type::Unsigned(ty) => match ty {
             Usize => unreachable!("usize is not supported"),
-            U8 => NumUnsigned(u8::arbitrary(g) as u128, *ty),
-            U16 => NumUnsigned(u16::arbitrary(g) as u128, *ty),
-            U32 => NumUnsigned(u32::arbitrary(g) as u128, *ty),
-            U64 => NumUnsigned(u64::arbitrary(g) as u128, *ty),
-            U128 => NumUnsigned(u128::arbitrary(g), *ty),
+            U8 => NumUnsigned(u8::arbitrary(g) as u64, *ty),
+            U16 => NumUnsigned(u16::arbitrary(g) as u64, *ty),
+            U32 => NumUnsigned(u32::arbitrary(g) as u64, *ty),
+            U64 => NumUnsigned(u64::arbitrary(g) as u64, *ty),
         },
         Type::Signed(ty) => match ty {
-            I8 => NumSigned(i8::arbitrary(g) as i128, *ty),
-            I16 => NumSigned(i16::arbitrary(g) as i128, *ty),
-            I32 => NumSigned(i32::arbitrary(g) as i128, *ty),
-            I64 => NumSigned(i64::arbitrary(g) as i128, *ty),
-            I128 => NumSigned(i128::arbitrary(g), *ty),
+            I8 => NumSigned(i8::arbitrary(g) as i64, *ty),
+            I16 => NumSigned(i16::arbitrary(g) as i64, *ty),
+            I32 => NumSigned(i32::arbitrary(g) as i64, *ty),
+            I64 => NumSigned(i64::arbitrary(g) as i64, *ty),
         },
         _ => unreachable!("only num types are supported"),
     }
@@ -150,12 +142,10 @@ fn apply_operator(op: &Op, x: &Literal, y: &Literal) -> Option<Literal> {
         (NumUnsigned(x, U16), NumUnsigned(y, U16)) => apply!(op, x: u16, y: u16),
         (NumUnsigned(x, U32), NumUnsigned(y, U32)) => apply!(op, x: u32, y: u32),
         (NumUnsigned(x, U64), NumUnsigned(y, U64)) => apply!(op, x: u64, y: u64),
-        (NumUnsigned(x, U128), NumUnsigned(y, U128)) => apply!(op, x: u128, y: u128),
         (NumSigned(x, I8), NumSigned(y, I8)) => apply!(op, x: i8, y: i8),
         (NumSigned(x, I16), NumSigned(y, I16)) => apply!(op, x: i16, y: i16),
         (NumSigned(x, I32), NumSigned(y, I32)) => apply!(op, x: i32, y: i32),
         (NumSigned(x, I64), NumSigned(y, I64)) => apply!(op, x: i64, y: i64),
-        (NumSigned(x, I128), NumSigned(y, I128)) => apply!(op, x: i128, y: i128),
         (x, y) => unreachable!("Incompatible x and y: {x}, {y}"),
     }
 }

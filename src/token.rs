@@ -15,9 +15,9 @@ pub enum TokenEnum {
     /// Constant unsigned number used to index arrays / tuples.
     ConstantIndexOrSize(u32),
     /// Unsigned number.
-    UnsignedNum(u128, UnsignedNumType),
+    UnsignedNum(u64, UnsignedNumType),
     /// Signed number.
-    SignedNum(i128, SignedNumType),
+    SignedNum(i64, SignedNumType),
     /// `enum` keyword.
     KeywordEnum,
     /// `struct` keyword.
@@ -186,20 +186,17 @@ pub enum UnsignedNumType {
     U32,
     /// 64-bit unsigned integer type.
     U64,
-    /// 128-bit unsigned integer type.
-    U128,
 }
 
 impl UnsignedNumType {
     /// Returns the max value representable by this type.
-    pub fn max(&self) -> u128 {
+    pub fn max(&self) -> u64 {
         match self {
-            UnsignedNumType::Usize => u32::MAX as u128,
-            UnsignedNumType::U8 => u8::MAX as u128,
-            UnsignedNumType::U16 => u16::MAX as u128,
-            UnsignedNumType::U32 => u32::MAX as u128,
-            UnsignedNumType::U64 => u64::MAX as u128,
-            UnsignedNumType::U128 => u128::MAX as u128,
+            UnsignedNumType::Usize => u32::MAX as u64,
+            UnsignedNumType::U8 => u8::MAX as u64,
+            UnsignedNumType::U16 => u16::MAX as u64,
+            UnsignedNumType::U32 => u32::MAX as u64,
+            UnsignedNumType::U64 => u64::MAX,
         }
     }
 }
@@ -212,7 +209,6 @@ impl std::fmt::Display for UnsignedNumType {
             UnsignedNumType::U16 => "u16",
             UnsignedNumType::U32 => "u32",
             UnsignedNumType::U64 => "u64",
-            UnsignedNumType::U128 => "u128",
         })
     }
 }
@@ -229,30 +225,26 @@ pub enum SignedNumType {
     I32,
     /// 64-bit signed integer type.
     I64,
-    /// 128-bit signed integer type.
-    I128,
 }
 
 impl SignedNumType {
     /// Returns the minimum value representable by this type.
-    pub fn min(&self) -> i128 {
+    pub fn min(&self) -> i64 {
         match self {
-            SignedNumType::I8 => i8::MIN as i128,
-            SignedNumType::I16 => i16::MIN as i128,
-            SignedNumType::I32 => i32::MIN as i128,
-            SignedNumType::I64 => i64::MIN as i128,
-            SignedNumType::I128 => i128::MIN as i128,
+            SignedNumType::I8 => i8::MIN as i64,
+            SignedNumType::I16 => i16::MIN as i64,
+            SignedNumType::I32 => i32::MIN as i64,
+            SignedNumType::I64 => i64::MIN as i64,
         }
     }
 
     /// Returns the maximum value representable by this type.
-    pub fn max(&self) -> i128 {
+    pub fn max(&self) -> i64 {
         match self {
-            SignedNumType::I8 => i8::MAX as i128,
-            SignedNumType::I16 => i16::MAX as i128,
-            SignedNumType::I32 => i32::MAX as i128,
-            SignedNumType::I64 => i64::MAX as i128,
-            SignedNumType::I128 => i128::MAX as i128,
+            SignedNumType::I8 => i8::MAX as i64,
+            SignedNumType::I16 => i16::MAX as i64,
+            SignedNumType::I32 => i32::MAX as i64,
+            SignedNumType::I64 => i64::MAX as i64,
         }
     }
 }
@@ -264,7 +256,6 @@ impl std::fmt::Display for SignedNumType {
             SignedNumType::I16 => "i16",
             SignedNumType::I32 => "i32",
             SignedNumType::I64 => "i64",
-            SignedNumType::I128 => "i128",
         })
     }
 }

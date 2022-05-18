@@ -440,10 +440,10 @@ impl CircuitBuilder {
         let current = PanicResult {
             has_panicked: 1,
             panic_type: reason.as_bits(),
-            start_line: unsigned_as_usize_bits(meta.start.0 as u128),
-            start_column: unsigned_as_usize_bits(meta.start.1 as u128),
-            end_line: unsigned_as_usize_bits(meta.end.0 as u128),
-            end_column: unsigned_as_usize_bits(meta.end.1 as u128),
+            start_line: unsigned_as_usize_bits(meta.start.0 as u64),
+            start_column: unsigned_as_usize_bits(meta.start.1 as u64),
+            end_line: unsigned_as_usize_bits(meta.end.0 as u64),
+            end_column: unsigned_as_usize_bits(meta.end.1 as u64),
         };
         for i in 0..self.panic_gates.start_line.len() {
             self.panic_gates.start_line[i] = self.push_mux(
@@ -846,7 +846,7 @@ impl CircuitBuilder {
     }
 }
 
-fn unsigned_as_usize_bits(n: u128) -> [usize; USIZE_BITS] {
+fn unsigned_as_usize_bits(n: u64) -> [usize; USIZE_BITS] {
     let mut bits = [0; USIZE_BITS];
     for (i, bit) in bits.iter_mut().enumerate().take(USIZE_BITS) {
         *bit = (n >> (USIZE_BITS - 1 - i) & 1) as usize;

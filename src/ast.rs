@@ -127,9 +127,9 @@ pub enum ExprEnum {
     /// Literal `false`.
     False,
     /// Unsigned number literal.
-    NumUnsigned(u128, UnsignedNumType),
+    NumUnsigned(u64, UnsignedNumType),
     /// Signed number literal.
-    NumSigned(i128, SignedNumType),
+    NumSigned(i64, SignedNumType),
     /// Identifier (either a variable or a function).
     Identifier(String),
     /// Array literal which explicitly specifies all of its elements.
@@ -163,7 +163,7 @@ pub enum ExprEnum {
     /// Explicit cast of an expression to the specified type.
     Cast(PreliminaryType, Box<Expr>),
     /// Range of numbers from the specified min (inclusive) to the specified max (exclusive).
-    Range((u128, UnsignedNumType), (u128, UnsignedNumType)),
+    Range((u64, UnsignedNumType), (u64, UnsignedNumType)),
 }
 
 /// A variant literal, used by [`ExprEnum::EnumLiteral`], with its location in the source code.
@@ -197,9 +197,9 @@ pub enum PatternEnum {
     /// Matches `false`.
     False,
     /// Matches the specified unsigned number.
-    NumUnsigned(u128, UnsignedNumType),
+    NumUnsigned(u64, UnsignedNumType),
     /// Matches the specified signed number.
-    NumSigned(i128, SignedNumType),
+    NumSigned(i64, SignedNumType),
     /// Matches a tuple if all of its fields match their respective patterns.
     Tuple(Vec<Pattern>),
     /// Matches a struct if all of its fields match their respective patterns.
@@ -211,9 +211,9 @@ pub enum PatternEnum {
     /// Matches an enum with the specified name and variant, if all fields match.
     EnumTuple(String, String, Vec<Pattern>),
     /// Matches any number inside the unsigned range between min (inclusive) and max (inclusive).
-    UnsignedInclusiveRange(u128, u128, UnsignedNumType),
+    UnsignedInclusiveRange(u64, u64, UnsignedNumType),
     /// Matches any number inside the signed range between min (inclusive) and max (inclusive).
-    SignedInclusiveRange(i128, i128, SignedNumType),
+    SignedInclusiveRange(i64, i64, SignedNumType),
 }
 
 /// The different kinds of unary operator.

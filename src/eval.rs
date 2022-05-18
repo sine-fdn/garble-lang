@@ -123,67 +123,55 @@ impl<'a> Evaluator<'a> {
     /// Encodes a usize int as bits and sets it as the input from the party.
     pub fn set_usize(&mut self, n: usize) {
         let inputs = self.push_input();
-        unsigned_to_bits(n as u128, USIZE_BITS, inputs);
+        unsigned_to_bits(n as u64, USIZE_BITS, inputs);
     }
 
     /// Encodes a u8 int as bits and sets it as the input from the party.
     pub fn set_u8(&mut self, n: u8) {
         let inputs = self.push_input();
-        unsigned_to_bits(n as u128, 8, inputs);
+        unsigned_to_bits(n as u64, 8, inputs);
     }
 
     /// Encodes a u16 int as bits and sets it as the input from the party.
     pub fn set_u16(&mut self, n: u16) {
         let inputs = self.push_input();
-        unsigned_to_bits(n as u128, 16, inputs);
+        unsigned_to_bits(n as u64, 16, inputs);
     }
 
     /// Encodes a u32 int as bits and sets it as the input from the party.
     pub fn set_u32(&mut self, n: u32) {
         let inputs = self.push_input();
-        unsigned_to_bits(n as u128, 32, inputs);
+        unsigned_to_bits(n as u64, 32, inputs);
     }
 
     /// Encodes a u64 int as bits and sets it as the input from the party.
     pub fn set_u64(&mut self, n: u64) {
         let inputs = self.push_input();
-        unsigned_to_bits(n as u128, 64, inputs);
-    }
-
-    /// Encodes a u128 int as bits and sets it as the input from the party.
-    pub fn set_u128(&mut self, n: u128) {
-        let inputs = self.push_input();
-        unsigned_to_bits(n, 128, inputs);
+        unsigned_to_bits(n as u64, 64, inputs);
     }
 
     /// Encodes a i8 int as bits and sets it as the input from the party.
     pub fn set_i8(&mut self, n: i8) {
         let inputs = self.push_input();
-        signed_to_bits(n as i128, 8, inputs);
+        signed_to_bits(n as i64, 8, inputs);
     }
 
     /// Encodes a i16 int as bits and sets it as the input from the party.
     pub fn set_i16(&mut self, n: i16) {
         let inputs = self.push_input();
-        signed_to_bits(n as i128, 16, inputs);
+        signed_to_bits(n as i64, 16, inputs);
     }
 
     /// Encodes a i32 int as bits and sets it as the input from the party.
     pub fn set_i32(&mut self, n: i32) {
         let inputs = self.push_input();
-        signed_to_bits(n as i128, 32, inputs);
+        signed_to_bits(n as i64, 32, inputs);
     }
 
     /// Encodes a i64 int as bits and sets it as the input from the party.
     pub fn set_i64(&mut self, n: i64) {
         let inputs = self.push_input();
-        signed_to_bits(n as i128, 64, inputs);
-    }
-
-    /// Encodes a i128 int as bits and sets it as the input from the party.
-    pub fn set_i128(&mut self, n: i128) {
-        let inputs = self.push_input();
-        signed_to_bits(n, 128, inputs);
+        signed_to_bits(n as i64, 64, inputs);
     }
 
     /// Encodes a literal (with enums looked up in the program) and sets it as the party's input.
@@ -293,14 +281,6 @@ impl<'a> TryFrom<EvalOutput<'a>> for u64 {
     }
 }
 
-impl<'a> TryFrom<EvalOutput<'a>> for u128 {
-    type Error = EvalError;
-
-    fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
-        value.into_unsigned(Type::Unsigned(UnsignedNumType::U128))
-    }
-}
-
 impl<'a> TryFrom<EvalOutput<'a>> for i8 {
     type Error = EvalError;
 
@@ -341,14 +321,6 @@ impl<'a> TryFrom<EvalOutput<'a>> for i64 {
     }
 }
 
-impl<'a> TryFrom<EvalOutput<'a>> for i128 {
-    type Error = EvalError;
-
-    fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
-        value.into_signed(Type::Signed(SignedNumType::I128))
-    }
-}
-
 impl<'a> TryFrom<EvalOutput<'a>> for Vec<bool> {
     type Error = EvalError;
 
@@ -361,13 +333,13 @@ impl<'a> TryFrom<EvalOutput<'a>> for Vec<bool> {
 }
 
 impl<'a> EvalOutput<'a> {
-    fn into_unsigned(self, ty: Type) -> Result<u128, EvalError> {
+    fn into_unsigned(self, ty: Type) -> Result<u64, EvalError> {
         let output = EvalPanic::parse(&self.output)?;
         let size = ty.size_in_bits_for_defs(self.program);
         if output.len() == size {
             let mut n = 0;
             for (i, output) in output.iter().copied().enumerate() {
-                n |= (output as u128) << (size - 1 - i);
+                n |= (output as u64) << (size - 1 - i);
             }
             Ok(n)
         } else {
@@ -378,19 +350,18 @@ impl<'a> EvalOutput<'a> {
         }
     }
 
-    fn into_signed(self, ty: Type) -> Result<i128, EvalError> {
+    fn into_signed(self, ty: Type) -> Result<i64, EvalError> {
         let output = EvalPanic::parse(&self.output)?;
         let size = ty.size_in_bits_for_defs(self.program);
         if output.len() == size {
             let mut n = 0;
             for (i, output) in output.iter().copied().enumerate() {
-                n |= (output as i128) << (size - 1 - i);
+                n |= (output as i64) << (size - 1 - i);
             }
             Ok(match size {
-                8 => (n as i8) as i128,
-                16 => (n as i16) as i128,
-                32 => (n as i32) as i128,
-                64 => (n as i64) as i128,
+                8 => (n as i8) as i64,
+                16 => (n as i16) as i64,
+                32 => (n as i32) as i64,
                 _ => n,
             })
         } else {
