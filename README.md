@@ -48,6 +48,6 @@ The Garble compiler is relatively straightforward and turns a program `&str` int
 
   1. `scan.rs` splits a program `&str` into a `token::Token` sequence.
   2. `parse.rs` parses a `token::Token` sequence into an untyped `ast::Program`.
-  3. `check.rs` type-checks an untyped `ast::Program`, returning a `typed_ast::Program`.
-  4. `compile.rs` converts a well-typed `typed_ast::Program` into a `circuit::Circuit`.
+  3. `check.rs` type-checks an untyped `ast::Program`, returning a typed `ast::Program`.
+  4. `compile.rs` converts a well-typed `ast::Program` into a `circuit::Circuit`.
   5. `eval.rs` executes a `circuit::Circuit` with locally supplied inputs.

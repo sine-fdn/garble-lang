@@ -1,9 +1,9 @@
 use garble::{
+    ast::{Pattern, PatternEnum, Type},
     check::{TypeError, TypeErrorEnum},
     scan::scan,
     token::{MetaInfo, UnsignedNumType},
-    typed_ast::{Pattern, PatternEnum, Program, Type},
-    Error,
+    Error, TypedProgram,
 };
 
 #[test]
@@ -131,18 +131,18 @@ pub fn main(x: u8) -> i32 {
         assert_eq!(
             missing,
             vec![
-                [Pattern(
-                    PatternEnum::UnsignedInclusiveRange(2, 2),
+                [Pattern::typed(
+                    PatternEnum::UnsignedInclusiveRange(2, 2, UnsignedNumType::U8),
                     Type::Unsigned(UnsignedNumType::U8),
                     meta
                 )],
-                [Pattern(
-                    PatternEnum::UnsignedInclusiveRange(10, 10),
+                [Pattern::typed(
+                    PatternEnum::UnsignedInclusiveRange(10, 10, UnsignedNumType::U8),
                     Type::Unsigned(UnsignedNumType::U8),
                     meta
                 )],
-                [Pattern(
-                    PatternEnum::UnsignedInclusiveRange(255, 255),
+                [Pattern::typed(
+                    PatternEnum::UnsignedInclusiveRange(255, 255, UnsignedNumType::U8),
                     Type::Unsigned(UnsignedNumType::U8),
                     meta
                 )]
@@ -175,13 +175,13 @@ pub fn main(x: bool, y: bool, z: bool) -> i32 {
         assert_eq!(
             missing,
             vec![
-                [Pattern(
+                [Pattern::typed(
                     PatternEnum::Tuple(vec![
-                        Pattern(PatternEnum::False, Type::Bool, meta),
-                        Pattern(
+                        Pattern::typed(PatternEnum::False, Type::Bool, meta),
+                        Pattern::typed(
                             PatternEnum::Tuple(vec![
-                                Pattern(PatternEnum::True, Type::Bool, meta),
-                                Pattern(PatternEnum::False, Type::Bool, meta),
+                                Pattern::typed(PatternEnum::True, Type::Bool, meta),
+                                Pattern::typed(PatternEnum::False, Type::Bool, meta),
                             ]),
                             Type::Tuple(vec![Type::Bool, Type::Bool]),
                             meta
@@ -190,13 +190,13 @@ pub fn main(x: bool, y: bool, z: bool) -> i32 {
                     Type::Tuple(vec![Type::Bool, Type::Tuple(vec![Type::Bool, Type::Bool])]),
                     meta
                 )],
-                [Pattern(
+                [Pattern::typed(
                     PatternEnum::Tuple(vec![
-                        Pattern(PatternEnum::False, Type::Bool, meta),
-                        Pattern(
+                        Pattern::typed(PatternEnum::False, Type::Bool, meta),
+                        Pattern::typed(
                             PatternEnum::Tuple(vec![
-                                Pattern(PatternEnum::False, Type::Bool, meta),
-                                Pattern(PatternEnum::False, Type::Bool, meta),
+                                Pattern::typed(PatternEnum::False, Type::Bool, meta),
+                                Pattern::typed(PatternEnum::False, Type::Bool, meta),
                             ]),
                             Type::Tuple(vec![Type::Bool, Type::Bool]),
                             meta
@@ -230,7 +230,7 @@ pub fn main(x: i32) -> i32 {
     Ok(())
 }
 
-fn assert_single_type_error(e: Result<Program, Vec<TypeError>>) -> TypeErrorEnum {
+fn assert_single_type_error(e: Result<TypedProgram, Vec<TypeError>>) -> TypeErrorEnum {
     if let Err(mut e) = e {
         if e.len() == 1 {
             e.pop().unwrap().0

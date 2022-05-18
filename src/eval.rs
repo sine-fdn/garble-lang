@@ -3,20 +3,20 @@
 use std::fmt::Debug;
 
 use crate::{
+    ast::Type,
     circuit::{Circuit, EvalPanic, USIZE_BITS},
     compile::{signed_to_bits, unsigned_to_bits},
     literal::Literal,
     token::{SignedNumType, UnsignedNumType},
-    typed_ast::{FnDef, Program, Type},
-    CompileTimeError,
+    CompileTimeError, TypedFnDef, TypedProgram,
 };
 
 /// Evaluates a [`crate::circuit::Circuit`] with inputs supplied by different parties.
 pub struct Evaluator<'a> {
     /// The type-checked program.
-    pub program: &'a Program,
+    pub program: &'a TypedProgram,
     /// The function to be evaluated.
-    pub main_fn: &'a FnDef,
+    pub main_fn: &'a TypedFnDef,
     /// The compiled circuit.
     pub circuit: &'a Circuit,
     inputs: Vec<Vec<bool>>,
@@ -24,7 +24,7 @@ pub struct Evaluator<'a> {
 
 impl<'a> Evaluator<'a> {
     /// Scans, parses, type-checks and then compiles a program for later evaluation.
-    pub fn new(program: &'a Program, main_fn: &'a FnDef, circuit: &'a Circuit) -> Self {
+    pub fn new(program: &'a TypedProgram, main_fn: &'a TypedFnDef, circuit: &'a Circuit) -> Self {
         Self {
             program,
             main_fn,
@@ -177,7 +177,7 @@ impl<'a> Evaluator<'a> {
     /// Encodes a literal (with enums looked up in the program) and sets it as the party's input.
     pub fn set_literal(&mut self, literal: Literal) -> Result<(), EvalError> {
         if self.inputs.len() < self.main_fn.params.len() {
-            let ty = &self.main_fn.params[self.inputs.len()].1;
+            let ty = &self.main_fn.params[self.inputs.len()].2;
             if literal.is_of_type(self.program, ty) {
                 self.inputs.push(vec![]);
                 self.inputs
@@ -196,7 +196,7 @@ impl<'a> Evaluator<'a> {
     /// Parses a literal (with enums looked up in the program) and sets it as the party's input.
     pub fn parse_literal(&mut self, literal: &str) -> Result<(), EvalError> {
         if self.inputs.len() < self.main_fn.params.len() {
-            let ty = &self.main_fn.params[self.inputs.len()].1;
+            let ty = &self.main_fn.params[self.inputs.len()].2;
             let parsed =
                 Literal::parse(self.program, ty, literal).map_err(EvalError::LiteralParseError)?;
             self.set_literal(parsed)?;
@@ -210,8 +210,8 @@ impl<'a> Evaluator<'a> {
 /// The encoded result of a circuit evaluation.
 #[derive(Debug, Clone)]
 pub struct EvalOutput<'a> {
-    program: &'a Program,
-    main_fn: &'a FnDef,
+    program: &'a TypedProgram,
+    main_fn: &'a TypedFnDef,
     output: Vec<bool>,
 }
 
@@ -374,7 +374,7 @@ impl<'a> EvalOutput<'a> {
 
     /// Decodes the evaluated result as a literal (with enums looked up in the program).
     pub fn into_literal(self) -> Result<Literal, EvalError> {
-        let ret_ty = self.main_fn.return_type();
-        Literal::from_result_bits(self.program, &ret_ty, &self.output)
+        let ret_ty = &self.main_fn.ty;
+        Literal::from_result_bits(self.program, ret_ty, &self.output)
     }
 }

@@ -1,6 +1,6 @@
 use std::{env::args, fs::File, io::Read, process::exit};
 
-use garble::{check, eval::Evaluator, literal::Literal, typed_ast::ParamDef};
+use garble::{ast::ParamDef, check, eval::Evaluator, literal::Literal};
 
 fn main() -> Result<(), std::io::Error> {
     let args: Vec<String> = args().collect();
@@ -38,7 +38,7 @@ fn main() -> Result<(), std::io::Error> {
         exit(65);
     }
     let mut params = Vec::with_capacity(main_params.len());
-    for (i, (ParamDef(_, ty), arg)) in main_params.iter().zip(fn_args).enumerate() {
+    for (i, (ParamDef(_, _, ty), arg)) in main_params.iter().zip(fn_args).enumerate() {
         let param = Literal::parse(evaluator.program, ty, arg);
         match param {
             Ok(param) => params.push(param),
