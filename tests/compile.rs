@@ -1812,3 +1812,46 @@ pub fn main(replacement: i32) -> [i32; 4] {
     }
     Ok(())
 }
+
+#[test]
+fn compile_operator_examples() -> Result<(), Error> {
+    let prg = "
+pub fn main(_a: i32, _b: i32) -> () {
+    let add = 0i32 + 1i32;
+    let sub = 1i32 - 1i32;
+    let mul = 2i32 * 1i32;
+    let div = 2i32 / 1i32;
+    let rem = 5i32 % 2i32;
+
+    let bit_xor = 4u32 ^ 6u32;
+    let bit_and = 4u32 & 6u32;
+    let bit_or = 4u32 | 6u32;
+    let bit_shiftl = 4u32 << 1u8;
+    let bit_shiftr = 4u32 >> 1u8;
+
+    let and = true & false;
+    let or = true | false;
+
+    let eq = true == false;
+    let neq = true != false;
+
+    let gt = 5i32 > 4i32;
+    let lt = 4i32 < 5i32;
+    let gte = 5i32 >= 4i32;
+    let lte = 4i32 <= 5i32;
+
+    let unary_not = !true;
+    let unary_minus = -5i32;
+    let unary_bitflip = !5i32;
+}
+";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    eval.set_i32(0);
+    eval.set_i32(0);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
+    let expected = Literal::parse(&typed_prg, &Type::Tuple(vec![]), "()")?;
+    assert_eq!(r, expected);
+    Ok(())
+}

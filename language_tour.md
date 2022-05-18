@@ -138,18 +138,18 @@ pub fn main(_x: i32) -> i32 {
 Garble supports a number of primitive types: Booleans (`bool`), unsigned integers of different bit lengths (`u8`, `u16`, `u32`, `u64`, `u128`, `usize`) and signed integers of different bit lengths (`i8`, `i16`, `i32`, `i64`, `i128`). Note that in contrast to Rust, the type suffix of a number must always be specified (and there is no automatic type coercion), except for tuple/array sizes or indexes (see below). Primitive types support the usual logical, bitwise and arithmetic operations:
 
 ```rust
-pub fn main(_a: i32, _b: i32) -> i32 {
+pub fn main(_a: i32, _b: i32) -> () {
     let add = 0i32 + 1i32;
     let sub = 1i32 - 1i32;
     let mul = 2i32 * 1i32;
     let div = 2i32 / 1i32;
     let rem = 5i32 % 2i32;
 
-    let bit_xor = 4i32 ^ 6i32;
-    let bit_and = 4i32 & 6i32;
-    let bit_or = 4i32 | 6i32;
-    let bit_shiftl = 4i32 << 1i32;
-    let bit_shiftr = 4i32 >> 1i32;
+    let bit_xor = 4u32 ^ 6u32;
+    let bit_and = 4u32 & 6u32;
+    let bit_or = 4u32 | 6u32;
+    let bit_shiftl = 4u32 << 1u8;
+    let bit_shiftr = 4u32 >> 1u8;
 
     let and = true & false;
     let or = true | false;
@@ -165,8 +165,6 @@ pub fn main(_a: i32, _b: i32) -> i32 {
     let unary_not = !true;
     let unary_minus = -5i32;
     let unary_bitflip = !5i32;
-
-    0i32
 }
 ```
 

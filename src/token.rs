@@ -104,6 +104,10 @@ pub enum TokenEnum {
     GreaterThan,
     /// `<`.
     LessThan,
+    /// `>=`.
+    GreaterThanEquals,
+    /// `<=`.
+    LessThanEquals,
     /// `>>`.
     DoubleGreaterThan,
     /// `<<`.
@@ -160,6 +164,8 @@ impl std::fmt::Display for TokenEnum {
             TokenEnum::BangEq => f.write_str("!="),
             TokenEnum::GreaterThan => f.write_str(">"),
             TokenEnum::LessThan => f.write_str("<"),
+            TokenEnum::GreaterThanEquals => f.write_str(">="),
+            TokenEnum::LessThanEquals => f.write_str("<="),
             TokenEnum::DoubleGreaterThan => f.write_str(">>"),
             TokenEnum::DoubleLessThan => f.write_str("<<"),
         }
