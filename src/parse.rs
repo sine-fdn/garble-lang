@@ -9,13 +9,8 @@ use crate::{
     },
     scan::Tokens,
     token::{MetaInfo, SignedNumType, Token, TokenEnum, UnsignedNumType},
+    UntypedExpr, UntypedFnDef, UntypedPattern, UntypedProgram, UntypedStmt,
 };
-
-type UntypedProgram = Program<()>;
-type UntypedFnDef = FnDef<()>;
-type UntypedStmt = Stmt<()>;
-type UntypedExpr = Expr<()>;
-type UntypedPattern = Pattern<()>;
 
 /// An error found during parsing, with its location in the source code.
 #[derive(Debug, Clone)]

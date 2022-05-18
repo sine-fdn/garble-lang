@@ -4,19 +4,14 @@ use std::{cmp::max, collections::HashMap};
 
 use crate::{
     ast::{
-        EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, Program, Stmt,
-        StmtEnum, StructDef, Type, UnaryOp, VariantExpr, VariantExprEnum,
+        EnumDef, Expr, ExprEnum, Op, ParamDef, Pattern, PatternEnum, StmtEnum, StructDef, Type,
+        UnaryOp, VariantExpr, VariantExprEnum,
     },
     circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, PanicResult, USIZE_BITS},
     env::Env,
     token::{SignedNumType, UnsignedNumType},
+    TypedExpr, TypedFnDef, TypedPattern, TypedProgram, TypedStmt,
 };
-
-type TypedProgram = Program<Type>;
-type TypedFnDef = FnDef<Type>;
-type TypedStmt = Stmt<Type>;
-type TypedExpr = Expr<Type>;
-type TypedPattern = Pattern<Type>;
 
 /// An error that occurred during compilation.
 #[derive(Debug, Clone)]
