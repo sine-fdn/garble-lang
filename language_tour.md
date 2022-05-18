@@ -1,6 +1,8 @@
 # A Short Tour of Garble
 
-A minimal Garble program is just a public function, with each input conceptually belonging to a different party in the MPC circuit. For example, the following (rather useless) program computes the boolean `and` of two parties:
+Garble is a programming language for writing programs that can be executed using [Secure Multi-Party Computation](https://en.wikipedia.org/wiki/Secure_multi-party_computation) (SMPC or simply MPC). Syntactically and semantically, Garble programs are similar to a very restricted subset of Rust (but without the borrow checker).
+
+A minimal Garble program is a public function (conventionally called `main`), with each input conceptually belonging to a different party in a [MPC Garbled Circuit](https://en.wikipedia.org/wiki/Garbled_circuit). For example, the following program computes the boolean `and` of two parties:
 
 ```rust
 pub fn main(party_a: bool, party_b: bool) -> bool {
@@ -8,7 +10,7 @@ pub fn main(party_a: bool, party_b: bool) -> bool {
 }
 ```
 
-More interesting would be to compute the sum of three parties:
+The above function is a bit contrived, a more interesting example would be to compute the sum of three parties:
 
 ```rust
 pub fn main(a: u32, b: u32, c: u32) -> u32 {
@@ -16,20 +18,20 @@ pub fn main(a: u32, b: u32, c: u32) -> u32 {
 }
 ```
 
-Garble will report type errors and display the location of the error in the code if a program cannot be compiled:
+Although Garble programs are intended to be executed using MPC, it is also possible to run functions locally on the command line, manually passing each party's input to the evaluator. If a program cannot be compiled, Garble will report type errors and display the location of the error in the source code:
 
 ```shell
 $ garble garble_examples/error_examples/simple_type_error.garble.rs main 0u32 true
+
 Type error on line 2:5.
 The operands have incompatible types; u32 vs bool:
-
        | pub fn main(a: u32, b: bool) -> u32 {
    2 > |     a - b
      > |     ^^^^^
        | }
 ```
 
-Garble programs are a collection of pure functions (there are no side effects such as printing output or doing any other form of IO). Functions that are meant to be invoked as the entry points of multi-party computations must be marked public by using the `pub` modifier. Non-`pub` top-level function definitions can be used to split the program into smaller chunks:
+Garble programs are a collection of pure functions. There are no side effects such as printing output or doing any other form of IO. Functions that are meant to be invoked as the entry points of multi-party computations must be marked public by using the `pub` modifier. Non-`pub` top-level function definitions can be used to split the program into smaller chunks:
 
 ```rust
 pub fn main(x: u16) -> u16 {
@@ -121,7 +123,7 @@ pub fn main(x: i32) -> i32 {
 }
 ```
 
-Garble supports for-each loops as the only looping / recursion construct in the language. Note that for-each loops can only loop over _fixed-size_ arrays. This is by design, as it disallows any form of unbounded recursion and thus enables the Garble compiler to generate fixed circuits consisting only of boolean gates. Garble programs are thus computationally equivalent to [LOOP programs](https://en.wikipedia.org/wiki/LOOP_(programming_language)) and capture the class of _primitive recursive functions_.
+Garble supports for-each loops as the only looping / recursion construct in the language. For-each loops can only loop over _fixed-size_ arrays. This is by design, as it disallows any form of unbounded recursion and thus enables the Garble compiler to generate fixed circuits consisting only of boolean gates. Garble programs are thus computationally equivalent to [LOOP programs](https://en.wikipedia.org/wiki/LOOP_(programming_language)) and capture the class of _primitive recursive functions_.
 
 ```rust
 pub fn main(_x: i32) -> i32 {
@@ -194,7 +196,7 @@ Panic due to Overflow on line 17:43.
 
 Garble will also panic on integer overflows caused by other arithmetic operations (such as subtraction and multiplication), divisions by zero, and out-of-bounds array indexing.
 
-*Circuit logic for panics is always compiled into the final circuit (and includes the line and column number of the code that caused the panic), it is your responsibility to ensure that no sensitive information can be leaked by deliberately causing a panic.*
+*Circuit logic for panics is always compiled into the final circuit (and includes the line and column number of the code that caused the panic), it is your responsibility to ensure that no sensitive information can be leaked by causing a panic.*
 
 ## Collection Types
 
@@ -212,7 +214,7 @@ pub fn main(a: u32, b: u32) -> [u32; 4] {
 }
 ```
 
-Arrays are indexed using `array[index]` (with a literal index being written without type suffix). A single element can be reassigned if the whole array has been declared as mutable by `let mut`. Note that whole arrays are copied by value, so that mutating a single index only changes one single array, never any of its copies (which might sound inefficient, but does not incur any performance penalty in a purely functional circuit using only boolean gates).
+Arrays are indexed using `array[index]` (with a literal index being written without type suffix). A single element can be reassigned if the whole array has been declared as mutable by `let mut`. Each new let bindings, no matter whether immutable or mutable, always copies the full array: As a result, mutating a single index only changes a single variable, never any other "copies" of the array. This might sound inefficient, but does not incur any performance penalty in a purely functional circuit using only boolean gates. Consequently, there is no shared mutable state in Garble:
 
 ```rust
 pub fn main(replacement: i32) -> [i32; 4] {
@@ -266,7 +268,7 @@ pub fn main(x: i32) -> i32 {
 }
 ```
 
-Similar to Rust, Garble offers a bit of syntactic sugar for dealing with structs. If the value of a field is a variable with the same name as the field, the value can be omitted (writing `Foo { bar }` instead of `Foo { bar: bar }`), both in patterns and in struct literals. Additionally, a subset of the fields of a struct can be matched by ignoring the remaining fields using `..`:
+Similar to Rust, Garble offers syntactic sugar for dealing with structs. If the value of a field is a variable with the same name as the field, the value can be omitted (writing `Foo { bar }` instead of `Foo { bar: bar }`), both in patterns and in struct literals. Additionally, a subset of the fields of a struct can be matched by ignoring the remaining fields using `..`:
 
 ```rust
 struct FooBar {
@@ -284,7 +286,7 @@ pub fn main(x: (i32, i32)) -> i32 {
 }
 ```
 
-Note that just like tuples, structs are immutable, so it is not possible to reassign a struct field.
+Just like tuples, structs are immutable, so it is not possible to reassign a struct field.
 
 ### Enums
 
@@ -310,7 +312,7 @@ pub fn main(op: Op) -> OpResult {
 }
 ```
 
-Pattern matching is also supported for structs, tuples and range literals (but not arrays). Patterns can be nested:
+Pattern matching is also supported for structs, tuples and range literals (but not for arbitrary arrays). Patterns can be nested:
 
 ```rust
 fn main(x: (bool, (u8, u8))) -> i32 {
@@ -364,9 +366,9 @@ The patterns are not exhaustive. Missing cases:
 
 ## Mental Model of Garble Programs
 
-It is important to keep in mind that Garble programs are boolean *circuits*, which consist of a graph of logic gates, not a sequentially executed program of instructions on a von Neumann architecture with main memory and CPU. This has deep consequences for the programming style that leads to efficient Garble programs, with programs that would be efficient in "normal" programming languages resulting in highly inefficient circuits and vice versa.
+Garble programs are boolean *circuits* consisting of a graph of logic gates, not a sequentially executed program of instructions on a von Neumann architecture with main memory and CPU. This has deep consequences for the programming style that leads to efficient Garble programs, with programs that would be efficient in "normal" programming languages resulting in highly inefficient circuits and vice versa.
 
-One example has already briefly been mentioned: Copying whole arrays in Garble is essentially free, because arrays (and their elements) are just a collection of output wires from a bunch of boolean logic gates. Duplicating these wires does not increase the complexity of the circuit, because no additional logic gates are required.
+One example has already been mentioned: Copying whole arrays in Garble is essentially free, because arrays (and their elements) are just a collection of output wires from a bunch of boolean logic gates. Duplicating these wires does not increase the complexity of the circuit, because no additional logic gates are required.
 
 Replacing the element at a *constant* index in an array with a new value is equally cheap, because the Garble compiler can just duplicate the output wires of all the other elements and only has to use the wires of the replacement element where previously the old element was being used. In contrast, replacing the element at a *non-constant* index (i.e. an index that depends on a runtime value) is a much more expensive operation in a boolean circuit than it would be on a normal computer, because the Garble compiler has to generate a nested multiplexer circuit.
 
@@ -396,6 +398,6 @@ pub fn main(arr: [u16; 500], x: u16) -> [u16; 500] {
 
 The difference in circuit size is staggering: While the first version (with `i` as an input parameter) is compiled to a circuit with more than 700,000 non-input gates, the second version (which shifts the entire array by one element) uses only 2 non-input gates (because the program is effectively a static transformation from input to output).
 
-Such an example is admittedly a bit contrived, especially since an entirely static transformation such as the shifted-array version above does not make much sense in an MPC-context, where inputs should be kept hidden. But it does highlight how unintuitive the computational model of pure boolean circuits can be from the perspective of a load-and-store architecture with main memory and CPU.
+Such an example might be a bit contrived, since it is possible to infer the inputs of both parties (except for the element that is dropped from the array) from the output of the above function, defeating the purpose of MPC, which is to keep each party's input private. But it does highlight how unintuitive the computational model of pure boolean circuits can be from the perspective of a load-and-store architecture with main memory and CPU.
 
 It can be helpful to think of Garble programs as being executed on a computer with infinite memory, free copying and no garbage collection: Nothing ever goes out of scope, it is therefore trivial to reuse old values. But any form of branching or looping needs to be compiled into a circuit where each possible branch or loop invocation is "unrolled" and requires its own dedicated logic gates. In normal programming languages, looping a few additional times does not increase the program size, but in Garble programs additional gates are necessary. The size of Garble programs therefore reflects the *worst case* algorithm performance: While normal programming languages can return early and will often require much less time in the best or average case than in the worst case, the evaluation of Garble programs will always take constant time, because the full circuit must always be evaluated.
