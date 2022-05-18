@@ -30,7 +30,7 @@ pub enum Gate {
 /// Each circuit consists of 3 parts:
 ///
 ///   1. `input_gates`, specifying how many input bits each party must provide
-///   2. `gates`, XOR/AND/NOT
+///   2. `gates`, XOR/AND/NOT intermediate gates (with input gates or intermediate gates as inputs)
 ///   3. `output_gates`, specifying which gates should be exposed as outputs (and in which order)
 ///
 /// Conceptually, a circuit is a sequence of input or intermediate (XOR/AND/NOT) gates, with all
