@@ -1,4 +1,4 @@
-//! Splits a source code into a stream of [`crate::scan::Token`]s.
+//! Splits a source code into a stream of [`crate::token::Token`]s.
 
 use std::{iter::Peekable, str::Chars};
 

@@ -1,4 +1,4 @@
-//! Simple helper for lexical scopes used by [`crate::check`] and [`crate::compile`].
+//! Simple helper for lexical scopes used by [`crate::check()`] and [`crate::compile()`].
 use std::collections::{hash_map::Entry, HashMap};
 
 #[derive(Debug, Clone)]

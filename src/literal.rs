@@ -1,4 +1,4 @@
-//! A subset of [`crate::typed_ast::Expr`] that is used as input / output by an
+//! A subset of [`crate::ast::Expr`] that is used as input / output by an
 //! [`crate::eval::Evaluator`].
 
 use std::{
@@ -21,7 +21,7 @@ use crate::{
     CompileTimeError, TypedExpr, TypedProgram, TypedVariantExpr,
 };
 
-/// A subset of [`crate::typed_ast::Expr`] that is used as input / output by an
+/// A subset of [`crate::ast::Expr`] that is used as input / output by an
 /// [`crate::eval::Evaluator`].
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -48,7 +48,7 @@ pub enum Literal {
     Range((u64, UnsignedNumType), (u64, UnsignedNumType)),
 }
 
-/// A variant literal (either of unit type or containing fields), used by [`Literal::EnumLiteral`].
+/// A variant literal (either of unit type or containing fields), used by [`Literal::Enum`].
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum VariantLiteral {
@@ -181,7 +181,7 @@ impl Literal {
     /// `bits` must be the _non-panic output-only portion of the circuit_, meaning all wires
     /// carrying panic information must already have been removed prior to parsing the bits. If you
     /// want to parse a circuit output that might have panicked, use
-    /// [`from_output`] instead.
+    /// [`Literal::from_result_bits`] instead.
     pub fn from_unwrapped_bits(
         checked: &TypedProgram,
         ty: &Type,
