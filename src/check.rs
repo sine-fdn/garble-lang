@@ -1,5 +1,5 @@
 //! Type-checker, transforming an untyped [`crate::ast::Program`] into a typed
-//! [`crate::Program`].
+//! [`crate::ast::Program`].
 
 use std::collections::{HashMap, HashSet};
 
