@@ -46,8 +46,8 @@ Richest::Tie
 
 The Garble compiler is relatively straightforward and turns a program `&str` into a `circuit::Circuit` (or aborts with a scan/parse/type error). The different steps and their modules are as follows (with steps 1-4 happening during compile time, step 5 during run time):
 
-  1. `scan.rs` splits a program `&str` into a `token::Token` sequence.
-  2. `parse.rs` parses a `token::Token` sequence into an untyped `ast::Program`.
-  3. `check.rs` type-checks an untyped `ast::Program`, returning a typed `ast::Program`.
-  4. `compile.rs` converts a well-typed `ast::Program` into a `circuit::Circuit`.
-  5. `eval.rs` executes a `circuit::Circuit` with locally supplied inputs.
+  1. [`scan.rs`](src/scan.rs) splits a program `&str` into a `token::Token` sequence.
+  2. [`parse.rs`](src/parse.rs) parses a `token::Token` sequence into an untyped `ast::Program`.
+  3. [`check.rs`](src/check.rs) type-checks an untyped `ast::Program`, returning a typed `ast::Program`.
+  4. [`compile.rs`](src/compile.rs) converts a well-typed `ast::Program` into a `circuit::Circuit`.
+  5. [`eval.rs`](src/eval.rs) executes a `circuit::Circuit` with locally supplied inputs.
