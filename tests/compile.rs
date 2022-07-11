@@ -1729,7 +1729,7 @@ pub fn main(x: i32) -> i32 {
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
             i32::try_from(output).map_err(|e| pretty_print(e, prg))?,
-            x + 0 + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9,
+            x + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9,
         );
     }
     Ok(())

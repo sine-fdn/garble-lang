@@ -10,6 +10,7 @@ use compile::CompilerError;
 use eval::EvalError;
 use parse::ParseError;
 use scan::{scan, ScanError};
+use std::fmt::Write as _;
 use token::MetaInfo;
 
 use ast::{Expr, FnDef, Pattern, Program, Stmt, Type, VariantExpr};
@@ -130,12 +131,14 @@ impl EvalError {
             EvalError::Panic(panic) => {
                 let mut msg = "".to_string();
                 let meta = panic.panicked_at;
-                msg += &format!(
-                    "Panic due to {} on line {}:{}.\n\n",
+                writeln!(
+                    msg,
+                    "Panic due to {} on line {}:{}.\n",
                     panic.reason,
                     meta.start.0 + 1,
                     meta.start.1 + 1
-                );
+                )
+                .unwrap();
                 msg += &prettify_meta(prg, meta);
                 msg
             }
@@ -187,13 +190,15 @@ impl CompileTimeError {
         }
         let mut msg = "".to_string();
         for (err_type, err, meta) in errs_for_display {
-            msg += &format!(
-                "\n{} on line {}:{}.\n",
+            writeln!(
+                msg,
+                "\n{} on line {}:{}.",
                 err_type,
                 meta.start.0 + 1,
                 meta.start.1 + 1
-            );
-            msg += &format!("{}:\n", err);
+            )
+            .unwrap();
+            writeln!(msg, "{}:", err).unwrap();
             msg += &prettify_meta(prg, meta);
         }
         msg
@@ -213,9 +218,9 @@ fn prettify_meta(prg: &str, meta: MetaInfo) -> String {
             l >= line_start && (l < line_end || (l == line_end && meta.end.1 > 0));
         if l >= 0 && (l as usize) < lines.len() {
             if line_should_be_highlighted {
-                msg += &format!("{: >4} > | {}\n", l + 1, lines[l as usize]);
+                writeln!(msg, "{: >4} > | {}", l + 1, lines[l as usize]).unwrap();
             } else {
-                msg += &format!("       | {}\n", lines[l as usize]);
+                writeln!(msg, "       | {}", lines[l as usize]).unwrap();
             }
         }
         if line_should_be_highlighted {
