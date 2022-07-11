@@ -1,4 +1,4 @@
-use garble::{
+use garble_lang::{
     ast::Type,
     compile,
     eval::Evaluator,

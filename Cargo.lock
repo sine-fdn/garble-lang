@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "garble"
+name = "garble_lang"
 version = "0.1.0"
 dependencies = [
  "quickcheck",

@@ -1,4 +1,4 @@
-use garble::{
+use garble_lang::{
     ast::Op::{self, *},
     ast::Type,
     compile,
