@@ -1,4 +1,4 @@
-use garble::{
+use garble_lang::{
     ast::{Pattern, PatternEnum, Type},
     check::{TypeError, TypeErrorEnum},
     scan::scan,

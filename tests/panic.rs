@@ -1,4 +1,4 @@
-use garble::{
+use garble_lang::{
     circuit::{EvalPanic, PanicReason},
     compile,
     eval::{EvalError, EvalOutput, Evaluator},

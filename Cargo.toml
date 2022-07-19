@@ -1,7 +1,11 @@
 [package]
-name = "garble"
+name = "garble_lang"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.60.0"
+description = "Turing-Incomplete Programming Language for Multi-Party Computation with Garbled Circuits"
+repository = "https://github.com/sine-fdn/garble/"
+license = "MIT"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"], optional = true }

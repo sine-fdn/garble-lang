@@ -1,6 +1,6 @@
 use std::{fs::File, io::Read};
 
-use garble::{
+use garble_lang::{
     check,
     eval::Evaluator,
     literal::{Literal, VariantLiteral},

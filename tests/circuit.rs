@@ -1,4 +1,4 @@
-use garble::compile;
+use garble_lang::compile;
 
 #[test]
 fn optimize_or() -> Result<(), String> {
