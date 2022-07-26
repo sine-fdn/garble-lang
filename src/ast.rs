@@ -98,6 +98,7 @@ pub struct ParamDef(pub Mutability, pub String, pub Type);
 
 /// Indicates whether a variable is declared as mutable.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Mutability {
     /// The variable is declared as mutable.
     Mutable,
@@ -186,10 +187,12 @@ impl std::fmt::Display for Type {
 
 /// A statement and its location in the source code.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Stmt<T>(pub StmtEnum<T>, pub MetaInfo);
 
 /// The different kinds of statements.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum StmtEnum<T> {
     /// Let expression, binds variables to exprs.
     Let(Pattern<T>, Expr<T>),
