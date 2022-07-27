@@ -29,7 +29,7 @@ dependencies = [
 
 [[package]]
 name = "garble_lang"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "quickcheck",
  "quickcheck_macros",
