@@ -404,11 +404,7 @@ impl Display for Literal {
             Literal::False => write!(f, "false"),
             Literal::NumUnsigned(n, ty) => write!(f, "{n}{ty}"),
             Literal::NumSigned(n, ty) => {
-                if let SignedNumType::I32 = ty {
-                    write!(f, "{n}")
-                } else {
-                    write!(f, "{n}{ty}")
-                }
+                write!(f, "{n}{ty}")
             }
             Literal::ArrayRepeat(elem, size) => write!(f, "[{elem}; {size}]"),
             Literal::Array(elems) => {
