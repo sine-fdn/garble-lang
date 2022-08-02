@@ -5,8 +5,35 @@ use garble_lang::{
     eval::Evaluator,
     literal::{Literal, VariantLiteral},
     token::UnsignedNumType,
-    Error,
+    Error, circuit::Circuit,
 };
+
+#[test]
+fn smart_cookie_compilation() -> Result<(), Error> {
+    let smart_cookie = read_source_code("smart_cookie.garble.rs");
+    println!("Parsing and type-checking...");
+    let program = check(&smart_cookie).map_err(|e| pretty_print(e, &smart_cookie))?;
+    println!("Compiling...");
+
+    let mut circuit: Option<Circuit> = None;
+    for _ in 0..4 {
+    let (decide_ad_circuit, _) = program.compile("decide_ad")?;
+        println!(">> 'decide_ad' has {}", decide_ad_circuit.report_gates());
+        if let Some(prev_compilation) = circuit {
+            if format!("{:?}", decide_ad_circuit) != format!("{:?}", prev_compilation) {
+                println!("{} vs {} gates", decide_ad_circuit.gates.len(), prev_compilation.gates.len());
+                for (i, (g1, g2)) in decide_ad_circuit.gates.iter().zip(prev_compilation.gates.iter()).enumerate() {
+                    if g1 != g2 {
+                        println!("Mismatch at {i}: {g1:?} vs {g2:?}");
+                    }
+                }
+                panic!("Circuit mismatch!");
+            }
+        }
+        circuit = Some(decide_ad_circuit);
+    }
+    Ok(())
+}
 
 #[test]
 fn smart_cookie_simple_interaction() -> Result<(), Error> {

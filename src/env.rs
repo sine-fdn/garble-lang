@@ -1,12 +1,12 @@
 //! Simple helper for lexical scopes used by [`crate::check()`] and [`crate::compile()`].
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{btree_map::Entry, BTreeMap};
 
 #[derive(Debug, Clone)]
-pub(crate) struct Env<T: Clone>(pub(crate) Vec<HashMap<String, T>>);
+pub(crate) struct Env<T: Clone>(pub(crate) Vec<BTreeMap<String, T>>);
 
 impl<T: Clone + std::fmt::Debug> Env<T> {
     pub(crate) fn new() -> Self {
-        Self(vec![HashMap::new()])
+        Self(vec![BTreeMap::new()])
     }
 
     pub(crate) fn get(&self, identifier: &str) -> Option<T> {
@@ -33,7 +33,7 @@ impl<T: Clone + std::fmt::Debug> Env<T> {
     }
 
     pub(crate) fn push(&mut self) {
-        self.0.push(HashMap::new());
+        self.0.push(BTreeMap::new());
     }
 
     pub(crate) fn pop(&mut self) {
