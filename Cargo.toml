@@ -9,6 +9,10 @@ license = "MIT"
 categories = ["command-line-utilities", "compilers"]
 keywords = ["programming-language", "secure-computation", "garbled-circuits", "circuit-description", "smpc"]
 
+[[bin]]
+name = "garble"
+path = "src/main.rs"
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"], optional = true }
 
