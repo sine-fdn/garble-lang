@@ -1416,6 +1416,43 @@ pub fn main(x: i8) -> i8 {
 }
 
 #[test]
+fn compile_if_elseif_else_two() -> Result<(), Error> {
+    let prg = "
+pub fn main(x: i8) -> i8 {
+    if x >= 10i8 {
+        10i8
+    } else if x >= 5i8 {
+        5i8
+    } else if x >= 1i8 {
+      1i8
+    } else {
+        0i8
+    }
+}
+    ";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    for x in [30, 10, 8, 5, 3, 1, -5] {
+        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let expected = if x >= 10 {
+            10
+        } else if x >= 5 {
+            5
+        } else if x >= 1 {
+            1
+        } else {
+            0
+        };
+        eval.set_i8(x);
+        let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+        assert_eq!(
+            i8::try_from(output).map_err(|e| pretty_print(e, prg))?,
+            expected
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn compile_lexically_scoped_block() -> Result<(), Error> {
     let prg = "
 pub fn main(x: i32) -> i32 {
