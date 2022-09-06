@@ -1416,36 +1416,39 @@ pub fn main(x: i8) -> i8 {
 }
 
 #[test]
-fn compile_if_elseif_else_two() -> Result<(), Error> {
+fn compile_if_elseif_else_assignment() -> Result<(), Error> {
     let prg = "
-pub fn main(x: i8) -> i8 {
-    if x >= 10i8 {
-        10i8
-    } else if x >= 5i8 {
-        5i8
-    } else if x >= 1i8 {
-      1i8
-    } else {
-        0i8
+    pub fn main(income: u32) -> bool {
+      let mut points = 0u16;
+
+      if income >= 10000u32 {
+        points = points + 200u16
+      } else if income >= 2000u32 {
+        points = points + 50u16
+      } else {
+        points = points + 0u16
+      }
+
+      if points > 150u16 {
+        true
+      } else {
+        false
+      }
     }
-}
+
     ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-    for x in [30, 10, 8, 5, 3, 1, -5] {
+    for x in [0, 10000] {
         let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
-        let expected = if x >= 10 {
-            10
-        } else if x >= 5 {
-            5
-        } else if x >= 1 {
-            1
+        let expected = if x == 0 {
+            false
         } else {
-            0
+            true
         };
-        eval.set_i8(x);
+        eval.set_u32(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
-            i8::try_from(output).map_err(|e| pretty_print(e, prg))?,
+            bool::try_from(output).map_err(|e| pretty_print(e, prg))?,
             expected
         );
     }
