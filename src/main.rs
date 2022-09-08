@@ -1,22 +1,58 @@
-use std::{env::args, fs::File, io::Read, process::exit};
+use std::{fs::File, io::Read, path::PathBuf, process::exit};
 
 use garble_lang::{ast::ParamDef, check, eval::Evaluator, literal::Literal};
 
+use clap::{Parser, Subcommand};
+
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    #[clap(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Check, compile and run garble program
+    /// usage: garble run [OPTIONS] <FILE> <INPUTS>...
+    #[clap(verbatim_doc_comment)]
+    Run {
+        /// Provide the path to the garble.rs file where your program is written
+        #[clap(value_parser)]
+        file: PathBuf,
+
+        /// Provide inputs to be passed as arguments in your function
+        #[clap(value_parser, required = true)]
+        inputs: Vec<String>,
+
+        /// Specify the name of the function to be ran
+        #[clap(short, long, value_parser, default_value = "main", alias = "fn")]
+        function: String,
+    },
+}
+
 fn main() -> Result<(), std::io::Error> {
-    let args: Vec<String> = args().collect();
-    if args.len() < 3 {
-        eprintln!(
-            "Usage: {} file function_name [input1] [input2] ...",
-            args[0]
-        );
-        exit(64);
+    let args = Args::parse();
+
+    match &args.command {
+        Command::Run {
+            file,
+            inputs,
+            function: fn_name,
+        } => run(file, inputs, fn_name),
     }
-    let mut f = File::open(&args[1])?;
+}
+
+fn run(file: &PathBuf, inputs: &Vec<String>, fn_name: &String) -> Result<(), std::io::Error> {
+    let mut f = File::open(file).unwrap_or_else(|e| {
+        eprintln!(
+            "Couldn't find {:?}. Please make sure it is the right file path.\nError: {e}",
+            file
+        );
+        exit(65);
+    });
     let mut prg = String::new();
     f.read_to_string(&mut prg)?;
-
-    let fn_name = &args[2];
-    let fn_args = &args[3..];
 
     let program = check(&prg).unwrap_or_else(|e| {
         eprintln!("{}", e.prettify(&prg));
@@ -28,22 +64,22 @@ fn main() -> Result<(), std::io::Error> {
     });
     let mut evaluator = Evaluator::new(&program, main_fn, &circuit);
     let main_params = &evaluator.main_fn.params;
-    if main_params.len() != fn_args.len() {
+    if main_params.len() != inputs.len() {
         eprintln!(
             "Expected {} inputs, but found {}: {:?}",
             main_params.len(),
-            fn_args.len(),
-            fn_args
+            inputs.len(),
+            inputs
         );
         exit(65);
     }
     let mut params = Vec::with_capacity(main_params.len());
-    for (i, (ParamDef(_, _, ty), arg)) in main_params.iter().zip(fn_args).enumerate() {
-        let param = Literal::parse(evaluator.program, ty, arg);
+    for (i, (ParamDef(_, _, ty), input)) in main_params.iter().zip(inputs).enumerate() {
+        let param = Literal::parse(&program, ty, input);
         match param {
             Ok(param) => params.push(param),
             Err(e) => {
-                eprintln!("Could not parse argument {i}!\n{}", e.prettify(arg));
+                eprintln!("Input {i} is not of type {ty}!\n{}", e.prettify(input));
                 exit(65);
             }
         }
