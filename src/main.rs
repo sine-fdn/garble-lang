@@ -13,7 +13,7 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// Check, compile and run garble program
+    /// Typechecks, compiles and runs garble program
     /// usage: garble run [OPTIONS] <FILE> <INPUTS>...
     #[clap(verbatim_doc_comment)]
     Run {
@@ -29,6 +29,14 @@ enum Command {
         #[clap(short, long, value_parser, default_value = "main", alias = "fn")]
         function: String,
     },
+    /// Typechecks garble program
+    /// usage: garble check <FILE>
+    #[clap(verbatim_doc_comment)]
+    Check {
+        /// Provide the path to the garble.rs file where your program is written
+        #[clap(value_parser)]
+        file: PathBuf,
+    },
 }
 
 fn main() -> Result<(), std::io::Error> {
@@ -38,12 +46,13 @@ fn main() -> Result<(), std::io::Error> {
         Command::Run {
             file,
             inputs,
-            function: fn_name,
-        } => run(file, inputs, fn_name),
+            function,
+        } => run(file, inputs, function),
+        Command::Check { file } => type_check(file),
     }
 }
 
-fn run(file: &PathBuf, inputs: &Vec<String>, fn_name: &String) -> Result<(), std::io::Error> {
+fn run(file: &PathBuf, inputs: &Vec<String>, function: &String) -> Result<(), std::io::Error> {
     let mut f = File::open(file).unwrap_or_else(|e| {
         eprintln!(
             "Couldn't find {:?}. Please make sure it is the right file path.\nError: {e}",
@@ -58,10 +67,11 @@ fn run(file: &PathBuf, inputs: &Vec<String>, fn_name: &String) -> Result<(), std
         eprintln!("{}", e.prettify(&prg));
         exit(65);
     });
-    let (circuit, main_fn) = program.compile(fn_name).unwrap_or_else(|e| {
+    let (circuit, main_fn) = program.compile(function).unwrap_or_else(|e| {
         eprintln!("{e}");
         exit(65);
     });
+
     let mut evaluator = Evaluator::new(&program, main_fn, &circuit);
     let main_params = &evaluator.main_fn.params;
     if main_params.len() != inputs.len() {
@@ -106,6 +116,29 @@ fn run(file: &PathBuf, inputs: &Vec<String>, fn_name: &String) -> Result<(), std
                     exit(70);
                 }
             }
+            Ok(())
+        }
+    }
+}
+
+fn type_check(file: &PathBuf) -> Result<(), std::io::Error> {
+    let mut f = File::open(file).unwrap_or_else(|e| {
+        eprintln!(
+            "Couldn't find {:?}. Please make sure it is the right file path.\nError: {e}",
+            file
+        );
+        exit(65);
+    });
+    let mut prg = String::new();
+    f.read_to_string(&mut prg)?;
+
+    match check(&prg) {
+        Err(e) => {
+            eprintln!("{}", e.prettify(&prg));
+            exit(65);
+        }
+        Ok(_) => {
+            println!("No type errors in the program.");
             Ok(())
         }
     }
