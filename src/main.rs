@@ -13,25 +13,21 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// Type-checks, compiles and runs garble program
-    /// usage: garble run [OPTIONS] <FILE> <INPUTS>...
-    #[clap(verbatim_doc_comment)]
+    /// Run the Garble program with the specified inputs
     Run {
-        /// Provide the path to the garble.rs file where your program is written
+        /// Path to the program source code file
         #[clap(value_parser)]
         file: PathBuf,
 
-        /// Provide inputs to be passed as arguments in your function
+        /// Inputs for the program, each either as a Garble literal or as a path to a file containing a Garble literal
         #[clap(value_parser, required = true)]
         inputs: Vec<String>,
 
-        /// Specify the name of the function to be ran
+        /// Name of the function in the Garble program to run
         #[clap(short, long, value_parser, default_value = "main", alias = "fn")]
         function: String,
     },
-    /// Type-checks garble program
-    /// usage: garble check <FILE>
-    #[clap(verbatim_doc_comment)]
+    /// Check the Garble program for any type errors
     Check {
         /// Provide the path to the garble.rs file where your program is written
         #[clap(value_parser)]
