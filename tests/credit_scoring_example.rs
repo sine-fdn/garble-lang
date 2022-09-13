@@ -1,12 +1,10 @@
-use std::{fs::File, io::Read};
-
 use garble_lang::{ast::Type, check, circuit::Circuit, eval::Evaluator, literal::Literal, Error};
 
 #[test]
 // Tests whether successive compilations always result in the same circuit, rather than different circuits with the same
 // output
-fn credit_scoring_successive_compilations() -> Result<(), Error> {
-    let credit_scoring = read_source_code("credit_scoring.garble.rs");
+fn credit_scoring_multiple_compilations() -> Result<(), Error> {
+    let credit_scoring = include_str!("../garble_examples/credit_scoring.garble.rs");
     println!("Parsing and type-checking...");
     let typed_prg = check(&credit_scoring).map_err(|e| pretty_print(e, &credit_scoring))?;
     println!("Compiling...");
@@ -44,9 +42,9 @@ fn credit_scoring_successive_compilations() -> Result<(), Error> {
 }
 
 #[test]
-fn credit_scoring_interaction() -> Result<(), Error> {
-    let credit_scoring = read_source_code("credit_scoring.garble.rs");
-    println!("Parsing and type-checking...");
+fn credit_scoring_single_run() -> Result<(), Error> {
+  let credit_scoring = include_str!("../garble_examples/credit_scoring.garble.rs");
+  println!("Parsing and type-checking...");
     let typed_prg = check(&credit_scoring).map_err(|e| pretty_print(e, &credit_scoring))?;
     println!("Compiling...");
 
@@ -148,13 +146,4 @@ fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
     let pretty = e.prettify(prg);
     println!("{}", pretty);
     e
-}
-fn read_source_code(file_name: &str) -> String {
-    let path = format!("./garble_examples/{file_name}");
-    let mut source_file = File::open(&path).unwrap_or_else(|_| panic!("Could not open {path}"));
-    let mut source_code = String::new();
-    source_file
-        .read_to_string(&mut source_code)
-        .unwrap_or_else(|_| panic!("Could not read {path}"));
-    source_code
 }
