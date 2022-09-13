@@ -1,8 +1,8 @@
 use garble_lang::{ast::Type, check, circuit::Circuit, eval::Evaluator, literal::Literal, Error};
 
 #[test]
-// Tests whether successive compilations always result in the same circuit, rather than different circuits with the same
-// output
+// Tests whether successive compilations always result in exactly the same circuit, rather than different circuits that
+// model the same function but might have slightly different gate arrangements.
 fn credit_scoring_multiple_compilations() -> Result<(), Error> {
     let credit_scoring = include_str!("../garble_examples/credit_scoring.garble.rs");
     println!("Parsing and type-checking...");
@@ -43,8 +43,8 @@ fn credit_scoring_multiple_compilations() -> Result<(), Error> {
 
 #[test]
 fn credit_scoring_single_run() -> Result<(), Error> {
-  let credit_scoring = include_str!("../garble_examples/credit_scoring.garble.rs");
-  println!("Parsing and type-checking...");
+    let credit_scoring = include_str!("../garble_examples/credit_scoring.garble.rs");
+    println!("Parsing and type-checking...");
     let typed_prg = check(&credit_scoring).map_err(|e| pretty_print(e, &credit_scoring))?;
     println!("Compiling...");
 
