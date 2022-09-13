@@ -12,10 +12,14 @@ keywords = ["programming-language", "secure-computation", "garbled-circuits", "c
 [[bin]]
 name = "garble"
 path = "src/main.rs"
+required-features = ["bin"]
 
 [dependencies]
-clap = { version = "3.2.20", features = ["derive"] }
+clap = { version = "3.2.20", features = ["derive"], optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
+
+[features]
+bin = ["clap"]
 
 [dev-dependencies]
 quickcheck = "1"
