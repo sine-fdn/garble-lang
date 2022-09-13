@@ -1,28 +1,36 @@
-use std::{fs::File, io::Read};
-
 use garble_lang::{
     check,
+    circuit::Circuit,
     eval::Evaluator,
     literal::{Literal, VariantLiteral},
     token::UnsignedNumType,
-    Error, circuit::Circuit,
+    Error,
 };
 
 #[test]
 fn smart_cookie_compilation() -> Result<(), Error> {
-    let smart_cookie = read_source_code("smart_cookie.garble.rs");
+    let smart_cookie = include_str!("../garble_examples/smart_cookie.garble.rs");
     println!("Parsing and type-checking...");
     let program = check(&smart_cookie).map_err(|e| pretty_print(e, &smart_cookie))?;
     println!("Compiling...");
 
     let mut circuit: Option<Circuit> = None;
     for _ in 0..4 {
-    let (decide_ad_circuit, _) = program.compile("decide_ad")?;
+        let (decide_ad_circuit, _) = program.compile("decide_ad")?;
         println!(">> 'decide_ad' has {}", decide_ad_circuit.report_gates());
         if let Some(prev_compilation) = circuit {
             if format!("{:?}", decide_ad_circuit) != format!("{:?}", prev_compilation) {
-                println!("{} vs {} gates", decide_ad_circuit.gates.len(), prev_compilation.gates.len());
-                for (i, (g1, g2)) in decide_ad_circuit.gates.iter().zip(prev_compilation.gates.iter()).enumerate() {
+                println!(
+                    "{} vs {} gates",
+                    decide_ad_circuit.gates.len(),
+                    prev_compilation.gates.len()
+                );
+                for (i, (g1, g2)) in decide_ad_circuit
+                    .gates
+                    .iter()
+                    .zip(prev_compilation.gates.iter())
+                    .enumerate()
+                {
                     if g1 != g2 {
                         println!("Mismatch at {i}: {g1:?} vs {g2:?}");
                     }
@@ -50,7 +58,7 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
     );
 
     for (expected_ad_decision, interests) in [interests1, interests2] {
-        let smart_cookie = read_source_code("smart_cookie.garble.rs");
+        let smart_cookie = include_str!("../garble_examples/smart_cookie.garble.rs");
         println!("Parsing and type-checking...");
         let program = check(&smart_cookie).map_err(|e| pretty_print(e, &smart_cookie))?;
         println!("Compiling...");
@@ -179,16 +187,6 @@ fn expect_enum(
         }
         _ => panic!("Unexpected ad decision result: {l}"),
     }
-}
-
-fn read_source_code(file_name: &str) -> String {
-    let path = format!("./garble_examples/{file_name}");
-    let mut source_file = File::open(&path).unwrap_or_else(|_| panic!("Could not open {path}"));
-    let mut source_code = String::new();
-    source_file
-        .read_to_string(&mut source_code)
-        .unwrap_or_else(|_| panic!("Could not read {path}"));
-    source_code
 }
 
 fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
