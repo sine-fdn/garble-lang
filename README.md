@@ -36,13 +36,17 @@ To execute the Millionaire's problem example, first install the `garble` utility
 $ cargo install garble_lang
 $ git clone git@github.com:sine-fdn/garble-lang.git
 $ cd garble-lang
-$ garble garble_examples/millionaires.garble.rs main 10000000u64 10000u64
+$ garble run garble_examples/millionaires.garble.rs --function=main 10000000u64 10000u64
 Richest::IsA
-$ garble garble_examples/millionaires.garble.rs main 100u64 5000000u64
+$ garble run garble_examples/millionaires.garble.rs --function=main 100u64 5000000u64
 Richest::IsB
-$ garble garble_examples/millionaires.garble.rs main 1000u64 1000u64
+$ garble run garble_examples/millionaires.garble.rs --function=main 1000u64 1000u64
 Richest::Tie
 ```
+
+You can also type-check a program without running it by using `cargo check` followed by the file name.
+
+(In order to pass inputs which include empty spaces, such as tuples, make sure to encompass them within inverted commas.)
 
 ## Architecture of this Repository
 
