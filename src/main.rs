@@ -1,49 +1,105 @@
-use std::{env::args, fs::File, io::Read, process::exit};
+use std::{fs::File, io::Read, path::PathBuf, process::exit};
 
 use garble_lang::{ast::ParamDef, check, eval::Evaluator, literal::Literal};
 
+use clap::{Parser, Subcommand};
+
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    #[clap(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Run the Garble program with the specified inputs
+    Run {
+        /// Path to the program source code file
+        #[clap(value_parser)]
+        file: PathBuf,
+
+        /// Inputs for the program, each either as a Garble literal or as a path to a file containing a Garble literal
+        #[clap(value_parser, required = true)]
+        inputs: Vec<String>,
+
+        /// Name of the function in the Garble program to run
+        #[clap(short, long, value_parser, default_value = "main", alias = "fn")]
+        function: String,
+    },
+    /// Check the Garble program for any type errors
+    Check {
+        /// Provide the path to the garble.rs file where your program is written
+        #[clap(value_parser)]
+        file: PathBuf,
+    },
+}
+
 fn main() -> Result<(), std::io::Error> {
-    let args: Vec<String> = args().collect();
-    if args.len() < 3 {
-        eprintln!(
-            "Usage: {} file function_name [input1] [input2] ...",
-            args[0]
-        );
-        exit(64);
+    let args = Args::parse();
+
+    match args.command {
+        Command::Run {
+            file,
+            inputs,
+            function,
+        } => run(file, inputs, function),
+        Command::Check { file } => type_check(file),
     }
-    let mut f = File::open(&args[1])?;
+}
+
+fn run(file: PathBuf, inputs: Vec<String>, function: String) -> Result<(), std::io::Error> {
+    let mut f = File::open(&file).unwrap_or_else(|_| {
+        eprintln!("Couldn't find {:?}", file);
+        exit(65);
+    });
     let mut prg = String::new();
     f.read_to_string(&mut prg)?;
-
-    let fn_name = &args[2];
-    let fn_args = &args[3..];
 
     let program = check(&prg).unwrap_or_else(|e| {
         eprintln!("{}", e.prettify(&prg));
         exit(65);
     });
-    let (circuit, main_fn) = program.compile(fn_name).unwrap_or_else(|e| {
+    let (circuit, main_fn) = program.compile(&function).unwrap_or_else(|e| {
         eprintln!("{e}");
         exit(65);
     });
+
+    let mut arguments: Vec<String> = Vec::with_capacity(inputs.len());
+
+    for input in inputs.into_iter() {
+        let input = match File::open(&input) {
+            Ok(mut file) => {
+                let mut argument = String::new();
+                file.read_to_string(&mut argument).unwrap_or_else(|e| {
+                    eprintln!("{e}");
+                    exit(65)
+                });
+                argument
+            }
+            Err(_) => input,
+        };
+        arguments.push(input);
+    }
+
     let mut evaluator = Evaluator::new(&program, main_fn, &circuit);
     let main_params = &evaluator.main_fn.params;
-    if main_params.len() != fn_args.len() {
+    if main_params.len() != arguments.len() {
         eprintln!(
             "Expected {} inputs, but found {}: {:?}",
             main_params.len(),
-            fn_args.len(),
-            fn_args
+            arguments.len(),
+            arguments
         );
         exit(65);
     }
     let mut params = Vec::with_capacity(main_params.len());
-    for (i, (ParamDef(_, _, ty), arg)) in main_params.iter().zip(fn_args).enumerate() {
-        let param = Literal::parse(evaluator.program, ty, arg);
+    for (i, (ParamDef(_, _, ty), input)) in main_params.iter().zip(arguments).enumerate() {
+        let param = Literal::parse(&program, ty, &input);
         match param {
             Ok(param) => params.push(param),
             Err(e) => {
-                eprintln!("Could not parse argument {i}!\n{}", e.prettify(arg));
+                eprintln!("Input {i} is not of type {ty}!\n{}", e.prettify(&input));
                 exit(65);
             }
         }
@@ -70,6 +126,26 @@ fn main() -> Result<(), std::io::Error> {
                     exit(70);
                 }
             }
+            Ok(())
+        }
+    }
+}
+
+fn type_check(file: PathBuf) -> Result<(), std::io::Error> {
+    let mut f = File::open(&file).unwrap_or_else(|_| {
+        eprintln!("Couldn't find {:?}", file);
+        exit(65);
+    });
+    let mut prg = String::new();
+    f.read_to_string(&mut prg)?;
+
+    match check(&prg) {
+        Err(e) => {
+            eprintln!("{}", e.prettify(&prg));
+            exit(65);
+        }
+        Ok(_) => {
+            println!("No type errors in the program.");
             Ok(())
         }
     }
