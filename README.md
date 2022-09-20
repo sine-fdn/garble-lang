@@ -46,7 +46,7 @@ Richest::Tie
 
 You can also type-check a program without running it by using `garble check` followed by the file name.
 
-(In order to pass inputs which include empty spaces, such as tuples, make sure to encompass them within inverted commas.)
+You might need to wrap input or metadata in single quotes if they contain whitespace.
 
 ## Architecture of this Repository
 
