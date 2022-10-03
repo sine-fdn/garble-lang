@@ -1416,6 +1416,42 @@ pub fn main(x: i8) -> i8 {
 }
 
 #[test]
+fn compile_if_elseif_else_assignment() -> Result<(), Error> {
+    let prg = "
+    pub fn main(income: u32) -> bool {
+      let mut points = 0u16;
+
+      if income >= 10000u32 {
+        points = points + 200u16
+      } else if income >= 2000u32 {
+        points = points + 50u16
+      } else {
+        points = points + 0u16
+      }
+
+      if points > 150u16 {
+        true
+      } else {
+        false
+      }
+    }
+
+    ";
+    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    for x in [0, 10000] {
+        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let expected = if x == 0 { false } else { true };
+        eval.set_u32(x);
+        let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+        assert_eq!(
+            bool::try_from(output).map_err(|e| pretty_print(e, prg))?,
+            expected
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn compile_lexically_scoped_block() -> Result<(), Error> {
     let prg = "
 pub fn main(x: i32) -> i32 {

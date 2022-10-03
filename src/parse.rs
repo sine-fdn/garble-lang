@@ -644,7 +644,7 @@ impl Parser {
                 let meta_right_brace = self.expect(&TokenEnum::RightBrace)?;
                 if self.next_matches(&TokenEnum::KeywordElse).is_some() {
                     if self.peek(&TokenEnum::KeywordIf) {
-                        let elseif_expr = self.parse_block_as_expr()?;
+                        let elseif_expr = self.parse_expr()?;
                         let meta = join_meta(meta, elseif_expr.1);
                         Ok(Expr::untyped(
                             ExprEnum::If(
