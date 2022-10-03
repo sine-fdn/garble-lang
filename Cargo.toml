@@ -1,6 +1,6 @@
 [package]
 name = "garble_lang"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 rust-version = "1.60.0"
 description = "Turing-Incomplete Programming Language for Multi-Party Computation with Garbled Circuits"
