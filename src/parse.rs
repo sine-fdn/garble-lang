@@ -122,7 +122,7 @@ impl Parser {
         let mut is_pub = None;
         while let Some(Token(token_enum, meta)) = self.advance() {
             match token_enum {
-                TokenEnum::KeywordPub if is_pub == None => {
+                TokenEnum::KeywordPub if is_pub.is_none() => {
                     is_pub = Some(meta);
                 }
                 TokenEnum::KeywordStruct => {
