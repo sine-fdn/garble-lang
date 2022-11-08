@@ -1175,7 +1175,7 @@ impl UntypedPattern {
     fn type_check(
         &self,
         env: &mut Env<(Option<Type>, Mutability)>,
-        fns: &mut TypedFns,
+        _fns: &mut TypedFns,
         defs: &Defs,
         ty: Option<Type>,
     ) -> Result<TypedPattern, TypeErrors> {
@@ -1257,7 +1257,7 @@ impl UntypedPattern {
                     let mut errors = vec![];
                     let mut typed_fields = Vec::with_capacity(fields.len());
                     for (field, ty) in fields.iter().zip(field_types) {
-                        match field.type_check(env, fns, defs, Some(ty)) {
+                        match field.type_check(env, _fns, defs, Some(ty)) {
                             Ok(typed_field) => typed_fields.push(typed_field),
                             Err(e) => errors.extend(e),
                         }
@@ -1270,7 +1270,7 @@ impl UntypedPattern {
                 } else {
                     let mut errors = vec![None];
                     for field in fields.iter() {
-                        match field.type_check(env, fns, defs, ty.clone()) {
+                        match field.type_check(env, _fns, defs, ty.clone()) {
                             Ok(_) => {}
                             Err(e) => errors.extend(e),
                         }
@@ -1297,7 +1297,7 @@ impl UntypedPattern {
                     let mut typed_fields = Vec::with_capacity(fields.len());
                     for (field_name, field_value) in fields {
                         if let Some(field_type) = struct_def.get(field_name.as_str()) {
-                            match field_value.type_check(env, fns, defs, Some(field_type.clone())) {
+                            match field_value.type_check(env, _fns, defs, Some(field_type.clone())) {
                                 Ok(typed_field) => {
                                     typed_fields.push((field_name.clone(), typed_field))
                                 }
@@ -1363,7 +1363,7 @@ impl UntypedPattern {
                                 let mut errors = vec![];
                                 let mut typed_fields = Vec::with_capacity(fields.len());
                                 for (field, ty) in fields.iter().zip(field_types) {
-                                    match field.type_check(env, fns, defs, Some(ty.clone())) {
+                                    match field.type_check(env, _fns, defs, Some(ty.clone())) {
                                         Ok(typed_field) => typed_fields.push(typed_field),
                                         Err(e) => errors.extend(e),
                                     }
