@@ -1175,7 +1175,7 @@ impl UntypedPattern {
     fn type_check(
         &self,
         env: &mut Env<(Option<Type>, Mutability)>,
-        _fns: &mut TypedFns,
+        fns: &mut TypedFns,
         defs: &Defs,
         ty: Option<Type>,
     ) -> Result<TypedPattern, TypeErrors> {
