@@ -200,7 +200,9 @@ Garble will also panic on integer overflows caused by other arithmetic operation
 
 ## Collection Types
 
-Several collection types are supported: Fixed-size arrays, ranges, tuples, structs and enums. Let's look at each of them in turn:
+Several collection types are supported: Fixed-size arrays, ranges, tuples, structs and enums. In contrast to Rust, all collection types in Garble support equality comparison (`==`) out of the box.
+
+Let's look at each of the collection types supported by Garble in turn:
 
 ### Arrays and Ranges
 
