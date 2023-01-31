@@ -1297,7 +1297,8 @@ impl UntypedPattern {
                     let mut typed_fields = Vec::with_capacity(fields.len());
                     for (field_name, field_value) in fields {
                         if let Some(field_type) = struct_def.get(field_name.as_str()) {
-                            match field_value.type_check(env, _fns, defs, Some(field_type.clone())) {
+                            match field_value.type_check(env, _fns, defs, Some(field_type.clone()))
+                            {
                                 Ok(typed_field) => {
                                     typed_fields.push((field_name.clone(), typed_field))
                                 }

@@ -275,8 +275,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for u64 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
-        value
-            .into_unsigned(Type::Unsigned(UnsignedNumType::U64))
+        value.into_unsigned(Type::Unsigned(UnsignedNumType::U64))
     }
 }
 
@@ -314,8 +313,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for i64 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
-        value
-            .into_signed(Type::Signed(SignedNumType::I64))
+        value.into_signed(Type::Signed(SignedNumType::I64))
     }
 }
 

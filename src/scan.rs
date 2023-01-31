@@ -256,9 +256,7 @@ impl<'a> Scanner<'a> {
                                     "u32" if n <= u32::MAX as u64 => {
                                         TokenEnum::UnsignedNum(n, UnsignedNumType::U32)
                                     }
-                                    "u64" => {
-                                        TokenEnum::UnsignedNum(n, UnsignedNumType::U64)
-                                    }
+                                    "u64" => TokenEnum::UnsignedNum(n, UnsignedNumType::U64),
                                     _ => {
                                         self.push_error(ScanErrorEnum::InvalidUnsignedNum);
                                         TokenEnum::UnsignedNum(n, UnsignedNumType::U64)
