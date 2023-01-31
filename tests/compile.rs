@@ -10,7 +10,7 @@ use garble_lang::{
 fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
     let e: Error = e.into();
     let pretty = e.prettify(prg);
-    println!("{}", pretty);
+    println!("{pretty}");
     e
 }
 
@@ -20,10 +20,9 @@ fn compile_xor() -> Result<(), Error> {
         let prg = format!(
             "
 pub fn main(x: bool) -> bool {{
-    x ^ {}
+    x ^ {y}
 }}
-",
-            y
+"
         );
         let (typed_prg, main_fn, circuit) =
             compile(&prg, "main").map_err(|e| pretty_print(e, &prg))?;
@@ -46,10 +45,9 @@ fn compile_add() -> Result<(), Error> {
         let prg = format!(
             "
 pub fn main(x: u8) -> u8 {{
-    x + {}u8
+    x + {y}u8
 }}
-",
-            y
+"
         );
         let (typed_prg, main_fn, circuit) =
             compile(&prg, "main").map_err(|e| pretty_print(e, &prg))?;
@@ -72,10 +70,9 @@ fn compile_add_with_int_coercion() -> Result<(), Error> {
         let prg = format!(
             "
 pub fn main(x: u16) -> u16 {{
-    x + {}u16
+    x + {y}u16
 }}
-",
-            y
+"
         );
         let (typed_prg, main_fn, circuit) =
             compile(&prg, "main").map_err(|e| pretty_print(e, &prg))?;
@@ -817,10 +814,9 @@ fn compile_array_repeat_literal_access() -> Result<(), Error> {
     let prg = &format!(
         "
 pub fn main(x: i8, i: usize) -> i8 {{
-    [x; {}][i]
+    [x; {array_size}][i]
 }}
-",
-        array_size
+"
     );
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
     for x in -10..10 {
@@ -841,12 +837,11 @@ fn compile_array_assignment() -> Result<(), Error> {
     let prg = &format!(
         "
 pub fn main(x: i8, i: usize, j: usize) -> i8 {{
-    let mut arr = [x; {}];
+    let mut arr = [x; {array_size}];
     arr[i] = x * 2i8;
     arr[j]
 }}
-",
-        array_size
+"
     );
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
     let x = -5;
@@ -873,15 +868,14 @@ fn compile_fold() -> Result<(), Error> {
     let prg = &format!(
         "
 pub fn main(x: i8) -> i8 {{
-    let mut arr = [x; {}];
+    let mut arr = [x; {array_size}];
     let mut acc = 0i8;
     for elem in arr {{
         acc = acc + elem;
     }}
     acc
 }}
-",
-        array_size
+"
     );
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
     for x in -10..10 {
@@ -1036,12 +1030,11 @@ fn compile_tuple() -> Result<(), Error> {
     for (t, i) in [("i32", 0), ("i16", 1), ("i8", 2), ("bool", 3), ("bool", 4)] {
         let prg = &format!(
             "
-pub fn main(x: bool) -> {} {{
+pub fn main(x: bool) -> {t} {{
     let t = (-3i32, -2i16, -1i8, true, false);
-    t.{}
+    t.{i}
 }}
-",
-            t, i
+"
         );
         let (typed_prg, main_fn, circuit) =
             compile(prg, "main").map_err(|e| pretty_print(e, prg))?;

@@ -275,7 +275,7 @@ impl PanicReason {
             1 => PanicReason::Overflow,
             2 => PanicReason::DivByZero,
             3 => PanicReason::OutOfBounds,
-            r => panic!("Invalid panic reason: {}", r),
+            r => panic!("Invalid panic reason: {r}"),
         }
     }
 

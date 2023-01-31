@@ -19,7 +19,7 @@ fn smart_cookie_compilation() -> Result<(), Error> {
         let (decide_ad_circuit, _) = program.compile("decide_ad")?;
         println!(">> 'decide_ad' has {}", decide_ad_circuit.report_gates());
         if let Some(prev_compilation) = circuit {
-            if format!("{:?}", decide_ad_circuit) != format!("{:?}", prev_compilation) {
+            if format!("{decide_ad_circuit:?}") != format!("{prev_compilation:?}") {
                 println!(
                     "{} vs {} gates",
                     decide_ad_circuit.gates.len(),
@@ -192,6 +192,6 @@ fn expect_enum(
 fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
     let e: Error = e.into();
     let pretty = e.prettify(prg);
-    println!("{}", pretty);
+    println!("{pretty}");
     e
 }

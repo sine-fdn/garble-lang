@@ -1678,7 +1678,7 @@ fn split_ctor(patterns: &[PatternStack], q: &[TypedPattern], defs: &Defs) -> Vec
             PatternEnum::UnsignedInclusiveRange(min, max, _) => {
                 split_unsigned_range(*ty, patterns, *min, *max)
             }
-            _ => panic!("cannot split {:?} for type {:?}", head_enum, ty),
+            _ => panic!("cannot split {head_enum:?} for type {ty:?}"),
         },
         Type::Signed(ty) => match head_enum {
             PatternEnum::Identifier(_) => {
@@ -1694,7 +1694,7 @@ fn split_ctor(patterns: &[PatternStack], q: &[TypedPattern], defs: &Defs) -> Vec
             PatternEnum::SignedInclusiveRange(min, max, _) => {
                 split_signed_range(*ty, patterns, *min, *max)
             }
-            _ => panic!("cannot split {:?} for type {:?}", head_enum, ty),
+            _ => panic!("cannot split {head_enum:?} for type {ty:?}"),
         },
         Type::Struct(struct_name) => {
             let (fields, field_types) = defs.structs.get(struct_name.as_str()).unwrap();
@@ -1718,7 +1718,7 @@ fn split_ctor(patterns: &[PatternStack], q: &[TypedPattern], defs: &Defs) -> Vec
         }
         Type::Array(elem_ty, size) => vec![Ctor::Array(elem_ty.clone(), *size)],
         Type::Fn(_, _) => {
-            panic!("Type {:?} does not support pattern matching", ty)
+            panic!("Type {ty:?} does not support pattern matching")
         }
         Type::UntypedTopLevelDefinition(_, _) => {
             unreachable!("Untyped top level types should have been typechecked at this point")

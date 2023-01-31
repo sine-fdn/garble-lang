@@ -474,7 +474,7 @@ impl TypedExpr {
                 } else if let Type::Signed(ty) = ty {
                     Literal::NumSigned(n as i64, ty)
                 } else {
-                    panic!("Literal type is not a number type: {:?}", ty)
+                    panic!("Literal type is not a number type: {ty:?}")
                 }
             }
             ExprEnum::NumSigned(n, _) => {
@@ -483,7 +483,7 @@ impl TypedExpr {
                 } else if let Type::Signed(ty) = ty {
                     Literal::NumSigned(n, ty)
                 } else {
-                    panic!("Literal type is not a number type: {:?}", ty)
+                    panic!("Literal type is not a number type: {ty:?}")
                 }
             }
             ExprEnum::ArrayRepeatLiteral(elem, size) => {

@@ -17,7 +17,7 @@ fn credit_scoring_multiple_compilations() -> Result<(), Error> {
             compute_score_circuit.report_gates()
         );
         if let Some(prev_compilation) = circuit {
-            if format!("{:?}", compute_score_circuit) != format!("{:?}", prev_compilation) {
+            if format!("{compute_score_circuit:?}") != format!("{prev_compilation:?}") {
                 println!(
                     "{} vs {} gates",
                     compute_score_circuit.gates.len(),
@@ -144,6 +144,6 @@ fn credit_scoring_single_run() -> Result<(), Error> {
 fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
     let e: Error = e.into();
     let pretty = e.prettify(prg);
-    println!("{}", pretty);
+    println!("{pretty}");
     e
 }

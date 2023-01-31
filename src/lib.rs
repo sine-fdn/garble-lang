@@ -198,7 +198,7 @@ impl CompileTimeError {
                 meta.start.1 + 1
             )
             .unwrap();
-            writeln!(msg, "{}:", err).unwrap();
+            writeln!(msg, "{err}:").unwrap();
             msg += &prettify_meta(prg, meta);
         }
         msg

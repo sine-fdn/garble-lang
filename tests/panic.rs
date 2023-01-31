@@ -334,13 +334,13 @@ fn expect_panic(eval_result: Result<EvalOutput, EvalError>, expected: PanicReaso
     assert!(eval_output.is_err());
     match eval_output.unwrap_err() {
         EvalError::Panic(EvalPanic { reason, .. }) => assert_eq!(expected, reason),
-        e => panic!("Expected a panic, but found {:?}", e),
+        e => panic!("Expected a panic, but found {e:?}"),
     }
 }
 
 fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
     let e: Error = e.into();
     let pretty = e.prettify(prg);
-    println!("{}", pretty);
+    println!("{pretty}");
     e
 }

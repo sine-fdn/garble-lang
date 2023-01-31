@@ -884,7 +884,7 @@ pub(crate) fn enum_tag_number(enum_def: &EnumDef, variant: &str) -> usize {
             return i;
         }
     }
-    panic!("Variant {} not found in enum def", variant)
+    panic!("Variant {variant} not found in enum def")
 }
 
 pub(crate) fn enum_tag_size(enum_def: &EnumDef) -> usize {
