@@ -6,7 +6,7 @@ use garble_lang::{ast::Type, check, circuit::Circuit, eval::Evaluator, literal::
 fn credit_scoring_multiple_compilations() -> Result<(), Error> {
     let credit_scoring = include_str!("../garble_examples/credit_scoring.garble.rs");
     println!("Parsing and type-checking...");
-    let typed_prg = check(&credit_scoring).map_err(|e| pretty_print(e, &credit_scoring))?;
+    let typed_prg = check(credit_scoring).map_err(|e| pretty_print(e, credit_scoring))?;
     println!("Compiling...");
     let mut circuit: Option<Circuit> = None;
 
@@ -45,7 +45,7 @@ fn credit_scoring_multiple_compilations() -> Result<(), Error> {
 fn credit_scoring_single_run() -> Result<(), Error> {
     let credit_scoring = include_str!("../garble_examples/credit_scoring.garble.rs");
     println!("Parsing and type-checking...");
-    let typed_prg = check(&credit_scoring).map_err(|e| pretty_print(e, &credit_scoring))?;
+    let typed_prg = check(credit_scoring).map_err(|e| pretty_print(e, credit_scoring))?;
     println!("Compiling...");
 
     let user_ty = Type::Struct("User".to_string());
@@ -126,14 +126,14 @@ fn credit_scoring_single_run() -> Result<(), Error> {
     )?;
 
     let (compute_score_circuit, compute_score_fn) = typed_prg.compile("compute_score")?;
-    let mut eval = Evaluator::new(&typed_prg, &compute_score_fn, &compute_score_circuit);
+    let mut eval = Evaluator::new(&typed_prg, compute_score_fn, &compute_score_circuit);
 
     eval.set_literal(scoring_algorithm)?;
     eval.set_literal(user)?;
-    let output = eval.run().map_err(|e| pretty_print(e, &credit_scoring))?;
+    let output = eval.run().map_err(|e| pretty_print(e, credit_scoring))?;
     let r = output
         .into_literal()
-        .map_err(|e| pretty_print(e, &credit_scoring))?;
+        .map_err(|e| pretty_print(e, credit_scoring))?;
 
     let score_ty = Type::Enum("Score".to_string());
     let expected = Literal::parse(&typed_prg, &score_ty, "Score::Good(85u8)")?;

@@ -554,7 +554,7 @@ impl From<u32> for Literal {
 
 impl From<u64> for Literal {
     fn from(n: u64) -> Self {
-        Literal::NumUnsigned(n as u64, UnsignedNumType::U64)
+        Literal::NumUnsigned(n, UnsignedNumType::U64)
     }
 }
 
@@ -578,6 +578,6 @@ impl From<i32> for Literal {
 
 impl From<i64> for Literal {
     fn from(n: i64) -> Self {
-        Literal::NumSigned(n as i64, SignedNumType::I64)
+        Literal::NumSigned(n, SignedNumType::I64)
     }
 }

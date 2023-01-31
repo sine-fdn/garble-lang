@@ -234,7 +234,7 @@ impl SignedNumType {
             SignedNumType::I8 => i8::MIN as i64,
             SignedNumType::I16 => i16::MIN as i64,
             SignedNumType::I32 => i32::MIN as i64,
-            SignedNumType::I64 => i64::MIN as i64,
+            SignedNumType::I64 => i64::MIN,
         }
     }
 
@@ -244,7 +244,7 @@ impl SignedNumType {
             SignedNumType::I8 => i8::MAX as i64,
             SignedNumType::I16 => i16::MAX as i64,
             SignedNumType::I32 => i32::MAX as i64,
-            SignedNumType::I64 => i64::MAX as i64,
+            SignedNumType::I64 => i64::MAX,
         }
     }
 }

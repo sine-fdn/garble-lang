@@ -147,7 +147,7 @@ impl<'a> Evaluator<'a> {
     /// Encodes a u64 int as bits and sets it as the input from the party.
     pub fn set_u64(&mut self, n: u64) {
         let inputs = self.push_input();
-        unsigned_to_bits(n as u64, 64, inputs);
+        unsigned_to_bits(n, 64, inputs);
     }
 
     /// Encodes a i8 int as bits and sets it as the input from the party.
@@ -171,7 +171,7 @@ impl<'a> Evaluator<'a> {
     /// Encodes a i64 int as bits and sets it as the input from the party.
     pub fn set_i64(&mut self, n: i64) {
         let inputs = self.push_input();
-        signed_to_bits(n as i64, 64, inputs);
+        signed_to_bits(n, 64, inputs);
     }
 
     /// Encodes a literal (with enums looked up in the program) and sets it as the party's input.
@@ -277,7 +277,6 @@ impl<'a> TryFrom<EvalOutput<'a>> for u64 {
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
         value
             .into_unsigned(Type::Unsigned(UnsignedNumType::U64))
-            .map(|n| n as u64)
     }
 }
 
@@ -317,7 +316,6 @@ impl<'a> TryFrom<EvalOutput<'a>> for i64 {
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
         value
             .into_signed(Type::Signed(SignedNumType::I64))
-            .map(|n| n as i64)
     }
 }
 

@@ -201,7 +201,7 @@ impl<'a> Scanner<'a> {
                                     "i32" if n >= i32::MIN as i64 && n <= i32::MAX as i64 => {
                                         SignedNumType::I32
                                     }
-                                    "i64" if n >= i64::MIN as i64 && n <= i64::MAX as i64 => {
+                                    "i64" if (i64::MIN..=i64::MAX).contains(&n) => {
                                         SignedNumType::I64
                                     }
                                     _ => {
@@ -256,7 +256,7 @@ impl<'a> Scanner<'a> {
                                     "u32" if n <= u32::MAX as u64 => {
                                         TokenEnum::UnsignedNum(n, UnsignedNumType::U32)
                                     }
-                                    "u64" if n <= u64::MAX as u64 => {
+                                    "u64" => {
                                         TokenEnum::UnsignedNum(n, UnsignedNumType::U64)
                                     }
                                     _ => {

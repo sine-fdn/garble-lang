@@ -74,13 +74,13 @@ impl Arbitrary for OperatorTestCase {
                         U8 => (x as u8).checked_shl(y_u8 as u32).map(|z| z.into()),
                         U16 => (x as u16).checked_shl(y_u8 as u32).map(|z| z.into()),
                         U32 => (x as u32).checked_shl(y_u8 as u32).map(|z| z.into()),
-                        U64 => (x as u64).checked_shl(y_u8 as u32).map(|z| z.into()),
+                        U64 => x.checked_shl(y_u8 as u32).map(|z| z.into()),
                     },
                     NumSigned(x, signed_ty) => match signed_ty {
                         I8 => (x as i8).checked_shl(y_u8 as u32).map(|z| z.into()),
                         I16 => (x as i16).checked_shl(y_u8 as u32).map(|z| z.into()),
                         I32 => (x as i32).checked_shl(y_u8 as u32).map(|z| z.into()),
-                        I64 => (x as i64).checked_shl(y_u8 as u32).map(|z| z.into()),
+                        I64 => x.checked_shl(y_u8 as u32).map(|z| z.into()),
                     },
                     _ => unreachable!("shift expects a num type"),
                 };
@@ -98,13 +98,13 @@ impl Arbitrary for OperatorTestCase {
                         U8 => (x as u8).checked_shr(y_u8 as u32).map(|z| z.into()),
                         U16 => (x as u16).checked_shr(y_u8 as u32).map(|z| z.into()),
                         U32 => (x as u32).checked_shr(y_u8 as u32).map(|z| z.into()),
-                        U64 => (x as u64).checked_shr(y_u8 as u32).map(|z| z.into()),
+                        U64 => x.checked_shr(y_u8 as u32).map(|z| z.into()),
                     },
                     NumSigned(x, signed_ty) => match signed_ty {
                         I8 => (x as i8).checked_shr(y_u8 as u32).map(|z| z.into()),
                         I16 => (x as i16).checked_shr(y_u8 as u32).map(|z| z.into()),
                         I32 => (x as i32).checked_shr(y_u8 as u32).map(|z| z.into()),
-                        I64 => (x as i64).checked_shr(y_u8 as u32).map(|z| z.into()),
+                        I64 => x.checked_shr(y_u8 as u32).map(|z| z.into()),
                     },
                     _ => unreachable!("shift expects a num type"),
                 };
@@ -124,13 +124,13 @@ fn arbitrary_literal_of_ty(g: &mut quickcheck::Gen, ty: &Type) -> Literal {
             U8 => NumUnsigned(u8::arbitrary(g) as u64, *ty),
             U16 => NumUnsigned(u16::arbitrary(g) as u64, *ty),
             U32 => NumUnsigned(u32::arbitrary(g) as u64, *ty),
-            U64 => NumUnsigned(u64::arbitrary(g) as u64, *ty),
+            U64 => NumUnsigned(u64::arbitrary(g), *ty),
         },
         Type::Signed(ty) => match ty {
             I8 => NumSigned(i8::arbitrary(g) as i64, *ty),
             I16 => NumSigned(i16::arbitrary(g) as i64, *ty),
             I32 => NumSigned(i32::arbitrary(g) as i64, *ty),
-            I64 => NumSigned(i64::arbitrary(g) as i64, *ty),
+            I64 => NumSigned(i64::arbitrary(g), *ty),
         },
         _ => unreachable!("only num types are supported"),
     }

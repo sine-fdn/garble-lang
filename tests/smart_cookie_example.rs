@@ -11,7 +11,7 @@ use garble_lang::{
 fn smart_cookie_compilation() -> Result<(), Error> {
     let smart_cookie = include_str!("../garble_examples/smart_cookie.garble.rs");
     println!("Parsing and type-checking...");
-    let program = check(&smart_cookie).map_err(|e| pretty_print(e, &smart_cookie))?;
+    let program = check(smart_cookie).map_err(|e| pretty_print(e, smart_cookie))?;
     println!("Compiling...");
 
     let mut circuit: Option<Circuit> = None;
@@ -60,7 +60,7 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
     for (expected_ad_decision, interests) in [interests1, interests2] {
         let smart_cookie = include_str!("../garble_examples/smart_cookie.garble.rs");
         println!("Parsing and type-checking...");
-        let program = check(&smart_cookie).map_err(|e| pretty_print(e, &smart_cookie))?;
+        let program = check(smart_cookie).map_err(|e| pretty_print(e, smart_cookie))?;
         println!("Compiling...");
 
         let (init_circuit, init_fn) = program.compile("init")?;
@@ -92,15 +92,15 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
         let mut init_eval = Evaluator::new(&program, init_fn, &init_circuit);
         init_eval
             .set_literal(website_signing_key.clone())
-            .map_err(|e| pretty_print(e, &smart_cookie))?;
+            .map_err(|e| pretty_print(e, smart_cookie))?;
         init_eval
             .parse_literal("()")
-            .map_err(|e| pretty_print(e, &smart_cookie))?;
+            .map_err(|e| pretty_print(e, smart_cookie))?;
         let mut user_state = init_eval
             .run()
-            .map_err(|e| pretty_print(e, &smart_cookie))?
+            .map_err(|e| pretty_print(e, smart_cookie))?
             .into_literal()
-            .map_err(|e| pretty_print(e, &smart_cookie))?;
+            .map_err(|e| pretty_print(e, smart_cookie))?;
 
         for (i, interest) in interests.iter().enumerate() {
             println!("  {i}: logging '{interest}'");
@@ -119,15 +119,15 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
                         ("key".to_string(), website_signing_key.clone()),
                     ],
                 ))
-                .map_err(|e| pretty_print(e, &smart_cookie))?;
+                .map_err(|e| pretty_print(e, smart_cookie))?;
             log_interest_eval
                 .set_literal(user_state)
-                .map_err(|e| pretty_print(e, &smart_cookie))?;
+                .map_err(|e| pretty_print(e, smart_cookie))?;
             let log_interest_result = log_interest_eval
                 .run()
-                .map_err(|e| pretty_print(e, &smart_cookie))?
+                .map_err(|e| pretty_print(e, smart_cookie))?
                 .into_literal()
-                .map_err(|e| pretty_print(e, &smart_cookie))?;
+                .map_err(|e| pretty_print(e, smart_cookie))?;
             user_state = expect_enum(&log_interest_result, "LogResult", "Ok", Some(1))
                 .pop()
                 .unwrap();
@@ -136,15 +136,15 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
         let mut decide_ad_eval = Evaluator::new(&program, decide_ad_fn, &decide_ad_circuit);
         decide_ad_eval
             .set_literal(website_signing_key)
-            .map_err(|e| pretty_print(e, &smart_cookie))?;
+            .map_err(|e| pretty_print(e, smart_cookie))?;
         decide_ad_eval
             .set_literal(user_state)
-            .map_err(|e| pretty_print(e, &smart_cookie))?;
+            .map_err(|e| pretty_print(e, smart_cookie))?;
         let ad_decision = decide_ad_eval
             .run()
-            .map_err(|e| pretty_print(e, &smart_cookie))?
+            .map_err(|e| pretty_print(e, smart_cookie))?
             .into_literal()
-            .map_err(|e| pretty_print(e, &smart_cookie))?;
+            .map_err(|e| pretty_print(e, smart_cookie))?;
 
         let ad_decision = expect_enum(&ad_decision, "AdDecisionResult", "Ok", Some(1));
         assert_eq!(

@@ -1440,7 +1440,7 @@ fn compile_if_elseif_else_assignment() -> Result<(), Error> {
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
     for x in [0, 10000] {
         let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
-        let expected = if x == 0 { false } else { true };
+        let expected = x != 0;
         eval.set_u32(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
