@@ -514,7 +514,7 @@ fn type_check_block(
         match stmt.type_check(top_level_defs, env, fns, defs) {
             Ok(stmt) => {
                 if i == block.len() - 1 {
-                    if let Stmt(StmtEnum::Expr(expr), _) = &stmt {
+                    if let StmtEnum::Expr(expr) = &stmt.inner {
                         ret_expr = expr.clone();
                     }
                 }
@@ -540,14 +540,14 @@ impl UntypedStmt {
         fns: &mut TypedFns,
         defs: &Defs,
     ) -> Result<TypedStmt, TypeErrors> {
-        let meta = self.1;
-        match &self.0 {
+        let meta = self.meta;
+        match &self.inner {
             ast::StmtEnum::Let(pattern, binding) => {
                 match binding.type_check(top_level_defs, env, fns, defs) {
                     Ok(binding) => {
                         let pattern =
                             pattern.type_check(env, fns, defs, Some(binding.2.clone()))?;
-                        Ok(Stmt(StmtEnum::Let(pattern, binding), meta))
+                        Ok(Stmt::new(StmtEnum::Let(pattern, binding), meta))
                     }
                     Err(mut errors) => {
                         if let Err(e) = pattern.type_check(env, fns, defs, None) {
@@ -564,7 +564,10 @@ impl UntypedStmt {
                             identifier.clone(),
                             (Some(binding.2.clone()), Mutability::Mutable),
                         );
-                        Ok(Stmt(StmtEnum::LetMut(identifier.clone(), binding), meta))
+                        Ok(Stmt::new(
+                            StmtEnum::LetMut(identifier.clone(), binding),
+                            meta,
+                        ))
                     }
                     Err(e) => {
                         env.let_in_current_scope(identifier.clone(), (None, Mutability::Mutable));
@@ -574,14 +577,17 @@ impl UntypedStmt {
             }
             ast::StmtEnum::Expr(expr) => {
                 let expr = expr.type_check(top_level_defs, env, fns, defs)?;
-                Ok(Stmt(StmtEnum::Expr(expr), meta))
+                Ok(Stmt::new(StmtEnum::Expr(expr), meta))
             }
             ast::StmtEnum::VarAssign(identifier, value) => {
                 match env.get(identifier) {
                     Some((Some(ty), Mutability::Mutable)) => {
                         let mut value = value.type_check(top_level_defs, env, fns, defs)?;
                         check_type(&mut value, &ty)?;
-                        Ok(Stmt(StmtEnum::VarAssign(identifier.clone(), value), meta))
+                        Ok(Stmt::new(
+                            StmtEnum::VarAssign(identifier.clone(), value),
+                            meta,
+                        ))
                     }
                     Some((None, Mutability::Mutable)) => {
                         // binding does not have a type, must have been caused by a previous error, so
@@ -608,7 +614,7 @@ impl UntypedStmt {
 
                         let mut value = value.type_check(top_level_defs, env, fns, defs)?;
                         check_type(&mut value, &elem_ty)?;
-                        Ok(Stmt(
+                        Ok(Stmt::new(
                             StmtEnum::ArrayAssign(identifier.clone(), index, value),
                             meta,
                         ))
@@ -638,7 +644,7 @@ impl UntypedStmt {
                     body_typed.push(stmt.type_check(top_level_defs, env, fns, defs)?);
                 }
                 env.pop();
-                Ok(Stmt(
+                Ok(Stmt::new(
                     StmtEnum::ForEachLoop(var.clone(), binding, body_typed),
                     meta,
                 ))

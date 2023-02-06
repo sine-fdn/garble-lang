@@ -195,7 +195,19 @@ impl std::fmt::Display for Type {
 /// A statement and its location in the source code.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Stmt<T>(pub StmtEnum<T>, pub MetaInfo);
+pub struct Stmt<T> {
+    /// The kind of statement being wrapped.
+    pub inner: StmtEnum<T>,
+    /// Metadata indicating the location in the source code of the statement.
+    pub meta: MetaInfo
+}
+
+impl<T> Stmt<T> {
+    /// Creates a new statement with the given metadata.
+    pub fn new(inner: StmtEnum<T>, meta: MetaInfo) -> Self {
+        Self { inner, meta }
+    }
+}
 
 /// The different kinds of statements.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

@@ -81,7 +81,7 @@ impl TypedStmt {
         env: &mut Env<Vec<GateIndex>>,
         circuit: &mut CircuitBuilder,
     ) -> Vec<GateIndex> {
-        match &self.0 {
+        match &self.inner {
             StmtEnum::Let(pattern, binding) => {
                 let binding = binding.compile(prg, env, circuit);
                 pattern.compile(&binding, prg, env, circuit);
@@ -142,7 +142,7 @@ impl TypedStmt {
                 let (index_less_than_array_len, _) =
                     circuit.push_comparator_circuit(index_bits, &index, false, &array_len, false);
                 let out_of_bounds = circuit.push_not(index_less_than_array_len);
-                circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, self.1);
+                circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, self.meta);
                 env.assign_mut(identifier.clone(), array);
                 vec![]
             }
