@@ -4,7 +4,7 @@ use std::{cmp::max, collections::HashMap};
 
 use crate::{
     ast::{
-        EnumDef, Expr, ExprEnum, Op, ParamDef, Pattern, PatternEnum, StmtEnum, StructDef, Type,
+        EnumDef, Expr, ExprEnum, Op, Pattern, PatternEnum, StmtEnum, StructDef, Type,
         UnaryOp, VariantExpr, VariantExprEnum,
     },
     circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, PanicResult, USIZE_BITS},
@@ -40,15 +40,15 @@ impl TypedProgram {
         let mut input_gates = vec![];
         let mut wire = 2;
         if let Some(fn_def) = self.fn_defs.get(fn_name) {
-            for ParamDef(_, identifier, ty) in fn_def.params.iter() {
-                let type_size = ty.size_in_bits_for_defs(self);
+            for param in fn_def.params.iter() {
+                let type_size = param.ty.size_in_bits_for_defs(self);
                 let mut wires = Vec::with_capacity(type_size);
                 for _ in 0..type_size {
                     wires.push(wire);
                     wire += 1;
                 }
                 input_gates.push(type_size);
-                env.let_in_current_scope(identifier.clone(), wires);
+                env.let_in_current_scope(param.name.clone(), wires);
             }
             let mut circuit = CircuitBuilder::new(input_gates);
             let output_gates = compile_block(&fn_def.body, self, &mut env, &mut circuit);
@@ -550,10 +550,10 @@ impl TypedExpr {
             ExprEnum::FnCall(identifier, args) => {
                 let fn_def = prg.fn_defs.get(identifier).unwrap();
                 let mut bindings = Vec::with_capacity(fn_def.params.len());
-                for (ParamDef(_, identifier, _), arg) in fn_def.params.iter().zip(args) {
+                for (param, arg) in fn_def.params.iter().zip(args) {
                     env.push();
                     let arg = arg.compile(prg, env, circuit);
-                    bindings.push((identifier, arg));
+                    bindings.push((param.name.clone(), arg));
                     env.pop();
                 }
                 env.push();

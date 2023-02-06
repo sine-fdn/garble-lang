@@ -94,7 +94,14 @@ pub struct FnDef<T> {
 /// A parameter definition (mutability flag, parameter name and type).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct ParamDef(pub Mutability, pub String, pub Type);
+pub struct ParamDef {
+    /// Indicates whether the parameters was declared to be mutable or immutable.
+    pub mutability: Mutability,
+    /// The identifier of the parameter.
+    pub name: String,
+    /// The type of the parameter.
+    pub ty: Type,
+}
 
 /// Indicates whether a variable is declared as mutable.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]

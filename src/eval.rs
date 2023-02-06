@@ -177,7 +177,7 @@ impl<'a> Evaluator<'a> {
     /// Encodes a literal (with enums looked up in the program) and sets it as the party's input.
     pub fn set_literal(&mut self, literal: Literal) -> Result<(), EvalError> {
         if self.inputs.len() < self.main_fn.params.len() {
-            let ty = &self.main_fn.params[self.inputs.len()].2;
+            let ty = &self.main_fn.params[self.inputs.len()].ty;
             if literal.is_of_type(self.program, ty) {
                 self.inputs.push(vec![]);
                 self.inputs
@@ -196,7 +196,7 @@ impl<'a> Evaluator<'a> {
     /// Parses a literal (with enums looked up in the program) and sets it as the party's input.
     pub fn parse_literal(&mut self, literal: &str) -> Result<(), EvalError> {
         if self.inputs.len() < self.main_fn.params.len() {
-            let ty = &self.main_fn.params[self.inputs.len()].2;
+            let ty = &self.main_fn.params[self.inputs.len()].ty;
             let parsed =
                 Literal::parse(self.program, ty, literal).map_err(EvalError::LiteralParseError)?;
             self.set_literal(parsed)?;

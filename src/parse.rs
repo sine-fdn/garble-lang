@@ -285,10 +285,14 @@ impl Parser {
     fn parse_param(&mut self) -> Result<ParamDef, ()> {
         // mut <param>: <type>
         let is_mutable = self.next_matches(&TokenEnum::KeywordMut).is_some();
-        let (param_name, _) = self.expect_identifier()?;
+        let (name, _) = self.expect_identifier()?;
         self.expect(&TokenEnum::Colon)?;
         let (ty, _) = self.parse_type()?;
-        Ok(ParamDef(is_mutable.into(), param_name, ty))
+        Ok(ParamDef {
+            mutability: is_mutable.into(),
+            name,
+            ty,
+        })
     }
 
     fn parse_stmt(&mut self) -> Result<UntypedStmt, ()> {

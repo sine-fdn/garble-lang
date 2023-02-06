@@ -437,20 +437,27 @@ impl UntypedFnDef {
         let mut params = Vec::with_capacity(self.params.len());
         let mut param_identifiers = HashSet::new();
         for param in self.params.iter() {
-            let ParamDef(mutability, identifier, ty) = param;
-            if param_identifiers.contains(identifier) {
-                let e = TypeErrorEnum::DuplicateFnParam(identifier.clone());
+            //let ParamDef(mutability, identifier, ty) = param;
+            if param_identifiers.contains(&param.name) {
+                let e = TypeErrorEnum::DuplicateFnParam(param.name.clone());
                 errors.push(Some(TypeError(e, self.meta)));
             } else {
-                param_identifiers.insert(identifier);
+                param_identifiers.insert(param.name.clone());
             }
-            match ty.as_concrete_type(top_level_defs) {
+            match param.ty.as_concrete_type(top_level_defs) {
                 Ok(ty) => {
-                    env.let_in_current_scope(identifier.clone(), (Some(ty.clone()), *mutability));
-                    params.push(ParamDef(*mutability, identifier.clone(), ty));
+                    env.let_in_current_scope(
+                        param.name.clone(),
+                        (Some(ty.clone()), param.mutability),
+                    );
+                    params.push(ParamDef {
+                        mutability: param.mutability,
+                        name: param.name.clone(),
+                        ty,
+                    });
                 }
                 Err(e) => {
-                    env.let_in_current_scope(identifier.clone(), (None, *mutability));
+                    env.let_in_current_scope(param.name.clone(), (None, param.mutability));
                     errors.extend(e);
                 }
             }
@@ -849,8 +856,8 @@ impl UntypedExpr {
                     (Some(Ok(fn_def)), None) => {
                         let ret_ty = fn_def.ty.clone();
                         let mut fn_arg_types = Vec::with_capacity(fn_def.params.len());
-                        for ParamDef(_, _, ty) in fn_def.params.iter() {
-                            fn_arg_types.push(ty.clone());
+                        for param_def in fn_def.params.iter() {
+                            fn_arg_types.push(param_def.ty.clone());
                         }
                         let mut arg_types = Vec::with_capacity(args.len());
                         let mut arg_meta = Vec::with_capacity(args.len());
