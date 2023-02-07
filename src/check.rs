@@ -437,20 +437,27 @@ impl UntypedFnDef {
         let mut params = Vec::with_capacity(self.params.len());
         let mut param_identifiers = HashSet::new();
         for param in self.params.iter() {
-            let ParamDef(mutability, identifier, ty) = param;
-            if param_identifiers.contains(identifier) {
-                let e = TypeErrorEnum::DuplicateFnParam(identifier.clone());
+            //let ParamDef(mutability, identifier, ty) = param;
+            if param_identifiers.contains(&param.name) {
+                let e = TypeErrorEnum::DuplicateFnParam(param.name.clone());
                 errors.push(Some(TypeError(e, self.meta)));
             } else {
-                param_identifiers.insert(identifier);
+                param_identifiers.insert(param.name.clone());
             }
-            match ty.as_concrete_type(top_level_defs) {
+            match param.ty.as_concrete_type(top_level_defs) {
                 Ok(ty) => {
-                    env.let_in_current_scope(identifier.clone(), (Some(ty.clone()), *mutability));
-                    params.push(ParamDef(*mutability, identifier.clone(), ty));
+                    env.let_in_current_scope(
+                        param.name.clone(),
+                        (Some(ty.clone()), param.mutability),
+                    );
+                    params.push(ParamDef {
+                        mutability: param.mutability,
+                        name: param.name.clone(),
+                        ty,
+                    });
                 }
                 Err(e) => {
-                    env.let_in_current_scope(identifier.clone(), (None, *mutability));
+                    env.let_in_current_scope(param.name.clone(), (None, param.mutability));
                     errors.extend(e);
                 }
             }
@@ -507,7 +514,7 @@ fn type_check_block(
         match stmt.type_check(top_level_defs, env, fns, defs) {
             Ok(stmt) => {
                 if i == block.len() - 1 {
-                    if let Stmt(StmtEnum::Expr(expr), _) = &stmt {
+                    if let StmtEnum::Expr(expr) = &stmt.inner {
                         ret_expr = expr.clone();
                     }
                 }
@@ -533,14 +540,14 @@ impl UntypedStmt {
         fns: &mut TypedFns,
         defs: &Defs,
     ) -> Result<TypedStmt, TypeErrors> {
-        let meta = self.1;
-        match &self.0 {
+        let meta = self.meta;
+        match &self.inner {
             ast::StmtEnum::Let(pattern, binding) => {
                 match binding.type_check(top_level_defs, env, fns, defs) {
                     Ok(binding) => {
                         let pattern =
-                            pattern.type_check(env, fns, defs, Some(binding.2.clone()))?;
-                        Ok(Stmt(StmtEnum::Let(pattern, binding), meta))
+                            pattern.type_check(env, fns, defs, Some(binding.ty.clone()))?;
+                        Ok(Stmt::new(StmtEnum::Let(pattern, binding), meta))
                     }
                     Err(mut errors) => {
                         if let Err(e) = pattern.type_check(env, fns, defs, None) {
@@ -555,9 +562,12 @@ impl UntypedStmt {
                     Ok(binding) => {
                         env.let_in_current_scope(
                             identifier.clone(),
-                            (Some(binding.2.clone()), Mutability::Mutable),
+                            (Some(binding.ty.clone()), Mutability::Mutable),
                         );
-                        Ok(Stmt(StmtEnum::LetMut(identifier.clone(), binding), meta))
+                        Ok(Stmt::new(
+                            StmtEnum::LetMut(identifier.clone(), binding),
+                            meta,
+                        ))
                     }
                     Err(e) => {
                         env.let_in_current_scope(identifier.clone(), (None, Mutability::Mutable));
@@ -567,14 +577,17 @@ impl UntypedStmt {
             }
             ast::StmtEnum::Expr(expr) => {
                 let expr = expr.type_check(top_level_defs, env, fns, defs)?;
-                Ok(Stmt(StmtEnum::Expr(expr), meta))
+                Ok(Stmt::new(StmtEnum::Expr(expr), meta))
             }
             ast::StmtEnum::VarAssign(identifier, value) => {
                 match env.get(identifier) {
                     Some((Some(ty), Mutability::Mutable)) => {
                         let mut value = value.type_check(top_level_defs, env, fns, defs)?;
                         check_type(&mut value, &ty)?;
-                        Ok(Stmt(StmtEnum::VarAssign(identifier.clone(), value), meta))
+                        Ok(Stmt::new(
+                            StmtEnum::VarAssign(identifier.clone(), value),
+                            meta,
+                        ))
                     }
                     Some((None, Mutability::Mutable)) => {
                         // binding does not have a type, must have been caused by a previous error, so
@@ -601,7 +614,7 @@ impl UntypedStmt {
 
                         let mut value = value.type_check(top_level_defs, env, fns, defs)?;
                         check_type(&mut value, &elem_ty)?;
-                        Ok(Stmt(
+                        Ok(Stmt::new(
                             StmtEnum::ArrayAssign(identifier.clone(), index, value),
                             meta,
                         ))
@@ -623,7 +636,7 @@ impl UntypedStmt {
             }
             ast::StmtEnum::ForEachLoop(var, binding, body) => {
                 let binding = binding.type_check(top_level_defs, env, fns, defs)?;
-                let (elem_ty, _) = expect_array_type(&binding.2, meta)?;
+                let (elem_ty, _) = expect_array_type(&binding.ty, meta)?;
                 let mut body_typed = Vec::with_capacity(body.len());
                 env.push();
                 env.let_in_current_scope(var.clone(), (Some(elem_ty), Mutability::Immutable));
@@ -631,7 +644,7 @@ impl UntypedStmt {
                     body_typed.push(stmt.type_check(top_level_defs, env, fns, defs)?);
                 }
                 env.pop();
-                Ok(Stmt(
+                Ok(Stmt::new(
                     StmtEnum::ForEachLoop(var.clone(), binding, body_typed),
                     meta,
                 ))
@@ -648,9 +661,8 @@ impl UntypedExpr {
         fns: &mut TypedFns,
         defs: &Defs,
     ) -> Result<TypedExpr, TypeErrors> {
-        let Expr(expr, meta, _) = self;
-        let meta = *meta;
-        let (expr, ty) = match expr {
+        let meta = self.meta;
+        let (expr, ty) = match &self.inner {
             ExprEnum::True => (ExprEnum::True, Type::Bool),
             ExprEnum::False => (ExprEnum::False, Type::Bool),
             ExprEnum::NumUnsigned(n, type_suffix) => (
@@ -682,18 +694,18 @@ impl UntypedExpr {
                         .next()
                         .unwrap()
                         .type_check(top_level_defs, env, fns, defs)?;
-                let first_meta = first_field.1;
-                let first_ty = first_field.2.clone();
+                let first_meta = first_field.meta;
+                let first_ty = first_field.ty.clone();
                 let mut typed_fields = vec![first_field];
                 for field in fields {
                     match field.type_check(top_level_defs, env, fns, defs) {
                         Ok(field) => {
-                            if field.2 != first_ty {
+                            if field.ty != first_ty {
                                 let e = TypeErrorEnum::TypeMismatch(
                                     (first_ty.clone(), first_meta),
-                                    (field.2.clone(), field.1),
+                                    (field.ty.clone(), field.meta),
                                 );
-                                errors.push(Some(TypeError(e, field.1)));
+                                errors.push(Some(TypeError(e, field.meta)));
                             }
                             typed_fields.push(field);
                         }
@@ -709,14 +721,13 @@ impl UntypedExpr {
             }
             ExprEnum::ArrayRepeatLiteral(value, size) => {
                 let value = value.type_check(top_level_defs, env, fns, defs)?;
-                let ty = Type::Array(Box::new(value.2.clone()), *size);
+                let ty = Type::Array(Box::new(value.ty.clone()), *size);
                 (ExprEnum::ArrayRepeatLiteral(Box::new(value), *size), ty)
             }
             ExprEnum::ArrayAccess(arr, index) => {
                 let arr = arr.type_check(top_level_defs, env, fns, defs)?;
                 let mut index = index.type_check(top_level_defs, env, fns, defs)?;
-                let Expr(_, array_meta, array_ty) = &arr;
-                let (elem_ty, _) = expect_array_type(array_ty, *array_meta)?;
+                let (elem_ty, _) = expect_array_type(&arr.ty, arr.meta)?;
                 check_type(&mut index, &Type::Unsigned(UnsignedNumType::Usize))?;
                 (
                     ExprEnum::ArrayAccess(Box::new(arr), Box::new(index)),
@@ -730,7 +741,7 @@ impl UntypedExpr {
                 for v in values {
                     match v.type_check(top_level_defs, env, fns, defs) {
                         Ok(typed) => {
-                            types.push(typed.2.clone());
+                            types.push(typed.ty.clone());
                             typed_values.push(typed);
                         }
                         Err(e) => {
@@ -747,26 +758,25 @@ impl UntypedExpr {
             }
             ExprEnum::TupleAccess(tuple, index) => {
                 let tuple = tuple.type_check(top_level_defs, env, fns, defs)?;
-                let Expr(_, meta, ty) = &tuple;
-                let value_types = expect_tuple_type(ty, *meta)?;
+                let value_types = expect_tuple_type(&tuple.ty, tuple.meta)?;
                 if *index < value_types.len() {
                     let ty = value_types[*index].clone();
                     (ExprEnum::TupleAccess(Box::new(tuple), *index), ty)
                 } else {
                     let e = TypeErrorEnum::TupleAccessOutOfBounds(value_types.len());
-                    return Err(vec![Some(TypeError(e, *meta))]);
+                    return Err(vec![Some(TypeError(e, tuple.meta))]);
                 }
             }
             ExprEnum::UnaryOp(UnaryOp::Neg, x) => {
                 let x = x.type_check(top_level_defs, env, fns, defs)?;
-                let ty = x.2.clone();
-                expect_signed_num_type(&ty, x.1)?;
+                let ty = x.ty.clone();
+                expect_signed_num_type(&ty, x.meta)?;
                 (ExprEnum::UnaryOp(UnaryOp::Neg, Box::new(x)), ty)
             }
             ExprEnum::UnaryOp(UnaryOp::Not, x) => {
                 let x = x.type_check(top_level_defs, env, fns, defs)?;
-                let ty = x.2.clone();
-                expect_bool_or_num_type(&ty, x.1)?;
+                let ty = x.ty.clone();
+                expect_bool_or_num_type(&ty, x.meta)?;
                 (ExprEnum::UnaryOp(UnaryOp::Not, Box::new(x)), ty)
             }
             ExprEnum::Op(op, x, y) => match op {
@@ -780,7 +790,7 @@ impl UntypedExpr {
                 Op::ShortCircuitAnd | Op::ShortCircuitOr => {
                     let x = x.type_check(top_level_defs, env, fns, defs)?;
                     let y = y.type_check(top_level_defs, env, fns, defs)?;
-                    for (meta, ty) in [(&x.1, &x.2), (&y.1, &y.2)] {
+                    for (meta, ty) in [(&x.meta, &x.ty), (&y.meta, &y.ty)] {
                         match ty {
                             Type::Bool => {}
                             ty => {
@@ -820,17 +830,16 @@ impl UntypedExpr {
                 Op::ShiftLeft | Op::ShiftRight => {
                     let x = x.type_check(top_level_defs, env, fns, defs)?;
                     let mut y = y.type_check(top_level_defs, env, fns, defs)?;
-                    let Expr(_, meta_x, ty_x) = x.clone();
-                    expect_num_type(&ty_x, meta_x)?;
+                    expect_num_type(&x.ty, x.meta)?;
                     check_type(&mut y, &Type::Unsigned(UnsignedNumType::U8))?;
-                    (ExprEnum::Op(*op, Box::new(x), Box::new(y)), ty_x)
+                    (ExprEnum::Op(*op, Box::new(x.clone()), Box::new(y)), x.ty)
                 }
             },
             ExprEnum::Block(stmts) => {
                 env.push();
                 let (body, ret_expr) =
                     type_check_block(stmts, meta, top_level_defs, env, fns, defs)?;
-                let ty = ret_expr.2;
+                let ty = ret_expr.ty;
                 env.pop();
                 (ExprEnum::Block(body), ty)
             }
@@ -849,8 +858,8 @@ impl UntypedExpr {
                     (Some(Ok(fn_def)), None) => {
                         let ret_ty = fn_def.ty.clone();
                         let mut fn_arg_types = Vec::with_capacity(fn_def.params.len());
-                        for ParamDef(_, _, ty) in fn_def.params.iter() {
-                            fn_arg_types.push(ty.clone());
+                        for param_def in fn_def.params.iter() {
+                            fn_arg_types.push(param_def.ty.clone());
                         }
                         let mut arg_types = Vec::with_capacity(args.len());
                         let mut arg_meta = Vec::with_capacity(args.len());
@@ -858,9 +867,8 @@ impl UntypedExpr {
                         for arg in args.iter() {
                             match arg.type_check(top_level_defs, env, fns, defs) {
                                 Ok(arg) => {
-                                    let Expr(_, meta, ty) = &arg;
-                                    arg_types.push(ty.clone());
-                                    arg_meta.push(*meta);
+                                    arg_types.push(arg.ty.clone());
+                                    arg_meta.push(arg.meta);
                                     arg_exprs.push(arg);
                                 }
                                 Err(e) => errors.extend(e),
@@ -939,8 +947,7 @@ impl UntypedExpr {
             ExprEnum::Cast(ty, expr) => {
                 let ty = ty.as_concrete_type(top_level_defs)?;
                 let expr = expr.type_check(top_level_defs, env, fns, defs)?;
-                let Expr(_, _, expr_ty) = &expr;
-                expect_bool_or_num_type(expr_ty, meta)?;
+                expect_bool_or_num_type(&expr.ty, meta)?;
                 expect_bool_or_num_type(&ty, meta)?;
                 (ExprEnum::Cast(ty.clone(), Box::new(expr)), ty)
             }
@@ -1039,7 +1046,7 @@ impl UntypedExpr {
             }
             ExprEnum::Match(expr, clauses) => {
                 let expr = expr.type_check(top_level_defs, env, fns, defs)?;
-                let ty = &expr.2;
+                let ty = &expr.ty;
 
                 match ty {
                     Type::Bool
@@ -1077,19 +1084,18 @@ impl UntypedExpr {
                 }
 
                 let ret_ty = {
-                    let (_, Expr(_, _, ret_ty)) = &typed_clauses.get(0).unwrap();
+                    let (_, ret_expr) = &typed_clauses.get(0).unwrap();
 
                     for (_, expr) in typed_clauses.iter() {
-                        let Expr(_, meta, ty) = expr;
-                        if ret_ty != ty {
+                        if ret_expr.ty != expr.ty {
                             let e = TypeErrorEnum::UnexpectedType {
-                                expected: ret_ty.clone(),
-                                actual: ty.clone(),
+                                expected: ret_expr.ty.clone(),
+                                actual: expr.ty.clone(),
                             };
-                            errors.push(Some(TypeError(e, *meta)));
+                            errors.push(Some(TypeError(e, expr.meta)));
                         }
                     }
-                    ret_ty.clone()
+                    ret_expr.ty.clone()
                 };
 
                 let patterns: Vec<_> = typed_clauses.iter().map(|(p, _)| p).collect();
@@ -1150,7 +1156,7 @@ impl UntypedExpr {
             }
             ExprEnum::StructAccess(struct_expr, field) => {
                 let struct_expr = struct_expr.type_check(top_level_defs, env, fns, defs)?;
-                let name = expect_struct_type(&struct_expr.2, struct_expr.1)?;
+                let name = expect_struct_type(&struct_expr.ty, struct_expr.meta)?;
                 if let Some((_, struct_def)) = defs.structs.get(name.as_str()) {
                     if let Some(field_ty) = struct_def.get(field.as_str()) {
                         (
@@ -1887,32 +1893,29 @@ fn expect_bool_or_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeErrors> 
 }
 
 pub(crate) fn check_type(expr: &mut TypedExpr, expected: &Type) -> Result<(), TypeErrors> {
-    let Expr(_, meta, actual) = &expr;
-    if actual == expected {
+    if &expr.ty == expected {
         Ok(())
     } else {
         let expected = expected.clone();
         let e = TypeErrorEnum::UnexpectedType {
             expected,
-            actual: actual.clone(),
+            actual: expr.ty.clone(),
         };
-        Err(vec![Some(TypeError(e, *meta))])
+        Err(vec![Some(TypeError(e, expr.meta))])
     }
 }
 
 fn unify(e1: &mut TypedExpr, e2: &mut TypedExpr, m: MetaInfo) -> Result<Type, TypeErrors> {
-    let Expr(expr1, meta1, ty1) = e1;
-    let Expr(expr2, meta2, ty2) = e2;
-    let ty = match (expr1, expr2) {
-        _ if *ty1 == *ty2 => Ok(ty1.clone()),
+    let ty = match (&e1.inner, &e2.inner) {
+        _ if e1.ty == e2.ty => Ok(e1.ty.clone()),
         _ => {
-            let e = TypeErrorEnum::TypeMismatch((ty1.clone(), *meta1), (ty2.clone(), *meta2));
+            let e = TypeErrorEnum::TypeMismatch((e1.ty.clone(), e1.meta), (e2.ty.clone(), e2.meta));
             Err(vec![Some(TypeError(e, m))])
         }
     };
     if let Ok(ty) = &ty {
-        e1.2 = ty.clone();
-        e2.2 = ty.clone();
+        e1.ty = ty.clone();
+        e2.ty = ty.clone();
     }
     ty
 }

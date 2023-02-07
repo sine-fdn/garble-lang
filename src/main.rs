@@ -1,6 +1,6 @@
 use std::{fs::File, io::Read, path::PathBuf, process::exit};
 
-use garble_lang::{ast::ParamDef, check, eval::Evaluator, literal::Literal};
+use garble_lang::{check, eval::Evaluator, literal::Literal};
 
 use clap::{Parser, Subcommand};
 
@@ -94,12 +94,16 @@ fn run(file: PathBuf, inputs: Vec<String>, function: String) -> Result<(), std::
         exit(65);
     }
     let mut params = Vec::with_capacity(main_params.len());
-    for (i, (ParamDef(_, _, ty), input)) in main_params.iter().zip(arguments).enumerate() {
-        let param = Literal::parse(&program, ty, &input);
+    for (i, (param_def, input)) in main_params.iter().zip(arguments).enumerate() {
+        let param = Literal::parse(&program, &param_def.ty, &input);
         match param {
             Ok(param) => params.push(param),
             Err(e) => {
-                eprintln!("Input {i} is not of type {ty}!\n{}", e.prettify(&input));
+                eprintln!(
+                    "Input {i} is not of type {}!\n{}",
+                    param_def.ty,
+                    e.prettify(&input)
+                );
                 exit(65);
             }
         }

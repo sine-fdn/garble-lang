@@ -86,7 +86,7 @@ impl Literal {
             })?;
         check_type(&mut expr, ty)
             .map_err(|errs| errs.into_iter().flatten().collect::<Vec<TypeError>>())?;
-        expr.2 = ty.clone();
+        expr.ty = ty.clone();
         Ok(expr.into_literal())
     }
 
@@ -464,7 +464,11 @@ impl Display for Literal {
 
 impl TypedExpr {
     fn into_literal(self) -> Literal {
-        let Expr(expr_enum, _, ty) = self;
+        let Expr {
+            inner: expr_enum,
+            ty,
+            ..
+        } = self;
         match expr_enum {
             ExprEnum::True => Literal::True,
             ExprEnum::False => Literal::False,

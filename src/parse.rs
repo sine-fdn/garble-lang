@@ -285,10 +285,14 @@ impl Parser {
     fn parse_param(&mut self) -> Result<ParamDef, ()> {
         // mut <param>: <type>
         let is_mutable = self.next_matches(&TokenEnum::KeywordMut).is_some();
-        let (param_name, _) = self.expect_identifier()?;
+        let (name, _) = self.expect_identifier()?;
         self.expect(&TokenEnum::Colon)?;
         let (ty, _) = self.parse_type()?;
-        Ok(ParamDef(is_mutable.into(), param_name, ty))
+        Ok(ParamDef {
+            mutability: is_mutable.into(),
+            name,
+            ty,
+        })
     }
 
     fn parse_stmt(&mut self) -> Result<UntypedStmt, ()> {
@@ -298,9 +302,9 @@ impl Parser {
                 let (identifier, _) = self.expect_identifier()?;
                 self.expect(&TokenEnum::Eq)?;
                 if let Ok(binding) = self.parse_expr() {
-                    let meta = join_meta(meta, binding.1);
+                    let meta = join_meta(meta, binding.meta);
                     self.expect(&TokenEnum::Semicolon)?;
-                    return Ok(Stmt(StmtEnum::LetMut(identifier, binding), meta));
+                    return Ok(Stmt::new(StmtEnum::LetMut(identifier, binding), meta));
                 } else {
                     self.push_error_for_next(ParseErrorEnum::ExpectedStmt);
                     self.consume_until_one_of(&[TokenEnum::Semicolon]);
@@ -313,9 +317,9 @@ impl Parser {
                 let pattern = self.parse_pattern()?;
                 self.expect(&TokenEnum::Eq)?;
                 if let Ok(binding) = self.parse_expr() {
-                    let meta = join_meta(meta, binding.1);
+                    let meta = join_meta(meta, binding.meta);
                     self.expect(&TokenEnum::Semicolon)?;
-                    return Ok(Stmt(StmtEnum::Let(pattern, binding), meta));
+                    return Ok(Stmt::new(StmtEnum::Let(pattern, binding), meta));
                 } else {
                     self.push_error_for_next(ParseErrorEnum::ExpectedStmt);
                     self.consume_until_one_of(&[TokenEnum::Semicolon]);
@@ -335,47 +339,50 @@ impl Parser {
             let loop_body = self.parse_stmts()?;
             let meta_end = self.expect(&TokenEnum::RightBrace)?;
             let meta = join_meta(meta, meta_end);
-            return Ok(Stmt(StmtEnum::ForEachLoop(var, binding, loop_body), meta));
+            return Ok(Stmt::new(
+                StmtEnum::ForEachLoop(var, binding, loop_body),
+                meta,
+            ));
         } else {
             let is_conditional_or_block = self.peek(&TokenEnum::KeywordIf)
                 || self.peek(&TokenEnum::KeywordMatch)
                 || self.peek(&TokenEnum::LeftBrace);
             let expr = self.parse_expr()?;
-            let meta = expr.1;
-            let stmt = if let Expr(ExprEnum::Identifier(identifier), identifier_meta, _) = expr {
+            let meta = expr.meta;
+            let stmt = if let ExprEnum::Identifier(identifier) = expr.inner {
                 if self.next_matches(&TokenEnum::Eq).is_some() {
                     let value = self.parse_expr()?;
-                    let meta = join_meta(identifier_meta, value.1);
+                    let meta = join_meta(meta, value.meta);
                     if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
                         self.expect(&TokenEnum::Semicolon)?;
                     }
-                    Stmt(StmtEnum::VarAssign(identifier, value), meta)
+                    Stmt::new(StmtEnum::VarAssign(identifier, value), meta)
                 } else {
-                    let expr = Expr::untyped(ExprEnum::Identifier(identifier), identifier_meta);
+                    let expr = Expr::untyped(ExprEnum::Identifier(identifier), meta);
                     if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
                         self.expect(&TokenEnum::Semicolon)?;
                     }
-                    Stmt(StmtEnum::Expr(expr), meta)
+                    Stmt::new(StmtEnum::Expr(expr), meta)
                 }
-            } else if let Expr(ExprEnum::ArrayAccess(array, index), array_meta, _) = expr {
-                if let (Expr(ExprEnum::Identifier(identifier), _, _), Some(_)) =
-                    (array.as_ref(), self.next_matches(&TokenEnum::Eq))
+            } else if let ExprEnum::ArrayAccess(array, index) = expr.inner {
+                if let (ExprEnum::Identifier(identifier), Some(_)) =
+                    (&array.as_ref().inner, self.next_matches(&TokenEnum::Eq))
                 {
                     let value = self.parse_expr()?;
-                    let meta = join_meta(array_meta, value.1);
+                    let meta = join_meta(meta, value.meta);
                     if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
                         self.expect(&TokenEnum::Semicolon)?;
                     }
-                    Stmt(
+                    Stmt::new(
                         StmtEnum::ArrayAssign(identifier.clone(), *index, value),
                         meta,
                     )
                 } else {
-                    let expr = Expr::untyped(ExprEnum::ArrayAccess(array, index), array_meta);
+                    let expr = Expr::untyped(ExprEnum::ArrayAccess(array, index), meta);
                     if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
                         self.expect(&TokenEnum::Semicolon)?;
                     }
-                    Stmt(StmtEnum::Expr(expr), meta)
+                    Stmt::new(StmtEnum::Expr(expr), meta)
                 }
             } else {
                 if !is_conditional_or_block
@@ -384,7 +391,7 @@ impl Parser {
                 {
                     self.expect(&TokenEnum::Semicolon)?;
                 }
-                Stmt(StmtEnum::Expr(expr), meta)
+                Stmt::new(StmtEnum::Expr(expr), meta)
             };
             return Ok(stmt);
         }
@@ -437,10 +444,13 @@ impl Parser {
     fn parse_block_as_expr(&mut self) -> Result<UntypedExpr, ()> {
         let stmts = self.parse_stmts()?;
         match stmts.last() {
-            Some(Stmt(StmtEnum::Expr(expr), _)) if stmts.len() == 1 => Ok(expr.clone()),
-            Some(Stmt(_, last)) => {
-                let Stmt(_, first) = stmts.first().unwrap();
-                let meta = join_meta(*first, *last);
+            Some(Stmt {
+                inner: StmtEnum::Expr(expr),
+                ..
+            }) if stmts.len() == 1 => Ok(expr.clone()),
+            Some(Stmt { meta: last, .. }) => {
+                let first = stmts.first().unwrap().meta;
+                let meta = join_meta(first, *last);
                 Ok(Expr::untyped(ExprEnum::Block(stmts), meta))
             }
             None => {
@@ -626,7 +636,7 @@ impl Parser {
         let mut x = self.parse_if_or_match()?;
         while self.next_matches(&TokenEnum::KeywordAs).is_some() {
             let (ty, ty_meta) = self.parse_type()?;
-            let meta = join_meta(x.1, ty_meta);
+            let meta = join_meta(x.meta, ty_meta);
             x = Expr::untyped(ExprEnum::Cast(ty, Box::new(x)), meta)
         }
         Ok(x)
@@ -645,7 +655,7 @@ impl Parser {
                 if self.next_matches(&TokenEnum::KeywordElse).is_some() {
                     if self.peek(&TokenEnum::KeywordIf) {
                         let elseif_expr = self.parse_expr()?;
-                        let meta = join_meta(meta, elseif_expr.1);
+                        let meta = join_meta(meta, elseif_expr.meta);
                         Ok(Expr::untyped(
                             ExprEnum::If(
                                 Box::new(cond_expr),
@@ -741,12 +751,19 @@ impl Parser {
         self.expect(&TokenEnum::FatArrow)?;
         let stmt = self.parse_stmt()?;
         let ends_with_brace = matches!(
-            stmt.0,
-            StmtEnum::Expr(Expr(ExprEnum::Match(_, _,), _, _))
-                | StmtEnum::Expr(Expr(ExprEnum::Block(_), _, _))
-                | StmtEnum::Expr(Expr(ExprEnum::If(_, _, _), _, _))
+            stmt.inner,
+            StmtEnum::Expr(Expr {
+                inner: ExprEnum::Match(_, _,),
+                ..
+            }) | StmtEnum::Expr(Expr {
+                inner: ExprEnum::Block(_),
+                ..
+            }) | StmtEnum::Expr(Expr {
+                inner: ExprEnum::If(_, _, _),
+                ..
+            })
         );
-        let meta = stmt.1;
+        let meta = stmt.meta;
         let expr = Expr::untyped(ExprEnum::Block(vec![stmt]), meta);
         Ok(((pattern, expr), ends_with_brace))
     }
@@ -972,7 +989,7 @@ impl Parser {
         // -, !
         if let Some(meta) = self.next_matches(&TokenEnum::Bang) {
             let unary = self.parse_unary()?;
-            let Expr(_, expr_meta, _) = unary;
+            let expr_meta = unary.meta;
             let meta = join_meta(meta, expr_meta);
             Ok(Expr::untyped(
                 ExprEnum::UnaryOp(UnaryOp::Not, Box::new(unary)),
@@ -980,7 +997,7 @@ impl Parser {
             ))
         } else if let Some(meta) = self.next_matches(&TokenEnum::Minus) {
             let unary = self.parse_unary()?;
-            let Expr(_, expr_meta, _) = unary;
+            let expr_meta = unary.meta;
             let meta = join_meta(meta, expr_meta);
             Ok(Expr::untyped(
                 ExprEnum::UnaryOp(UnaryOp::Neg, Box::new(unary)),
@@ -1039,13 +1056,13 @@ impl Parser {
                         meta,
                     );
                     let end = self.expect(&TokenEnum::RightBracket)?;
-                    let meta = join_meta(expr.1, end);
+                    let meta = join_meta(expr.meta, end);
                     expr =
                         Expr::untyped(ExprEnum::ArrayAccess(Box::new(expr), Box::new(index)), meta);
                 } else {
                     let index = self.parse_expr()?;
                     let end = self.expect(&TokenEnum::RightBracket)?;
-                    let meta = join_meta(expr.1, end);
+                    let meta = join_meta(expr.meta, end);
                     expr =
                         Expr::untyped(ExprEnum::ArrayAccess(Box::new(expr), Box::new(index)), meta);
                 }
@@ -1057,7 +1074,7 @@ impl Parser {
                     let i = *i;
                     let meta_index = *meta_index;
                     self.advance();
-                    let meta = join_meta(expr.1, meta_index);
+                    let meta = join_meta(expr.meta, meta_index);
                     expr = Expr::untyped(ExprEnum::TupleAccess(Box::new(expr), i as usize), meta)
                 } else {
                     self.push_error_for_next(ParseErrorEnum::ExpectedMethodCallOrFieldAccess);
@@ -1478,7 +1495,7 @@ impl Parser {
 }
 
 fn join_expr_meta(x: &UntypedExpr, y: &UntypedExpr) -> MetaInfo {
-    join_meta(x.1, y.1)
+    join_meta(x.meta, y.meta)
 }
 
 fn join_meta(x: MetaInfo, y: MetaInfo) -> MetaInfo {

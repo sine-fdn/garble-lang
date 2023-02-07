@@ -94,7 +94,14 @@ pub struct FnDef<T> {
 /// A parameter definition (mutability flag, parameter name and type).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct ParamDef(pub Mutability, pub String, pub Type);
+pub struct ParamDef {
+    /// Indicates whether the parameters was declared to be mutable or immutable.
+    pub mutability: Mutability,
+    /// The identifier of the parameter.
+    pub name: String,
+    /// The type of the parameter.
+    pub ty: Type,
+}
 
 /// Indicates whether a variable is declared as mutable.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -188,7 +195,19 @@ impl std::fmt::Display for Type {
 /// A statement and its location in the source code.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Stmt<T>(pub StmtEnum<T>, pub MetaInfo);
+pub struct Stmt<T> {
+    /// The kind of statement being wrapped.
+    pub inner: StmtEnum<T>,
+    /// Metadata indicating the location of the statement in the source code.
+    pub meta: MetaInfo,
+}
+
+impl<T> Stmt<T> {
+    /// Creates a new statement with the given metadata.
+    pub fn new(inner: StmtEnum<T>, meta: MetaInfo) -> Self {
+        Self { inner, meta }
+    }
+}
 
 /// The different kinds of statements.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -211,19 +230,34 @@ pub enum StmtEnum<T> {
 /// An expression and its location in the source code.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Expr<T>(pub ExprEnum<T>, pub MetaInfo, pub T);
+pub struct Expr<T> {
+    /// The kind of expression being wrapped.
+    pub inner: ExprEnum<T>,
+    /// Metadata indicating the location of the expression in the source code.
+    pub meta: MetaInfo,
+    /// The type of the expression.
+    pub ty: T,
+}
 
 impl Expr<()> {
     /// Constructs an expression without any associated type information.
     pub fn untyped(expr: ExprEnum<()>, meta: MetaInfo) -> Self {
-        Self(expr, meta, ())
+        Self {
+            inner: expr,
+            meta,
+            ty: (),
+        }
     }
 }
 
 impl Expr<Type> {
     /// Constructs an expression with an associated type.
     pub fn typed(expr: ExprEnum<Type>, ty: Type, meta: MetaInfo) -> Self {
-        Self(expr, meta, ty)
+        Self {
+            inner: expr,
+            meta,
+            ty,
+        }
     }
 }
 

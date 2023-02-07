@@ -4,8 +4,8 @@ use std::{cmp::max, collections::HashMap};
 
 use crate::{
     ast::{
-        EnumDef, Expr, ExprEnum, Op, ParamDef, Pattern, PatternEnum, StmtEnum, StructDef, Type,
-        UnaryOp, VariantExpr, VariantExprEnum,
+        EnumDef, ExprEnum, Op, Pattern, PatternEnum, StmtEnum, StructDef, Type, UnaryOp,
+        VariantExpr, VariantExprEnum,
     },
     circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, PanicResult, USIZE_BITS},
     env::Env,
@@ -40,15 +40,15 @@ impl TypedProgram {
         let mut input_gates = vec![];
         let mut wire = 2;
         if let Some(fn_def) = self.fn_defs.get(fn_name) {
-            for ParamDef(_, identifier, ty) in fn_def.params.iter() {
-                let type_size = ty.size_in_bits_for_defs(self);
+            for param in fn_def.params.iter() {
+                let type_size = param.ty.size_in_bits_for_defs(self);
                 let mut wires = Vec::with_capacity(type_size);
                 for _ in 0..type_size {
                     wires.push(wire);
                     wire += 1;
                 }
                 input_gates.push(type_size);
-                env.let_in_current_scope(identifier.clone(), wires);
+                env.let_in_current_scope(param.name.clone(), wires);
             }
             let mut circuit = CircuitBuilder::new(input_gates);
             let output_gates = compile_block(&fn_def.body, self, &mut env, &mut circuit);
@@ -81,7 +81,7 @@ impl TypedStmt {
         env: &mut Env<Vec<GateIndex>>,
         circuit: &mut CircuitBuilder,
     ) -> Vec<GateIndex> {
-        match &self.0 {
+        match &self.inner {
             StmtEnum::Let(pattern, binding) => {
                 let binding = binding.compile(prg, env, circuit);
                 pattern.compile(&binding, prg, env, circuit);
@@ -99,7 +99,7 @@ impl TypedStmt {
                 vec![]
             }
             StmtEnum::ArrayAssign(identifier, index, value) => {
-                let elem_bits = value.2.size_in_bits_for_defs(prg);
+                let elem_bits = value.ty.size_in_bits_for_defs(prg);
                 let mut array = env.get(identifier).unwrap();
                 let size = array.len() / elem_bits;
                 let mut index = index.compile(prg, env, circuit);
@@ -142,12 +142,12 @@ impl TypedStmt {
                 let (index_less_than_array_len, _) =
                     circuit.push_comparator_circuit(index_bits, &index, false, &array_len, false);
                 let out_of_bounds = circuit.push_not(index_less_than_array_len);
-                circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, self.1);
+                circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, self.meta);
                 env.assign_mut(identifier.clone(), array);
                 vec![]
             }
             StmtEnum::ForEachLoop(var, array, body) => {
-                let elem_in_bits = match &array.2 {
+                let elem_in_bits = match &array.ty {
                     Type::Array(elem_ty, _size) => elem_ty.size_in_bits_for_defs(prg),
                     _ => panic!("Found a non-array value in an array access expr"),
                 };
@@ -178,8 +178,9 @@ impl TypedExpr {
         env: &mut Env<Vec<GateIndex>>,
         circuit: &mut CircuitBuilder,
     ) -> Vec<GateIndex> {
-        let Expr(expr, meta, ty) = self;
-        match expr {
+        let meta = self.meta;
+        let ty = &self.ty;
+        match &self.inner {
             ExprEnum::True => {
                 vec![1]
             }
@@ -205,7 +206,7 @@ impl TypedExpr {
                 wires
             }
             ExprEnum::ArrayRepeatLiteral(elem, size) => {
-                let elem_ty = elem.2.clone();
+                let elem_ty = elem.ty.clone();
                 let mut elem = elem.compile(prg, env, circuit);
                 extend_to_bits(&mut elem, &elem_ty, elem_ty.size_in_bits_for_defs(prg));
                 let bits = ty.size_in_bits_for_defs(prg);
@@ -216,7 +217,7 @@ impl TypedExpr {
                 array
             }
             ExprEnum::ArrayAccess(array, index) => {
-                let num_elems = match &array.2 {
+                let num_elems = match &array.ty {
                     Type::Array(_, size) => *size,
                     _ => panic!("Found a non-array value in an array access expr"),
                 };
@@ -256,7 +257,7 @@ impl TypedExpr {
                 let (index_less_than_array_len, _) =
                     circuit.push_comparator_circuit(index_bits, &index, false, &array_len, false);
                 let out_of_bounds = circuit.push_not(index_less_than_array_len);
-                circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, *meta);
+                circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, meta);
                 if array.is_empty() {
                     // accessing a 0-size array will result in a panic, but we still need to return
                     // an element of a valid size (even though it will not be used)
@@ -273,7 +274,7 @@ impl TypedExpr {
                 wires
             }
             ExprEnum::TupleAccess(tuple, index) => {
-                let (wires_before, wires_at_index) = match &tuple.2 {
+                let (wires_before, wires_at_index) = match &tuple.ty {
                     Type::Tuple(values) => {
                         let mut wires_before = 0;
                         for v in values[0..*index].iter() {
@@ -281,7 +282,7 @@ impl TypedExpr {
                         }
                         (wires_before, values[*index].size_in_bits_for_defs(prg))
                     }
-                    _ => panic!("Expected a tuple type, but found {:?}", tuple.1),
+                    _ => panic!("Expected a tuple type, but found {:?}", tuple.meta),
                 };
                 let tuple = tuple.compile(prg, env, circuit);
                 tuple[wires_before..wires_before + wires_at_index].to_vec()
@@ -323,7 +324,7 @@ impl TypedExpr {
                 vec![circuit.push_or(x[0], y[0])]
             }
             ExprEnum::Op(op @ (Op::ShiftLeft | Op::ShiftRight), x, y) => {
-                let x_is_signed = is_signed(&x.2);
+                let x_is_signed = is_signed(&x.ty);
                 let x = x.compile(prg, env, circuit);
                 let y = y.compile(prg, env, circuit);
                 assert_eq!(y.len(), 8);
@@ -367,12 +368,12 @@ impl TypedExpr {
                 for &w in y[..(8 - max_filled_bits)].iter() {
                     overflow = circuit.push_or(overflow, w);
                 }
-                circuit.push_panic_if(overflow, PanicReason::Overflow, *meta);
+                circuit.push_panic_if(overflow, PanicReason::Overflow, meta);
                 bits_unshifted
             }
             ExprEnum::Op(op, x, y) => {
-                let ty_x = &x.2;
-                let ty_y = &y.2;
+                let ty_x = &x.ty;
+                let ty_y = &y.ty;
                 let mut x = x.compile(prg, env, circuit);
                 let mut y = y.compile(prg, env, circuit);
                 let bits = max(x.len(), y.len());
@@ -403,7 +404,7 @@ impl TypedExpr {
                     Op::Sub => {
                         let (sum, overflow) =
                             circuit.push_subtraction_circuit(&x, &y, is_signed(ty));
-                        circuit.push_panic_if(overflow, PanicReason::Overflow, *meta);
+                        circuit.push_panic_if(overflow, PanicReason::Overflow, meta);
                         sum
                     }
                     Op::Add => {
@@ -413,7 +414,7 @@ impl TypedExpr {
                         } else {
                             carry
                         };
-                        circuit.push_panic_if(overflow, PanicReason::Overflow, *meta);
+                        circuit.push_panic_if(overflow, PanicReason::Overflow, meta);
                         sum
                     }
                     Op::Mul => {
@@ -479,7 +480,7 @@ impl TypedExpr {
                                 *w = circuit.push_mux(is_result_neg, result_negated[i], *w);
                             }
                         }
-                        circuit.push_panic_if(overflow, PanicReason::Overflow, *meta);
+                        circuit.push_panic_if(overflow, PanicReason::Overflow, meta);
                         result
                     }
                     Op::Div => {
@@ -488,7 +489,7 @@ impl TypedExpr {
                             let eq = circuit.push_eq(*b, 0);
                             all_zero = circuit.push_and(all_zero, eq);
                         }
-                        circuit.push_panic_if(all_zero, PanicReason::DivByZero, *meta);
+                        circuit.push_panic_if(all_zero, PanicReason::DivByZero, meta);
                         if is_signed(ty) {
                             circuit.push_signed_division_circuit(&mut x, &mut y).0
                         } else {
@@ -501,7 +502,7 @@ impl TypedExpr {
                             let eq = circuit.push_eq(*b, 0);
                             all_zero = circuit.push_and(all_zero, eq);
                         }
-                        circuit.push_panic_if(all_zero, PanicReason::DivByZero, *meta);
+                        circuit.push_panic_if(all_zero, PanicReason::DivByZero, meta);
                         if is_signed(ty) {
                             circuit.push_signed_division_circuit(&mut x, &mut y).1
                         } else {
@@ -550,10 +551,10 @@ impl TypedExpr {
             ExprEnum::FnCall(identifier, args) => {
                 let fn_def = prg.fn_defs.get(identifier).unwrap();
                 let mut bindings = Vec::with_capacity(fn_def.params.len());
-                for (ParamDef(_, identifier, _), arg) in fn_def.params.iter().zip(args) {
+                for (param, arg) in fn_def.params.iter().zip(args) {
                     env.push();
                     let arg = arg.compile(prg, env, circuit);
-                    bindings.push((identifier, arg));
+                    bindings.push((param.name.clone(), arg));
                     env.pop();
                 }
                 env.push();
@@ -592,7 +593,7 @@ impl TypedExpr {
                 gate_indexes
             }
             ExprEnum::Cast(ty, expr) => {
-                let ty_expr = &expr.2;
+                let ty_expr = &expr.ty;
                 let mut expr = expr.compile(prg, env, circuit);
                 let size_after_cast = ty.size_in_bits_for_defs(prg);
 
@@ -675,7 +676,7 @@ impl TypedExpr {
                 muxed_ret_expr
             }
             ExprEnum::StructAccess(struct_expr, field) => {
-                if let Type::Struct(name) = &struct_expr.2 {
+                if let Type::Struct(name) = &struct_expr.ty {
                     let struct_expr = struct_expr.compile(prg, env, circuit);
                     let struct_def = prg.struct_defs.get(name.as_str()).unwrap();
                     let mut bits = 0;
