@@ -198,8 +198,8 @@ impl std::fmt::Display for Type {
 pub struct Stmt<T> {
     /// The kind of statement being wrapped.
     pub inner: StmtEnum<T>,
-    /// Metadata indicating the location in the source code of the statement.
-    pub meta: MetaInfo
+    /// Metadata indicating the location of the statement in the source code.
+    pub meta: MetaInfo,
 }
 
 impl<T> Stmt<T> {
@@ -230,19 +230,34 @@ pub enum StmtEnum<T> {
 /// An expression and its location in the source code.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Expr<T>(pub ExprEnum<T>, pub MetaInfo, pub T);
+pub struct Expr<T> {
+    /// The kind of expression being wrapped.
+    pub inner: ExprEnum<T>,
+    /// Metadata indicating the location of the expression in the source code.
+    pub meta: MetaInfo,
+    /// The type of the expression.
+    pub ty: T,
+}
 
 impl Expr<()> {
     /// Constructs an expression without any associated type information.
     pub fn untyped(expr: ExprEnum<()>, meta: MetaInfo) -> Self {
-        Self(expr, meta, ())
+        Self {
+            inner: expr,
+            meta,
+            ty: (),
+        }
     }
 }
 
 impl Expr<Type> {
     /// Constructs an expression with an associated type.
     pub fn typed(expr: ExprEnum<Type>, ty: Type, meta: MetaInfo) -> Self {
-        Self(expr, meta, ty)
+        Self {
+            inner: expr,
+            meta,
+            ty,
+        }
     }
 }
 
