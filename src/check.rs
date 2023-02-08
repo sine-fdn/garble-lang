@@ -437,7 +437,6 @@ impl UntypedFnDef {
         let mut params = Vec::with_capacity(self.params.len());
         let mut param_identifiers = HashSet::new();
         for param in self.params.iter() {
-            //let ParamDef(mutability, identifier, ty) = param;
             if param_identifiers.contains(&param.name) {
                 let e = TypeErrorEnum::DuplicateFnParam(param.name.clone());
                 errors.push(Some(TypeError(e, self.meta)));
