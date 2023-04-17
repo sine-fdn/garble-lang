@@ -371,9 +371,9 @@ impl<'a> Scanner<'a> {
 }
 
 fn is_digit(c: char) -> bool {
-    ('0'..='9').contains(&c)
+    c.is_ascii_digit()
 }
 
 fn is_alphanumeric(c: char) -> bool {
-    ('a'..='z').contains(&c) || ('A'..='Z').contains(&c) || c == '_' || is_digit(c)
+    c.is_ascii_lowercase() || c.is_ascii_uppercase() || c == '_' || is_digit(c)
 }

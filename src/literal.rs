@@ -385,7 +385,7 @@ impl Literal {
                 wires
             }
             Literal::Range((min, min_ty), (max, _)) => {
-                let elems: Vec<usize> = (*min as usize..*max as usize).into_iter().collect();
+                let elems: Vec<usize> = (*min as usize..*max as usize).collect();
                 let elem_size = Type::Unsigned(*min_ty).size_in_bits_for_defs(checked);
                 let mut bits = Vec::with_capacity(elems.len() * elem_size);
                 for elem in elems {

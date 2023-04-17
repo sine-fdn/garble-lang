@@ -461,9 +461,7 @@ pub fn main(mode: bool, x: i16, y: u8) -> i16 {
 }
 ";
     let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-    let test_values = (-20..20)
-        .into_iter()
-        .chain(vec![i16::MAX, i16::MIN].into_iter());
+    let test_values = (-20..20).chain(vec![i16::MAX, i16::MIN].into_iter());
     for x in test_values {
         for mode in [true, false] {
             for y in 0..20 {
