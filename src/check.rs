@@ -20,7 +20,7 @@ pub struct TypeError(pub TypeErrorEnum, pub MetaInfo);
 
 impl PartialOrd for TypeError {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.1.partial_cmp(&other.1)
+        Some(self.cmp(other))
     }
 }
 
