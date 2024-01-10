@@ -1083,7 +1083,7 @@ impl UntypedExpr {
                 }
 
                 let ret_ty = {
-                    let (_, ret_expr) = &typed_clauses.get(0).unwrap();
+                    let (_, ret_expr) = typed_clauses.first().unwrap();
 
                     for (_, expr) in typed_clauses.iter() {
                         if ret_expr.ty != expr.ty {
