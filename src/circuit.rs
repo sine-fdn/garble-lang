@@ -10,11 +10,13 @@ use std::collections::HashMap;
 // 3. Pruning of useless gates (gates that are not part of the output nor used by other gates)
 
 const PRINT_OPTIMIZATION_RATIO: bool = false;
+const MAX_GATES: usize = (u32::MAX >> 4) as usize;
+const MAX_AND_GATES: usize = (u32::MAX >> 8) as usize;
 
 /// Data type to uniquely identify gates.
 pub type GateIndex = usize;
 
-/// Description of a gate executed under S-MPC.
+/// Description of a gate executed under MPC.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Gate {
     /// A logical XOR gate attached to the two specified input wires.
@@ -25,7 +27,7 @@ pub enum Gate {
     Not(GateIndex),
 }
 
-/// Representation of a circuit evaluated by an S-MPC engine.
+/// Representation of a circuit evaluated by an MPC engine.
 ///
 /// Each circuit consists of 3 parts:
 ///
@@ -75,7 +77,103 @@ pub struct Circuit {
     pub output_gates: Vec<GateIndex>,
 }
 
+/// An input wire or a gate operating on them.
+pub enum Wire {
+    /// An input wire, with its value coming directly from one of the parties.
+    Input(GateIndex),
+    /// A logical XOR gate attached to the two specified input wires.
+    Xor(GateIndex, GateIndex),
+    /// A logical AND gate attached to the two specified input wires.
+    And(GateIndex, GateIndex),
+    /// A logical NOT gate attached to the specified input wire.
+    Not(GateIndex),
+}
+
+/// Errors occurring during the validation or the execution of the MPC protocol.
+#[derive(Debug, PartialEq, Eq)]
+pub enum CircuitError {
+    /// The gate with the specified wire contains invalid gate connections.
+    InvalidGate(usize),
+    /// The specified output gate does not exist in the circuit.
+    InvalidOutput(usize),
+    /// The circuit does not specify any output gates.
+    EmptyOutputs,
+    /// The provided circuit has too many gates to be processed.
+    MaxCircuitSizeExceeded,
+    /// The provided index does not correspond to any party.
+    PartyIndexOutOfBounds,
+}
+
 impl Circuit {
+    /// Returns all the wires (inputs + gates) in the circuit, in ascending order.
+    pub fn wires(&self) -> Vec<Wire> {
+        let mut gates = vec![];
+        for (party, inputs) in self.input_gates.iter().enumerate() {
+            for _ in 0..*inputs {
+                gates.push(Wire::Input(party))
+            }
+        }
+        for gate in self.gates.iter() {
+            let gate = match gate {
+                Gate::Xor(x, y) => Wire::Xor(*x, *y),
+                Gate::And(x, y) => Wire::And(*x, *y),
+                Gate::Not(x) => Wire::Not(*x),
+            };
+            gates.push(gate);
+        }
+        gates
+    }
+
+    /// Returns the number of AND gates in the circuit.
+    pub fn and_gates(&self) -> usize {
+        self.gates
+            .iter()
+            .filter(|g| matches!(g, Gate::And(_, _)))
+            .count()
+    }
+
+    /// Checks that the circuit only uses valid wires, includes no cycles, has outputs, etc.
+    pub fn validate(&self) -> Result<(), CircuitError> {
+        let mut num_and_gates = 0;
+        let wires = self.wires();
+        for (i, g) in wires.iter().enumerate() {
+            match g {
+                Wire::Input(_) => {}
+                &Wire::Xor(x, y) => {
+                    if x >= i || y >= i {
+                        return Err(CircuitError::InvalidGate(i));
+                    }
+                }
+                &Wire::And(x, y) => {
+                    if x >= i || y >= i {
+                        return Err(CircuitError::InvalidGate(i));
+                    }
+                    num_and_gates += 1;
+                }
+                &Wire::Not(x) => {
+                    if x >= i {
+                        return Err(CircuitError::InvalidGate(i));
+                    }
+                }
+            }
+        }
+        if self.output_gates.is_empty() {
+            return Err(CircuitError::EmptyOutputs);
+        }
+        for &o in self.output_gates.iter() {
+            if o >= wires.len() {
+                return Err(CircuitError::InvalidOutput(o));
+            }
+        }
+        if num_and_gates > MAX_AND_GATES {
+            return Err(CircuitError::MaxCircuitSizeExceeded);
+        }
+        if wires.len() > MAX_GATES {
+            return Err(CircuitError::MaxCircuitSizeExceeded);
+        }
+        Ok(())
+    }
+
     /// Evaluates the circuit with the specified inputs (with one `Vec<bool>` per party).
     ///
     /// Assumes that the inputs have been previously type-checked and **panics** if the number of
