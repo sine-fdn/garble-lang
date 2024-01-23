@@ -3,6 +3,9 @@
 use crate::{compile::wires_as_unsigned, env::Env, token::MetaInfo};
 use std::collections::HashMap;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 // This module currently implements a few basic kinds of circuit optimizations:
 //
 // 1. Constant evaluation (e.g. x ^ 0 == x; x & 1 == x; x & 0 == 0)
@@ -18,6 +21,7 @@ pub type GateIndex = usize;
 
 /// Description of a gate executed under MPC.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Gate {
     /// A logical XOR gate attached to the two specified input wires.
     Xor(GateIndex, GateIndex),
@@ -68,6 +72,7 @@ pub enum Gate {
 /// true and constant false, specified as `Gate::Xor(0, 0)` with wire `n` and `Gate::Not(n)` (and
 /// thus depend on the first input bit for their specifications).
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Circuit {
     /// The different parties, with `usize` at index `i` as the number of input bits for party `i`.
     pub input_gates: Vec<usize>,

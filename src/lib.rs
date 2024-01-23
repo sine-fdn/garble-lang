@@ -41,7 +41,9 @@
 #![deny(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
 
+use ast::{Expr, FnDef, Pattern, Program, Stmt, Type, VariantExpr};
 use check::TypeError;
+use circuit::Circuit;
 use compile::CompilerError;
 use eval::{EvalError, Evaluator};
 use literal::Literal;
@@ -50,8 +52,8 @@ use scan::{scan, ScanError};
 use std::fmt::{Display, Write as _};
 use token::MetaInfo;
 
-use ast::{Expr, FnDef, Pattern, Program, Stmt, Type, VariantExpr};
-use circuit::Circuit;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
 /// [`crate::ast::Program`] without any associated type information.
 pub type UntypedProgram = Program<()>;
@@ -119,7 +121,6 @@ pub struct GarbleProgram {
 
 /// An input argument for a Garble program and circuit.
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GarbleArgument<'a>(Literal, &'a TypedProgram);
 
 impl GarbleProgram {
