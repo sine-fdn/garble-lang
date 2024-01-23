@@ -43,6 +43,8 @@ pub enum EvalError {
     UnexpectedNumberOfInputsFromParty(usize),
     /// An input literal could not be parsed.
     LiteralParseError(CompileTimeError),
+    /// The circuit does not have an input argument with the given index.
+    InvalidArgIndex(usize),
     /// The literal is not of the expected parameter type.
     InvalidLiteralType(Literal, Type),
     /// The number of output bits does not match the expected type.
@@ -67,6 +69,9 @@ impl std::fmt::Display for EvalError {
             EvalError::UnexpectedNumberOfInputsFromParty(party) => f.write_fmt(format_args!("Unexpected number of input bits from party {party}")),
             EvalError::LiteralParseError(err) => {
                 err.fmt(f)
+            }
+            EvalError::InvalidArgIndex(i) => {
+                f.write_fmt(format_args!("The circuit does not an input argument with index {i}"))
             }
             EvalError::InvalidLiteralType(literal, ty) => {
                 f.write_fmt(format_args!("The argument literal is not of type {ty}: '{literal}'"))

@@ -2,7 +2,7 @@ use garble_lang::{
     ast::Op::{self, *},
     ast::Type,
     compile,
-    eval::{EvalError, Evaluator},
+    eval::EvalError,
     literal::Literal::{self, NumSigned, NumUnsigned},
     token::{SignedNumType::*, UnsignedNumType::*},
     Error,
@@ -181,8 +181,8 @@ macro_rules! apply {
 #[quickcheck]
 fn quickcheck_operator(test_case: OperatorTestCase) -> Result<(), Error> {
     let OperatorTestCase { x, y, result, prg } = test_case;
-    let (typed_prg, main_fn, circuit) = compile(&prg, "main")?;
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let compiled = compile(&prg)?;
+    let mut eval = compiled.evaluator();
     eval.set_literal(x)?;
     eval.set_literal(y)?;
     let output = eval.run()?;
