@@ -1,7 +1,7 @@
 use garble_lang::{
     circuit::{EvalPanic, PanicReason},
     compile,
-    eval::{EvalError, EvalOutput, Evaluator},
+    eval::{EvalError, EvalOutput},
     Error,
 };
 
@@ -11,8 +11,8 @@ fn panic_on_unsigned_add_with_overflow() -> Result<(), String> {
 pub fn main(x: u8) -> u8 {
     x + 255u8
 }";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| e.prettify(prg))?;
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let prg = compile(prg).map_err(|e| e.prettify(prg))?;
+    let mut computation = prg.evaluator();
     computation.set_u8(1);
     let res = computation.run();
     expect_panic(res, PanicReason::Overflow);
@@ -25,8 +25,8 @@ fn panic_on_signed_add_with_overflow() -> Result<(), String> {
 pub fn main(x: i8) -> i8 {
     x + -100i8
 }";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| e.prettify(prg))?;
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let prg = compile(prg).map_err(|e| e.prettify(prg))?;
+    let mut computation = prg.evaluator();
     computation.set_i8(-100);
     let res = computation.run();
     expect_panic(res, PanicReason::Overflow);
@@ -39,8 +39,8 @@ fn panic_on_sub_with_overflow() -> Result<(), String> {
 pub fn main(x: i8) -> i8 {
     x - 100i8
 }";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| e.prettify(prg))?;
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let prg = compile(prg).map_err(|e| e.prettify(prg))?;
+    let mut computation = prg.evaluator();
     computation.set_i8(-100);
     let res = computation.run();
     expect_panic(res, PanicReason::Overflow);
@@ -53,8 +53,8 @@ fn panic_on_div_by_zero() -> Result<(), String> {
 pub fn main(x: u8) -> u8 {
     x / 0u8
 }";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| e.prettify(prg))?;
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let prg = compile(prg).map_err(|e| e.prettify(prg))?;
+    let mut computation = prg.evaluator();
     computation.set_u8(1);
     let res = computation.run();
     expect_panic(res, PanicReason::DivByZero);
@@ -71,13 +71,13 @@ pub fn main(b: bool) -> i32 {
         1i32 / 0i32
     }
 }";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| e.prettify(prg))?;
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let prg = compile(prg).map_err(|e| e.prettify(prg))?;
+    let mut computation = prg.evaluator();
     computation.set_bool(true);
     let res = computation.run();
     assert!(res.is_ok());
 
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut computation = prg.evaluator();
     computation.set_bool(false);
     let res = computation.run();
     expect_panic(res, PanicReason::DivByZero);
@@ -96,29 +96,29 @@ pub fn main(x: i32) -> i32 {
         _ => 3i32,
     }
 }";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| e.prettify(prg))?;
+    let prg = compile(prg).map_err(|e| e.prettify(prg))?;
 
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut computation = prg.evaluator();
     computation.set_i32(0);
     let res = computation.run();
     assert!(res.is_ok());
 
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut computation = prg.evaluator();
     computation.set_i32(1);
     let res = computation.run();
     expect_panic(res, PanicReason::DivByZero);
 
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut computation = prg.evaluator();
     computation.set_i32(2);
     let res = computation.run();
     assert!(res.is_ok());
 
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut computation = prg.evaluator();
     computation.set_i32(3);
     let res = computation.run();
     expect_panic(res, PanicReason::Overflow);
 
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut computation = prg.evaluator();
     computation.set_i32(4);
     let res = computation.run();
     assert!(res.is_ok());
@@ -133,24 +133,24 @@ pub fn main(i: usize) -> i32 {
     [1i32, 2i32, 3i32][i]
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| e.prettify(prg))?;
+    let prg = compile(prg).map_err(|e| e.prettify(prg))?;
 
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut computation = prg.evaluator();
     computation.set_usize(0);
     let res = computation.run();
     assert!(res.is_ok());
 
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut computation = prg.evaluator();
     computation.set_usize(1);
     let res = computation.run();
     assert!(res.is_ok());
 
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut computation = prg.evaluator();
     computation.set_usize(2);
     let res = computation.run();
     assert!(res.is_ok());
 
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut computation = prg.evaluator();
     computation.set_usize(3);
     let res = computation.run();
     expect_panic(res, PanicReason::OutOfBounds);
@@ -167,24 +167,24 @@ pub fn main(i: usize) -> i32 {
     updated[0]
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| e.prettify(prg))?;
+    let prg = compile(prg).map_err(|e| e.prettify(prg))?;
 
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut computation = prg.evaluator();
     computation.set_usize(0);
     let res = computation.run();
     assert!(res.is_ok());
 
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut computation = prg.evaluator();
     computation.set_usize(1);
     let res = computation.run();
     assert!(res.is_ok());
 
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut computation = prg.evaluator();
     computation.set_usize(2);
     let res = computation.run();
     assert!(res.is_ok());
 
-    let mut computation = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut computation = prg.evaluator();
     computation.set_usize(3);
     let res = computation.run();
     expect_panic(res, PanicReason::OutOfBounds);
@@ -199,13 +199,13 @@ pub fn main(b: bool) -> bool {
     b & [true; 0][1]
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(true);
     expect_panic(eval.run(), PanicReason::OutOfBounds);
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(false);
     expect_panic(eval.run(), PanicReason::OutOfBounds);
 
@@ -214,13 +214,13 @@ pub fn main(b: bool) -> bool {
     b && [true; 0][1]
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(true);
     expect_panic(eval.run(), PanicReason::OutOfBounds);
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(false);
     let output = eval.run()?;
     let output = bool::try_from(output);
@@ -232,13 +232,13 @@ pub fn main(b: bool) -> bool {
     [true; 0][1] && b
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(true);
     expect_panic(eval.run(), PanicReason::OutOfBounds);
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(false);
     expect_panic(eval.run(), PanicReason::OutOfBounds);
 
@@ -247,13 +247,13 @@ pub fn main(b: bool) -> bool {
     (0i32 / 0i32 == 1i32) && [true; 0][1]
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(true);
     expect_panic(eval.run(), PanicReason::DivByZero);
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(false);
     expect_panic(eval.run(), PanicReason::DivByZero);
 
@@ -267,13 +267,13 @@ pub fn main(b: bool) -> bool {
     b | [true; 0][1]
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(true);
     expect_panic(eval.run(), PanicReason::OutOfBounds);
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(false);
     expect_panic(eval.run(), PanicReason::OutOfBounds);
 
@@ -282,16 +282,16 @@ pub fn main(b: bool) -> bool {
     b || [true; 0][1]
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(true);
     let output = eval.run()?;
     let output = bool::try_from(output);
     assert!(output.is_ok());
     assert_eq!(output.unwrap(), true);
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(false);
     expect_panic(eval.run(), PanicReason::OutOfBounds);
 
@@ -300,13 +300,13 @@ pub fn main(b: bool) -> bool {
     [true; 0][1] || b
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(true);
     expect_panic(eval.run(), PanicReason::OutOfBounds);
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(false);
     expect_panic(eval.run(), PanicReason::OutOfBounds);
 
@@ -315,13 +315,13 @@ pub fn main(b: bool) -> bool {
     (0i32 / 0i32 == 1i32) || [true; 0][1]
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(true);
     expect_panic(eval.run(), PanicReason::DivByZero);
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let mut eval = prg.evaluator();
     eval.set_bool(false);
     expect_panic(eval.run(), PanicReason::DivByZero);
 

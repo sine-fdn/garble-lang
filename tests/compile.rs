@@ -1,11 +1,4 @@
-use garble_lang::{
-    ast::Type,
-    compile,
-    eval::Evaluator,
-    literal::Literal,
-    token::{SignedNumType, UnsignedNumType},
-    Error,
-};
+use garble_lang::{compile, Error};
 
 fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
     let e: Error = e.into();
@@ -24,10 +17,9 @@ pub fn main(x: bool) -> bool {{
 }}
 "
         );
-        let (typed_prg, main_fn, circuit) =
-            compile(&prg, "main").map_err(|e| pretty_print(e, &prg))?;
+        let compiled = compile(&prg).map_err(|e| pretty_print(e, &prg))?;
         for x in [true, false] {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_bool(x);
             let output = eval.run().map_err(|e| pretty_print(e, &prg))?;
             assert_eq!(
@@ -49,10 +41,9 @@ pub fn main(x: u8) -> u8 {{
 }}
 "
         );
-        let (typed_prg, main_fn, circuit) =
-            compile(&prg, "main").map_err(|e| pretty_print(e, &prg))?;
+        let compiled = compile(&prg).map_err(|e| pretty_print(e, &prg))?;
         for x in 0..127 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_u8(x);
             let output = eval.run().map_err(|e| pretty_print(e, &prg))?;
             assert_eq!(
@@ -74,10 +65,9 @@ pub fn main(x: u16) -> u16 {{
 }}
 "
         );
-        let (typed_prg, main_fn, circuit) =
-            compile(&prg, "main").map_err(|e| pretty_print(e, &prg))?;
+        let compiled = compile(&prg).map_err(|e| pretty_print(e, &prg))?;
         for x in 240..280 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_u16(x);
             let output = eval.run().map_err(|e| pretty_print(e, &prg))?;
             assert_eq!(
@@ -97,8 +87,8 @@ pub fn main(x: u16) -> u16 {
     y + 1u16
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
     eval.set_u16(255);
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(
@@ -123,8 +113,8 @@ fn add(x: u16, y: u16) -> u16 {
     x + y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
     eval.set_u16(255);
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(
@@ -145,9 +135,9 @@ pub fn main(x: bool) -> u8 {
     }
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for b in [true, false] {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         let expected = if b { 100 } else { 50 };
         eval.set_bool(b);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -166,11 +156,11 @@ pub fn main(x: u16, y: u16, z: u16) -> u16 {
     x | (y & (z ^ 2u16))
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in 10..20 {
         for y in 10..20 {
             for z in 10..20 {
-                let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+                let mut eval = compiled.evaluator();
                 let expected = x | (y & (z ^ 2));
                 eval.set_u16(x);
                 eval.set_u16(y);
@@ -193,10 +183,10 @@ pub fn main(x: u16, y: u16) -> bool {
     (x > y) & (x < 10u16)
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in 5..15 {
         for y in 5..15 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             let expected = (x > y) && (x < 10);
             eval.set_u16(x);
             eval.set_u16(y);
@@ -217,10 +207,10 @@ pub fn main(x: u16, y: u16) -> bool {
     (x == y) & (x != 0u16)
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in 0..2 {
         for y in 0..2 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             let expected = (x == y) && (x != 0);
             eval.set_u16(x);
             eval.set_u16(y);
@@ -241,10 +231,10 @@ pub fn main(x: u16, y: u8) -> u16 {
     (x as u8) as u16 + y as u16
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in 200..300 {
         for y in 0..10 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             let expected = (x as u8) as u16 + y as u16;
             eval.set_u16(x);
             eval.set_u8(y);
@@ -265,10 +255,10 @@ pub fn main(x: bool, y: u8) -> u16 {
     x as u16 + y as u16
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in [true, false] {
         for y in 0..10 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             let expected = (x as u16) + (y as u16);
             eval.set_bool(x);
             eval.set_u8(y);
@@ -289,11 +279,11 @@ pub fn main(mode: bool, x: u16, y: u8) -> u16 {
     if mode { x << y } else { x >> y }
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for mode in [true, false] {
         for x in 240..270 {
             for y in 0..20 {
-                let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+                let mut eval = compiled.evaluator();
                 eval.set_bool(mode);
                 eval.set_u16(x);
                 eval.set_u8(y);
@@ -329,17 +319,17 @@ pub fn main(mode: bool, x: u16, y: u8) -> u16 {
 }
     ";
 
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
     let eval = |x: u16, y: u8| -> Result<(u16, u16), Error> {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_bool(true);
         eval.set_u16(x);
         eval.set_u8(y);
         let result = eval.run().map_err(|e| pretty_print(e, prg))?;
         let result1 = u16::try_from(result)?;
 
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_bool(false);
         eval.set_u16(x);
         eval.set_u8(y);
@@ -365,9 +355,9 @@ pub fn main(x: i8) -> i8 {
     x
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -128..127 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_i8(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(i8::try_from(output).map_err(|e| pretty_print(e, prg))?, x);
@@ -382,10 +372,10 @@ pub fn main(x: i8, y: i8) -> i8 {
     x + y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -64..64 {
         for y in -64..63 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_i8(x);
             eval.set_i8(y);
             let output = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -405,11 +395,11 @@ pub fn main(x: i16, y: i16, z: i16) -> i16 {
     x | (y & (z ^ 2i16))
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -10..10 {
         for y in -10..10 {
             for z in -10..10 {
-                let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+                let mut eval = compiled.evaluator();
                 let expected = x | (y & (z ^ 2));
                 eval.set_i16(x);
                 eval.set_i16(y);
@@ -432,10 +422,10 @@ pub fn main(x: i16, y: i16) -> bool {
     (x > y) & (y < x)
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -10..10 {
         for y in -10..10 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             let expected = (x > y) && (y < x);
             eval.set_i16(x);
             eval.set_i16(y);
@@ -460,12 +450,12 @@ pub fn main(mode: bool, x: i16, y: u8) -> i16 {
     }
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     let test_values = (-20..20).chain(vec![i16::MAX, i16::MIN].into_iter());
     for x in test_values {
         for mode in [true, false] {
             for y in 0..20 {
-                let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+                let mut eval = compiled.evaluator();
                 eval.set_bool(mode);
                 eval.set_i16(x);
                 eval.set_u8(y);
@@ -500,9 +490,9 @@ pub fn main(x: i16) -> i16 {
     x + -10i16
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -10..10 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         let expected = x + -10;
         eval.set_i16(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -521,10 +511,10 @@ pub fn main(x: u8, y: u8) -> u8 {
     x - y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in (0..=255).step_by(3) {
         for y in (0..=255).step_by(3) {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_u8(x);
             eval.set_u8(y);
             let result = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -547,10 +537,10 @@ pub fn main(x: i8, y: i8) -> i8 {
     x - y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in (-128..=127).step_by(3) {
         for y in (-128..=127).step_by(3) {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_i8(x);
             eval.set_i8(y);
             let result = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -573,9 +563,9 @@ pub fn main(x: i16) -> i16 {
     -x
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -127..127 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_i16(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(i16::try_from(output).map_err(|e| pretty_print(e, prg))?, -x);
@@ -590,9 +580,9 @@ pub fn main(x: i16) -> i16 {
     !x
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -127..127 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_i16(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(i16::try_from(output).map_err(|e| pretty_print(e, prg))?, !x);
@@ -603,9 +593,9 @@ pub fn main(x: bool) -> bool {
     !x
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for b in [true, false] {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_bool(b);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
@@ -623,10 +613,10 @@ pub fn main(x: u8, y: u8) -> u8 {
     x * y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in (0..=255).step_by(3) {
         for y in (0..=255).step_by(3) {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_u8(x);
             eval.set_u8(y);
             let result = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -649,10 +639,10 @@ pub fn main(x: i8, y: i8) -> i8 {
     x * y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in (-128..=127).step_by(3) {
         for y in (-128..=127).step_by(3) {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_i8(x);
             eval.set_i8(y);
             let result = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -675,10 +665,10 @@ pub fn main(x: u8, y: u8) -> u8 {
     x / y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in 0..255 {
         for y in 1..10 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_u8(x);
             eval.set_u8(y);
             let output = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -688,7 +678,7 @@ pub fn main(x: u8, y: u8) -> u8 {
             );
         }
         for y in 250..255 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_u8(x);
             eval.set_u8(y);
             let output = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -708,10 +698,10 @@ pub fn main(x: u8, y: u8) -> u8 {
     x % y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in 0..255 {
         for y in 1..10 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_u8(x);
             eval.set_u8(y);
             let output = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -721,7 +711,7 @@ pub fn main(x: u8, y: u8) -> u8 {
             );
         }
         for y in 250..255 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_u8(x);
             eval.set_u8(y);
             let output = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -741,10 +731,10 @@ pub fn main(x: i8, y: i8) -> i8 {
     x / y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -128..127 {
         for y in -4..5 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             if y == -1 || y == 0 {
                 continue;
             }
@@ -757,7 +747,7 @@ pub fn main(x: i8, y: i8) -> i8 {
             );
         }
         for y in 120..127 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_i8(x);
             eval.set_i8(y);
             let output = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -777,10 +767,10 @@ pub fn main(x: i8, y: i8) -> i8 {
     x % y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -128..127 {
         for y in -4..5 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             if y == -1 || y == 0 {
                 continue;
             }
@@ -793,7 +783,7 @@ pub fn main(x: i8, y: i8) -> i8 {
             );
         }
         for y in 120..127 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_i8(x);
             eval.set_i8(y);
             let output = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -816,10 +806,10 @@ pub fn main(x: i8, i: usize) -> i8 {{
 }}
 "
     );
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -10..10 {
         for i in 0..array_size {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_i8(x);
             eval.set_usize(i);
             let output = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -841,11 +831,11 @@ pub fn main(x: i8, i: usize, j: usize) -> i8 {{
 }}
 "
     );
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     let x = -5;
     for i in 0..array_size {
         for j in 0..array_size {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             let expected = if i == j { x * 2 } else { x };
             eval.set_i8(x);
             eval.set_usize(i);
@@ -875,9 +865,9 @@ pub fn main(x: i8) -> i8 {{
 }}
 "
     );
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -10..10 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_i8(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
@@ -902,10 +892,10 @@ pub fn main(x: i8, i: usize) -> i8 {{
 }}
 "
     );
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -10..10 {
         for i in 0..array_size {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_i8(x);
             eval.set_usize(i);
             let output = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -923,9 +913,9 @@ fn compile_signed_casts() -> Result<(), Error> {
     // signed to unsigned:
 
     let prg = "pub fn main(x: i16) -> u8 { x as u8 }";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -200..200 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_i16(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
@@ -935,9 +925,9 @@ fn compile_signed_casts() -> Result<(), Error> {
     }
 
     let prg = "pub fn main(x: i8) -> u16 { x as u16 }";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -128..127 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_i8(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
@@ -949,9 +939,9 @@ fn compile_signed_casts() -> Result<(), Error> {
     // unsigned to signed:
 
     let prg = "pub fn main(x: u16) -> i8 { x as i8 }";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in 200..300 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_u16(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
@@ -961,9 +951,9 @@ fn compile_signed_casts() -> Result<(), Error> {
     }
 
     let prg = "pub fn main(x: u8) -> i16 { x as i16 }";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in 200..255 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_u8(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
@@ -975,9 +965,9 @@ fn compile_signed_casts() -> Result<(), Error> {
     // signed to signed:
 
     let prg = "pub fn main(x: i16) -> i8 { x as i8 }";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -200..200 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_i16(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
@@ -987,9 +977,9 @@ fn compile_signed_casts() -> Result<(), Error> {
     }
 
     let prg = "pub fn main(x: i8) -> i16 { x as i16 }";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -128..127 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_i8(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
@@ -1012,8 +1002,8 @@ pub fn main(_x: u8) -> i16 {
     acc
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
     eval.set_u8(0);
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(
@@ -1034,9 +1024,8 @@ pub fn main(x: bool) -> {t} {{
 }}
 "
         );
-        let (typed_prg, main_fn, circuit) =
-            compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+        let mut eval = compiled.evaluator();
         eval.set_bool(false);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         match i {
@@ -1081,9 +1070,8 @@ pub fn main(b: bool) -> i32 {
 }
 ";
     for b in [false, true] {
-        let (typed_prg, main_fn, circuit) =
-            compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+        let mut eval = compiled.evaluator();
         eval.set_bool(b);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         let result = i32::try_from(output).map_err(|e| pretty_print(e, prg))?;
@@ -1117,9 +1105,8 @@ pub fn main(b: bool) -> u8 {
 }
 ";
     for b in [false, true] {
-        let (typed_prg, main_fn, circuit) =
-            compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+        let mut eval = compiled.evaluator();
         eval.set_bool(b);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
@@ -1162,9 +1149,8 @@ pub fn main(choice: u8, x: u8, y: u8) -> u8 {
             } else {
                 x / y
             };
-            let (typed_prg, main_fn, circuit) =
-                compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+            let mut eval = compiled.evaluator();
             eval.set_u8(choice);
             eval.set_u8(x);
             eval.set_u8(y);
@@ -1193,9 +1179,8 @@ pub fn main(x: u8) -> u8 {
 }
 ";
     for x in 0..255 {
-        let (typed_prg, main_fn, circuit) =
-            compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+        let mut eval = compiled.evaluator();
         eval.set_u8(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         let expected = if x <= 9 {
@@ -1226,9 +1211,8 @@ pub fn main(x: u8) -> u8 {
 }
 ";
     for x in 0..10 {
-        let (typed_prg, main_fn, circuit) =
-            compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+        let mut eval = compiled.evaluator();
         eval.set_u8(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         let expected = if x == 0 { 2 } else { x };
@@ -1254,9 +1238,8 @@ pub fn main(x: u8) -> u8 {
 }
 ";
     for x in 0..10 {
-        let (typed_prg, main_fn, circuit) =
-            compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+        let mut eval = compiled.evaluator();
         eval.set_u8(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         let expected = if x == 0 { 1 } else { x * 2 };
@@ -1275,19 +1258,14 @@ pub fn main(values: (u8, u8)) -> (u8, u8) {
     (values.0 + 1u8, values.1 + 1u8)
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
-    let tuple_ty = Type::Tuple(vec![
-        Type::Unsigned(UnsignedNumType::U8),
-        Type::Unsigned(UnsignedNumType::U8),
-    ]);
-    let input = Literal::parse(&typed_prg, &tuple_ty, "(2u8, 3u8)")?;
-    eval.set_literal(input)?;
+    let mut eval = compiled.evaluator();
+    let input = compiled.parse_arg(0, "(2u8, 3u8)")?;
+    eval.set_literal(input.as_literal())?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-    let expected = Literal::parse(&typed_prg, &tuple_ty, "(3u8, 4u8)")?;
-    assert_eq!(r, expected);
+    assert_eq!(format!("{r}"), "(3u8, 4u8)");
     Ok(())
 }
 
@@ -1312,17 +1290,14 @@ pub fn main(op: Op) -> OpResult {
     }
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
-    let ty_in = Type::Enum("Op".to_string());
-    let ty_out = Type::Enum("OpResult".to_string());
-    let input = Literal::parse(&typed_prg, &ty_in, "Op::Div(10u8, 2u8)")?;
-    eval.set_literal(input)?;
+    let mut eval = compiled.evaluator();
+    let input = compiled.parse_arg(0, "Op::Div(10u8, 2u8)")?;
+    eval.set_literal(input.as_literal())?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-    let expected = Literal::parse(&typed_prg, &ty_out, "OpResult::Ok(5u8)")?;
-    assert_eq!(r, expected);
+    assert_eq!(r.to_string(), "OpResult::Ok(5u8)");
     Ok(())
 }
 
@@ -1332,9 +1307,9 @@ fn compile_array_literal_access() -> Result<(), Error> {
 pub fn main(i: usize) -> i32 {
     [-2i32, -1i32, 0i32, 1i32, 2i32][i]
 }";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for i in 0..5 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_usize(i);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
@@ -1360,16 +1335,14 @@ pub fn main(nums: [u8; 5]) -> [u8; 5] {
     nums
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
-    let array_ty = Type::Array(Box::new(Type::Unsigned(UnsignedNumType::U8)), 5);
-    let input = Literal::parse(&typed_prg, &array_ty, "[1u8, 2u8, 3u8, 4u8, 5u8]")?;
-    eval.set_literal(input)?;
+    let mut eval = compiled.evaluator();
+    let input = compiled.parse_arg(0, "[1u8, 2u8, 3u8, 4u8, 5u8]")?;
+    eval.set_literal(input.as_literal())?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-    let expected = Literal::parse(&typed_prg, &array_ty, "[15u8, 15u8, 15u8, 15u8, 15u8]")?;
-    assert_eq!(r, expected);
+    assert_eq!(r.to_string(), "[15u8, 15u8, 15u8, 15u8, 15u8]");
     Ok(())
 }
 
@@ -1386,9 +1359,9 @@ pub fn main(x: i8) -> i8 {
     }
 }
     ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in [-2, -1, 0, 1, 2] {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         let expected = if x < 0 {
             -1
         } else if x == 0 {
@@ -1428,9 +1401,9 @@ fn compile_if_elseif_else_assignment() -> Result<(), Error> {
     }
 
     ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in [0, 10000] {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         let expected = x != 0;
         eval.set_u32(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -1454,9 +1427,9 @@ pub fn main(x: i32) -> i32 {
     y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in 0..10 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_i32(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         let output = i32::try_from(output).map_err(|e| pretty_print(e, prg))?;
@@ -1478,8 +1451,8 @@ pub fn main(x: i32) -> i32 {
     foobar.bar
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
     eval.set_i32(5);
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let output = i32::try_from(output).map_err(|e| pretty_print(e, prg))?;
@@ -1507,24 +1480,14 @@ pub fn main(x: FooBarBaz) -> FooBarBaz {
     }
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
-    let ty = Type::Struct("FooBarBaz".to_string());
-    let input = Literal::parse(
-        &typed_prg,
-        &ty,
-        "FooBarBaz { foo: 1i32, bar: 0u8, baz: true }",
-    )?;
-    eval.set_literal(input)?;
+    let mut eval = compiled.evaluator();
+    let input = compiled.parse_arg(0, "FooBarBaz { foo: 1i32, bar: 0u8, baz: true }")?;
+    eval.set_literal(input.as_literal())?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-    let expected = Literal::parse(
-        &typed_prg,
-        &ty,
-        "FooBarBaz { foo: 1i32, bar: 1u8, baz: true }",
-    )?;
-    assert_eq!(r, expected);
+    assert_eq!(r.to_string(), "FooBarBaz {bar: 1u8, baz: true, foo: 1i32}");
     Ok(())
 }
 
@@ -1542,8 +1505,8 @@ pub fn main(x: u16) -> u16 {
     x + /* ... */ 1u16
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
     eval.set_u16(1);
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(u16::try_from(output).map_err(|e| pretty_print(e, prg))?, 2);
@@ -1568,9 +1531,9 @@ pub fn main(x: (i32, i32)) -> i32 {
     a + y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
-    eval.parse_literal("(1i32, 2i32)")?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_literal(compiled.parse_arg(0, "(1i32, 2i32)")?.as_literal())?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, 1);
     Ok(())
@@ -1593,9 +1556,9 @@ pub fn main(x: (i32, i32)) -> i32 {
     }
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
-    eval.parse_literal("(2i32, 3i32)")?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_literal(compiled.parse_arg(0, "(2i32, 3i32)")?.as_literal())?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, 2);
     Ok(())
@@ -1634,14 +1597,14 @@ pub fn main(x: i32) -> i32 {
     }
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in [0, 1, 2] {
         let expected = match x {
             0 => 1,
             1 => 3,
             _ => 6,
         };
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_i32(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
@@ -1661,9 +1624,9 @@ pub fn main(x: i32) -> i32 {
     y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -20..20 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_i32(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, x);
@@ -1682,10 +1645,10 @@ pub fn main(x: i32, b: bool) -> i32 {
     y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for b in [true, false] {
         for x in -20..20 {
-            let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+            let mut eval = compiled.evaluator();
             eval.set_i32(x);
             eval.set_bool(b);
             let output = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -1719,9 +1682,9 @@ pub fn main(x: i32) -> i32 {
     y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in 0..110 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_i32(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         let expected = match x {
@@ -1749,9 +1712,9 @@ pub fn main(x: i32) -> i32 {
     y
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in 0..110 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_i32(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
@@ -1773,9 +1736,9 @@ pub fn main(_x: i32) -> i32 {
     sum
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in 0..110 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_i32(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
@@ -1797,17 +1760,12 @@ pub fn main(_x: i32) -> [i32; 5] {
     array
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
     eval.set_i32(0);
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-    let expected = Literal::parse(
-        &typed_prg,
-        &Type::Array(Box::new(Type::Signed(SignedNumType::I32)), 5),
-        "[0i32, 2i32, 4i32, 6i32, 8i32]",
-    )?;
-    assert_eq!(r, expected);
+    assert_eq!(r.to_string(), "[0i32, 2i32, 4i32, 6i32, 8i32]");
     Ok(())
 }
 
@@ -1824,18 +1782,13 @@ pub fn main(replacement: i32) -> [i32; 4] {
     array2
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in 0..110 {
-        let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+        let mut eval = compiled.evaluator();
         eval.set_i32(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-        let expected = Literal::parse(
-            &typed_prg,
-            &Type::Array(Box::new(Type::Signed(SignedNumType::I32)), 4),
-            &format!("[10i32, {x}i32, 30i32, 40i32]"),
-        )?;
-        assert_eq!(r, expected);
+        assert_eq!(r.to_string(), format!("[10i32, {x}i32, 30i32, 40i32]"));
     }
     Ok(())
 }
@@ -1872,13 +1825,12 @@ pub fn main(_a: i32, _b: i32) -> () {
     let unary_bitflip = !5i32;
 }
 ";
-    let (typed_prg, main_fn, circuit) = compile(prg, "main").map_err(|e| pretty_print(e, prg))?;
-    let mut eval = Evaluator::new(&typed_prg, &main_fn, &circuit);
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
     eval.set_i32(0);
     eval.set_i32(0);
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-    let expected = Literal::parse(&typed_prg, &Type::Tuple(vec![]), "()")?;
-    assert_eq!(r, expected);
+    assert_eq!(r.to_string(), "()");
     Ok(())
 }

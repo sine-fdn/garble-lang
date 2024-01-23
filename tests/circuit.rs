@@ -12,10 +12,13 @@ pub fn main(_x: bool) -> bool {
     true
 }
 ";
-    let (_, _, unoptimized) = compile(unoptimized, "main").map_err(|e| e.prettify(unoptimized))?;
-    let (_, _, optimized) = compile(optimized, "main").map_err(|e| e.prettify(optimized))?;
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(unoptimized.gates.len(), optimized.gates.len());
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
     Ok(())
 }
 
@@ -31,10 +34,13 @@ pub fn main(_x: i32) -> i32 {
     10i32
 }
 ";
-    let (_, _, unoptimized) = compile(unoptimized, "main").map_err(|e| e.prettify(unoptimized))?;
-    let (_, _, optimized) = compile(optimized, "main").map_err(|e| e.prettify(optimized))?;
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(unoptimized.gates.len(), optimized.gates.len());
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
     Ok(())
 }
 
@@ -51,9 +57,12 @@ pub fn main(b: bool, x: i32) -> bool {
     if b { y } else { y }
 }
 ";
-    let (_, _, unoptimized) = compile(unoptimized, "main").map_err(|e| e.prettify(unoptimized))?;
-    let (_, _, optimized) = compile(optimized, "main").map_err(|e| e.prettify(optimized))?;
-    assert_eq!(unoptimized.gates.len(), optimized.gates.len());
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
     Ok(())
 }
 
@@ -69,9 +78,12 @@ pub fn main(b: bool) -> bool {
     b
 }
 ";
-    let (_, _, unoptimized) = compile(unoptimized, "main").map_err(|e| e.prettify(unoptimized))?;
-    let (_, _, optimized) = compile(optimized, "main").map_err(|e| e.prettify(optimized))?;
-    assert_eq!(unoptimized.gates.len(), optimized.gates.len());
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
     Ok(())
 }
 
@@ -98,9 +110,12 @@ pub fn main(arr1: [u8; 8], arr2: [u8; 8], choice: bool) -> [u8; 8] {
     arr
 }
 ";
-    let (_, _, unoptimized) = compile(unoptimized, "main").map_err(|e| e.prettify(unoptimized))?;
-    let (_, _, optimized) = compile(optimized, "main").map_err(|e| e.prettify(optimized))?;
-    assert_eq!(unoptimized.gates.len(), optimized.gates.len());
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
     Ok(())
 }
 
@@ -127,8 +142,11 @@ pub fn main(arr1: [u8; 8], arr2: [u8; 8], choice: bool) -> [u8; 8] {
     arr
 }
 ";
-    let (_, _, unoptimized) = compile(unoptimized, "main").map_err(|e| e.prettify(unoptimized))?;
-    let (_, _, optimized) = compile(optimized, "main").map_err(|e| e.prettify(optimized))?;
-    assert_eq!(unoptimized.gates.len(), optimized.gates.len());
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
     Ok(())
 }
