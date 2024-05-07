@@ -75,7 +75,12 @@ impl Literal {
         };
         let mut env = Env::new();
         let mut fns = TypedFns::new();
-        let defs = Defs::new(&checked.struct_defs, &checked.enum_defs);
+        let const_types = checked
+            .const_defs
+            .iter()
+            .map(|(n, c)| (n.clone(), c.ty.clone()))
+            .collect();
+        let defs = Defs::new(&const_types, &checked.struct_defs, &checked.enum_defs);
         let mut expr = scan(literal)?
             .parse_literal()?
             .type_check(&top_level_defs, &mut env, &mut fns, &defs)

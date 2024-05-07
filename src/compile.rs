@@ -9,6 +9,7 @@ use crate::{
     },
     circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, PanicResult, USIZE_BITS},
     env::Env,
+    literal::Literal,
     token::{SignedNumType, UnsignedNumType},
     TypedExpr, TypedFnDef, TypedPattern, TypedProgram, TypedStmt,
 };
@@ -18,6 +19,8 @@ use crate::{
 pub enum CompilerError {
     /// The specified function could not be compiled, as it was not found in the program.
     FnNotFound(String),
+    /// The provided constant was not of the required type.
+    InvalidLiteralType(Literal, Type),
 }
 
 impl std::fmt::Display for CompilerError {
@@ -26,6 +29,9 @@ impl std::fmt::Display for CompilerError {
             CompilerError::FnNotFound(fn_name) => f.write_fmt(format_args!(
                 "Could not find any function with name '{fn_name}'"
             )),
+            CompilerError::InvalidLiteralType(literal, ty) => {
+                f.write_fmt(format_args!("The literal is not of type '{ty}': {literal}"))
+            }
         }
     }
 }
@@ -36,9 +42,40 @@ impl TypedProgram {
     /// Assumes that the input program has been correctly type-checked and **panics** if
     /// incompatible types are found that should have been caught by the type-checker.
     pub fn compile(&self, fn_name: &str) -> Result<(Circuit, &TypedFnDef), CompilerError> {
+        self.compile_with_constants(fn_name, HashMap::new())
+    }
+
+    /// Compiles the (type-checked) program with provided constants, producing a circuit of gates.
+    ///
+    /// Assumes that the input program has been correctly type-checked and **panics** if
+    /// incompatible types are found that should have been caught by the type-checker.
+    pub fn compile_with_constants(
+        &self,
+        fn_name: &str,
+        consts: HashMap<String, HashMap<String, Literal>>,
+    ) -> Result<(Circuit, &TypedFnDef), CompilerError> {
         let mut env = Env::new();
         let mut input_gates = vec![];
         let mut wire = 2;
+        for (party, deps) in self.const_deps.iter() {
+            for (c, (identifier, ty)) in deps {
+                let Some(party_deps) = consts.get(party) else {
+                    todo!("missing party dep for {party}");
+                };
+                let Some(literal) = party_deps.get(c) else {
+                    todo!("missing value {party}::{c}");
+                };
+                if literal.is_of_type(self, ty) {
+                    let bits = literal.as_bits(self).iter().map(|b| *b as usize).collect();
+                    env.let_in_current_scope(identifier.clone(), bits);
+                } else {
+                    return Err(CompilerError::InvalidLiteralType(
+                        literal.clone(),
+                        ty.clone(),
+                    ));
+                }
+            }
+        }
         if let Some(fn_def) = self.fn_defs.get(fn_name) {
             for param in fn_def.params.iter() {
                 let type_size = param.ty.size_in_bits_for_defs(self);

@@ -11,12 +11,36 @@ use crate::token::{MetaInfo, SignedNumType, UnsignedNumType};
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Program<T> {
+    /// The external constants that the top level const definitions depend upon.
+    pub const_deps: HashMap<String, HashMap<String, (String, T)>>,
+    /// Top level const definitions.
+    pub const_defs: HashMap<String, ConstDef<T>>,
     /// Top level struct type definitions.
     pub struct_defs: HashMap<String, StructDef>,
     /// Top level enum type definitions.
     pub enum_defs: HashMap<String, EnumDef>,
     /// Top level function definitions.
     pub fn_defs: HashMap<String, FnDef<T>>,
+}
+
+/// A top level const definition.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ConstDef<T> {
+    /// The type of the constant.
+    pub ty: Type,
+    /// The value of the constant.
+    pub value: ConstExpr<T>,
+    /// The location in the source code.
+    pub meta: MetaInfo,
+}
+
+/// A constant value, either a literal or a namespaced symbol.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ConstExpr<T> {
+    /// A constant value specified as a literal value.
+    Literal(Expr<T>),
 }
 
 /// A top level struct type definition.

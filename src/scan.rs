@@ -274,6 +274,7 @@ impl<'a> Scanner<'a> {
                         }
                         let identifier: String = chars.into_iter().collect();
                         match identifier.as_str() {
+                            "const" => self.push_token(TokenEnum::KeywordConst),
                             "struct" => self.push_token(TokenEnum::KeywordStruct),
                             "enum" => self.push_token(TokenEnum::KeywordEnum),
                             "fn" => self.push_token(TokenEnum::KeywordFn),

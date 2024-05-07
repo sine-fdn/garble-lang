@@ -18,10 +18,12 @@ pub enum TokenEnum {
     UnsignedNum(u64, UnsignedNumType),
     /// Signed number.
     SignedNum(i64, SignedNumType),
-    /// `enum` keyword.
-    KeywordEnum,
+    /// `const` keyword.
+    KeywordConst,
     /// `struct` keyword.
     KeywordStruct,
+    /// `enum` keyword.
+    KeywordEnum,
     /// `fn` keyword.
     KeywordFn,
     /// `let` keyword.
@@ -121,6 +123,7 @@ impl std::fmt::Display for TokenEnum {
             TokenEnum::ConstantIndexOrSize(num) => f.write_fmt(format_args!("{num}")),
             TokenEnum::UnsignedNum(num, suffix) => f.write_fmt(format_args!("{num}{suffix}")),
             TokenEnum::SignedNum(num, suffix) => f.write_fmt(format_args!("{num}{suffix}")),
+            TokenEnum::KeywordConst => f.write_str("const"),
             TokenEnum::KeywordStruct => f.write_str("struct"),
             TokenEnum::KeywordEnum => f.write_str("enum"),
             TokenEnum::KeywordFn => f.write_str("fn"),

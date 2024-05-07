@@ -4,8 +4,8 @@ use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, Program, Stmt,
-        StmtEnum, StructDef, Type, UnaryOp, Variant, VariantExpr, VariantExprEnum,
+        ConstDef, ConstExpr, EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum,
+        Program, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant, VariantExpr, VariantExprEnum,
     },
     scan::Tokens,
     token::{MetaInfo, SignedNumType, Token, TokenEnum, UnsignedNumType},
@@ -116,6 +116,7 @@ impl Parser {
             TokenEnum::KeywordStruct,
             TokenEnum::KeywordEnum,
         ];
+        let mut const_defs = HashMap::new();
         let mut struct_defs = HashMap::new();
         let mut enum_defs = HashMap::new();
         let mut fn_defs = HashMap::new();
@@ -124,6 +125,14 @@ impl Parser {
             match token_enum {
                 TokenEnum::KeywordPub if is_pub.is_none() => {
                     is_pub = Some(meta);
+                }
+                TokenEnum::KeywordConst => {
+                    if let Ok((const_name, const_def)) = self.parse_const_def(meta) {
+                        const_defs.insert(const_name, const_def);
+                    } else {
+                        self.consume_until_one_of(&top_level_keywords);
+                    }
+                    is_pub = None;
                 }
                 TokenEnum::KeywordStruct => {
                     if let Ok((struct_name, struct_def)) = self.parse_struct_def(meta) {
@@ -158,12 +167,45 @@ impl Parser {
         }
         if self.errors.is_empty() {
             return Ok(Program {
+                const_deps: HashMap::new(),
+                const_defs,
                 struct_defs,
                 enum_defs,
                 fn_defs,
             });
         }
         Err(self.errors)
+    }
+
+    fn parse_const_def(&mut self, start: MetaInfo) -> Result<(String, ConstDef<()>), ()> {
+        // const keyword was already consumed by the top-level parser
+        let (identifier, _) = self.expect_identifier()?;
+
+        self.expect(&TokenEnum::Colon)?;
+
+        let (ty, _) = self.parse_type()?;
+
+        self.expect(&TokenEnum::Eq)?;
+
+        let Some(token) = self.tokens.next() else {
+            self.push_error(ParseErrorEnum::InvalidTopLevelDef, start);
+            return Err(());
+        };
+        match self.parse_literal(token, true) {
+            Ok(literal) => {
+                let end = self.expect(&TokenEnum::Semicolon)?;
+                let meta = join_meta(start, end);
+                Ok((
+                    identifier,
+                    ConstDef {
+                        ty,
+                        value: ConstExpr::Literal(literal),
+                        meta,
+                    },
+                ))
+            }
+            Err(_) => todo!("non-literal const def"),
+        }
     }
 
     fn parse_struct_def(&mut self, start: MetaInfo) -> Result<(String, StructDef), ()> {

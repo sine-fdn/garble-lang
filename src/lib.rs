@@ -49,7 +49,10 @@ use eval::{EvalError, Evaluator};
 use literal::Literal;
 use parse::ParseError;
 use scan::{scan, ScanError};
-use std::fmt::{Display, Write as _};
+use std::{
+    collections::HashMap,
+    fmt::{Display, Write as _},
+};
 use token::MetaInfo;
 
 #[cfg(feature = "serde")]
@@ -99,6 +102,21 @@ pub fn check(prg: &str) -> Result<TypedProgram, Error> {
 pub fn compile(prg: &str) -> Result<GarbleProgram, Error> {
     let program = check(prg)?;
     let (circuit, main) = program.compile("main")?;
+    let main = main.clone();
+    Ok(GarbleProgram {
+        program,
+        main,
+        circuit,
+    })
+}
+
+/// Scans, parses, type-checks and then compiles the `"main"` fn of a program to a boolean circuit.
+pub fn compile_with_constants(
+    prg: &str,
+    consts: HashMap<String, HashMap<String, Literal>>,
+) -> Result<GarbleProgram, Error> {
+    let program = check(prg)?;
+    let (circuit, main) = program.compile_with_constants("main", consts)?;
     let main = main.clone();
     Ok(GarbleProgram {
         program,

@@ -5,8 +5,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::{
-        self, EnumDef, Expr, ExprEnum, Mutability, Op, ParamDef, Pattern, PatternEnum, Stmt,
-        StmtEnum, StructDef, Type, UnaryOp, Variant, VariantExpr, VariantExprEnum,
+        self, ConstDef, ConstExpr, EnumDef, Expr, ExprEnum, Mutability, Op, ParamDef, Pattern,
+        PatternEnum, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant, VariantExpr,
+        VariantExprEnum,
     },
     env::Env,
     token::{MetaInfo, SignedNumType, UnsignedNumType},
@@ -50,7 +51,7 @@ pub enum TypeErrorEnum {
     /// The struct constructor is missing the specified field.
     MissingStructField(String, String),
     /// No enum declaration with the specified name exists.
-    UnknownEnum(String),
+    UnknownEnum(String, String),
     /// The enum exists, but no variant declaration with the specified name was found.
     UnknownEnumVariant(String, String),
     /// No variable or function with the specified name exists in the current scope.
@@ -137,8 +138,8 @@ impl std::fmt::Display for TypeErrorEnum {
             TypeErrorEnum::MissingStructField(struct_name, struct_field) => f.write_fmt(
                 format_args!("Field '{struct_field}' is missing for struct '{struct_name}'"),
             ),
-            TypeErrorEnum::UnknownEnum(enum_name) => {
-                f.write_fmt(format_args!("Unknown enum '{enum_name}'"))
+            TypeErrorEnum::UnknownEnum(enum_name, enum_variant) => {
+                f.write_fmt(format_args!("Unknown enum '{enum_name}::{enum_variant}'"))
             }
             TypeErrorEnum::UnknownEnumVariant(enum_name, enum_variant) => f.write_fmt(
                 format_args!("Unknown enum variant '{enum_name}::{enum_variant}'"),
@@ -277,6 +278,7 @@ impl Type {
 
 /// Static top-level definitions of enums and functions.
 pub struct Defs<'a> {
+    consts: HashMap<&'a str, &'a Type>,
     structs: HashMap<&'a str, (Vec<&'a str>, HashMap<&'a str, Type>)>,
     enums: HashMap<&'a str, HashMap<&'a str, Option<Vec<Type>>>>,
     fns: HashMap<&'a str, &'a UntypedFnDef>,
@@ -284,14 +286,19 @@ pub struct Defs<'a> {
 
 impl<'a> Defs<'a> {
     pub(crate) fn new(
+        const_defs: &'a HashMap<String, Type>,
         struct_defs: &'a HashMap<String, StructDef>,
         enum_defs: &'a HashMap<String, EnumDef>,
     ) -> Self {
         let mut defs = Self {
+            consts: HashMap::new(),
             structs: HashMap::new(),
             enums: HashMap::new(),
             fns: HashMap::new(),
         };
+        for (const_name, ty) in const_defs.iter() {
+            defs.consts.insert(const_name, &ty);
+        }
         for (struct_name, struct_def) in struct_defs.iter() {
             let mut field_names = Vec::with_capacity(struct_def.fields.len());
             let mut field_types = HashMap::with_capacity(struct_def.fields.len());
@@ -338,6 +345,63 @@ impl UntypedProgram {
             struct_names,
             enum_names,
         };
+        let mut const_deps: HashMap<String, HashMap<String, (String, Type)>> = HashMap::new();
+        let mut const_types = HashMap::with_capacity(self.const_defs.len());
+        let mut const_defs = HashMap::with_capacity(self.const_defs.len());
+        {
+            let top_level_defs = TopLevelTypes {
+                struct_names: HashSet::new(),
+                enum_names: HashSet::new(),
+            };
+            let mut env = Env::new();
+            let mut fns = TypedFns {
+                currently_being_checked: HashSet::new(),
+                typed: HashMap::new(),
+            };
+            let defs = Defs {
+                consts: HashMap::new(),
+                structs: HashMap::new(),
+                enums: HashMap::new(),
+                fns: HashMap::new(),
+            };
+            for (const_name, const_def) in self.const_defs.iter() {
+                match &const_def.value {
+                    ConstExpr::Literal(expr) => {
+                        match expr.type_check(&top_level_defs, &mut env, &mut fns, &defs) {
+                            Ok(mut expr) => {
+                                if let Err(errs) = check_type(&mut expr, &const_def.ty) {
+                                    errors.extend(errs);
+                                }
+                                const_defs.insert(
+                                    const_name.clone(),
+                                    ConstDef {
+                                        ty: const_def.ty.clone(),
+                                        value: ConstExpr::Literal(expr),
+                                        meta: const_def.meta,
+                                    },
+                                );
+                            }
+                            Err(errs) => {
+                                for e in errs {
+                                    if let Some(e) = e {
+                                        if let TypeError(TypeErrorEnum::UnknownEnum(p, n), _) = e {
+                                            // ignore this error, constant can be provided later during compilation
+                                            const_deps.entry(p).or_default().insert(
+                                                n,
+                                                (const_name.clone(), const_def.ty.clone()),
+                                            );
+                                        } else {
+                                            errors.push(Some(e));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        const_types.insert(const_name.clone(), const_def.ty.clone());
+                    }
+                }
+            }
+        }
         let mut struct_defs = HashMap::with_capacity(self.struct_defs.len());
         for (struct_name, struct_def) in self.struct_defs.iter() {
             let meta = struct_def.meta;
@@ -372,7 +436,7 @@ impl UntypedProgram {
             enum_defs.insert(enum_name.clone(), EnumDef { variants, meta });
         }
 
-        let mut untyped_defs = Defs::new(&struct_defs, &enum_defs);
+        let mut untyped_defs = Defs::new(&const_types, &struct_defs, &enum_defs);
         let mut checked_fn_defs = TypedFns::new();
         for (fn_name, fn_def) in self.fn_defs.iter() {
             untyped_defs.fns.insert(fn_name, fn_def);
@@ -406,6 +470,8 @@ impl UntypedProgram {
         }
         if errors.is_empty() {
             Ok(TypedProgram {
+                const_deps,
+                const_defs,
                 struct_defs,
                 enum_defs,
                 fn_defs,
@@ -677,12 +743,15 @@ impl UntypedExpr {
                 Some((None, _mutability)) => {
                     return Err(vec![None]);
                 }
-                None => {
-                    return Err(vec![Some(TypeError(
-                        TypeErrorEnum::UnknownIdentifier(identifier.clone()),
-                        meta,
-                    ))]);
-                }
+                None => match defs.consts.get(identifier.as_str()) {
+                    Some(&ty) => (ExprEnum::Identifier(identifier.clone()), ty.clone()),
+                    None => {
+                        return Err(vec![Some(TypeError(
+                            TypeErrorEnum::UnknownIdentifier(identifier.clone()),
+                            meta,
+                        ))]);
+                    }
+                },
             },
             ExprEnum::ArrayLiteral(fields) => {
                 let mut errors = vec![];
@@ -966,9 +1035,9 @@ impl UntypedExpr {
                 )
             }
             ExprEnum::EnumLiteral(identifier, variant) => {
+                let VariantExpr(variant_name, variant, variant_meta) = variant.as_ref();
                 if let Some(enum_def) = defs.enums.get(identifier.as_str()) {
-                    let VariantExpr(variant_name, variant, meta) = variant.as_ref();
-                    let meta = *meta;
+                    let meta = *variant_meta;
                     if let Some(types) = enum_def.get(variant_name.as_str()) {
                         match (variant, types) {
                             (VariantExprEnum::Unit, None) => {
@@ -1039,7 +1108,8 @@ impl UntypedExpr {
                         return Err(vec![Some(TypeError(e, meta))]);
                     }
                 } else {
-                    let e = TypeErrorEnum::UnknownEnum(identifier.clone());
+                    let e =
+                        TypeErrorEnum::UnknownEnum(identifier.clone(), variant_name.to_string());
                     return Err(vec![Some(TypeError(e, meta))]);
                 }
             }
@@ -1402,7 +1472,7 @@ impl UntypedPattern {
                         return Err(vec![Some(TypeError(e, meta))]);
                     }
                 } else {
-                    let e = TypeErrorEnum::UnknownEnum(enum_name.clone());
+                    let e = TypeErrorEnum::UnknownEnum(enum_name.clone(), variant_name.to_string());
                     return Err(vec![Some(TypeError(e, meta))]);
                 }
             }
