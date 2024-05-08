@@ -363,10 +363,7 @@ impl Parser {
                     self.expect(&TokenEnum::Semicolon)?;
                     return Ok(Stmt::new(StmtEnum::Let(pattern, binding), meta));
                 } else {
-                    self.push_error_for_next(ParseErrorEnum::ExpectedStmt);
                     self.consume_until_one_of(&[TokenEnum::Semicolon]);
-                    self.advance();
-                    self.parse_expr()?;
                     self.expect(&TokenEnum::Semicolon)?;
                 }
             }
@@ -449,6 +446,7 @@ impl Parser {
             && !self.peek(&TokenEnum::KeywordFn)
             && !self.peek(&TokenEnum::KeywordStruct)
             && !self.peek(&TokenEnum::KeywordEnum)
+            && !self.tokens.peek().is_none()
         {
             if let Ok(stmt) = self.parse_stmt() {
                 stmts.push(stmt);
