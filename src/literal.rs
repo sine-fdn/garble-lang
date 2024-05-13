@@ -174,9 +174,10 @@ impl Literal {
         checked: &TypedProgram,
         ty: &Type,
         bits: &[bool],
+        const_sizes: &HashMap<String, usize>,
     ) -> Result<Self, EvalError> {
         match EvalPanic::parse(bits) {
-            Ok(bits) => Literal::from_unwrapped_bits(checked, ty, bits),
+            Ok(bits) => Literal::from_unwrapped_bits(checked, ty, bits, const_sizes),
             Err(panic) => Err(EvalError::Panic(panic)),
         }
     }
@@ -191,6 +192,7 @@ impl Literal {
         checked: &TypedProgram,
         ty: &Type,
         bits: &[bool],
+        const_sizes: &HashMap<String, usize>,
     ) -> Result<Self, EvalError> {
         match ty {
             Type::Bool => {
@@ -208,7 +210,7 @@ impl Literal {
                 }
             }
             Type::Unsigned(unsigned_ty) => {
-                let size = ty.size_in_bits_for_defs(checked);
+                let size = ty.size_in_bits_for_defs(checked, const_sizes);
                 if bits.len() == size {
                     let mut n = 0;
                     for (i, output) in bits.iter().copied().enumerate() {
@@ -223,7 +225,7 @@ impl Literal {
                 }
             }
             Type::Signed(signed_ty) => {
-                let size = ty.size_in_bits_for_defs(checked);
+                let size = ty.size_in_bits_for_defs(checked, const_sizes);
                 if bits.len() == size {
                     let mut n = 0;
                     for (i, output) in bits.iter().copied().enumerate() {
@@ -244,12 +246,34 @@ impl Literal {
                 }
             }
             Type::Array(ty, size) => {
-                let ty_size = ty.size_in_bits_for_defs(checked);
+                let ty_size = ty.size_in_bits_for_defs(checked, const_sizes);
                 let mut elems = vec![];
                 let mut i = 0;
                 for _ in 0..*size {
                     let bits = &bits[i..i + ty_size];
-                    elems.push(Literal::from_unwrapped_bits(checked, ty, bits)?);
+                    elems.push(Literal::from_unwrapped_bits(
+                        checked,
+                        ty,
+                        bits,
+                        const_sizes,
+                    )?);
+                    i += ty_size;
+                }
+                Ok(Literal::Array(elems))
+            }
+            Type::ArrayConst(ty, size) => {
+                let size = const_sizes.get(size).unwrap();
+                let ty_size = ty.size_in_bits_for_defs(checked, const_sizes);
+                let mut elems = vec![];
+                let mut i = 0;
+                for _ in 0..*size {
+                    let bits = &bits[i..i + ty_size];
+                    elems.push(Literal::from_unwrapped_bits(
+                        checked,
+                        ty,
+                        bits,
+                        const_sizes,
+                    )?);
                     i += ty_size;
                 }
                 Ok(Literal::Array(elems))
@@ -258,9 +282,14 @@ impl Literal {
                 let mut fields = vec![];
                 let mut i = 0;
                 for ty in field_types {
-                    let ty_size = ty.size_in_bits_for_defs(checked);
+                    let ty_size = ty.size_in_bits_for_defs(checked, const_sizes);
                     let bits = &bits[i..i + ty_size];
-                    fields.push(Literal::from_unwrapped_bits(checked, ty, bits)?);
+                    fields.push(Literal::from_unwrapped_bits(
+                        checked,
+                        ty,
+                        bits,
+                        const_sizes,
+                    )?);
                     i += ty_size;
                 }
                 Ok(Literal::Tuple(fields))
@@ -270,9 +299,9 @@ impl Literal {
                 let mut i = 0;
                 let struct_def = checked.struct_defs.get(struct_name).unwrap();
                 for (field_name, ty) in struct_def.fields.iter() {
-                    let ty_size = ty.size_in_bits_for_defs(checked);
+                    let ty_size = ty.size_in_bits_for_defs(checked, const_sizes);
                     let bits = &bits[i..i + ty_size];
-                    let value = Literal::from_unwrapped_bits(checked, ty, bits)?;
+                    let value = Literal::from_unwrapped_bits(checked, ty, bits, const_sizes)?;
                     fields.push((field_name.clone(), value));
                     i += ty_size;
                 }
@@ -299,10 +328,11 @@ impl Literal {
                             let field = Literal::from_unwrapped_bits(
                                 checked,
                                 ty,
-                                &bits[i..i + ty.size_in_bits_for_defs(checked)],
+                                &bits[i..i + ty.size_in_bits_for_defs(checked, const_sizes)],
+                                const_sizes,
                             )?;
                             fields.push(field);
-                            i += ty.size_in_bits_for_defs(checked);
+                            i += ty.size_in_bits_for_defs(checked, const_sizes);
                         }
                         let variant = VariantLiteral::Tuple(fields);
                         Ok(Literal::Enum(
@@ -321,24 +351,28 @@ impl Literal {
     }
 
     /// Encodes the literal as bits, looking up enum defs in the program.
-    pub fn as_bits(&self, checked: &TypedProgram) -> Vec<bool> {
+    pub fn as_bits(
+        &self,
+        checked: &TypedProgram,
+        const_sizes: &HashMap<String, usize>,
+    ) -> Vec<bool> {
         match self {
             Literal::True => vec![true],
             Literal::False => vec![false],
             Literal::NumUnsigned(n, ty) => {
-                let size = Type::Unsigned(*ty).size_in_bits_for_defs(checked);
+                let size = Type::Unsigned(*ty).size_in_bits_for_defs(checked, const_sizes);
                 let mut bits = vec![];
                 unsigned_to_bits(*n, size, &mut bits);
                 bits
             }
             Literal::NumSigned(n, ty) => {
-                let size = Type::Signed(*ty).size_in_bits_for_defs(checked);
+                let size = Type::Signed(*ty).size_in_bits_for_defs(checked, const_sizes);
                 let mut bits = vec![];
                 signed_to_bits(*n, size, &mut bits);
                 bits
             }
             Literal::ArrayRepeat(elem, size) => {
-                let elem = elem.as_bits(checked);
+                let elem = elem.as_bits(checked, const_sizes);
                 let elem_size = elem.len();
                 let mut bits = vec![false; elem_size * size];
                 for i in 0..*size {
@@ -349,28 +383,28 @@ impl Literal {
             Literal::Array(elems) => {
                 let mut bits = vec![];
                 for elem in elems {
-                    bits.extend(elem.as_bits(checked))
+                    bits.extend(elem.as_bits(checked, const_sizes))
                 }
                 bits
             }
             Literal::Tuple(fields) => {
                 let mut bits = vec![];
                 for f in fields {
-                    bits.extend(f.as_bits(checked))
+                    bits.extend(f.as_bits(checked, const_sizes))
                 }
                 bits
             }
             Literal::Struct(_, fields) => {
                 let mut bits = vec![];
                 for (_, f) in fields {
-                    bits.extend(f.as_bits(checked))
+                    bits.extend(f.as_bits(checked, const_sizes))
                 }
                 bits
             }
             Literal::Enum(enum_name, variant_name, variant) => {
                 let enum_def = checked.enum_defs.get(enum_name).unwrap();
                 let tag_size = enum_tag_size(enum_def);
-                let max_size = enum_max_size(enum_def, checked);
+                let max_size = enum_max_size(enum_def, checked, const_sizes);
                 let mut wires = vec![false; max_size];
                 let tag_number = enum_tag_number(enum_def, variant_name);
                 for (i, wire) in wires.iter_mut().enumerate().take(tag_size) {
@@ -381,7 +415,7 @@ impl Literal {
                     VariantLiteral::Unit => {}
                     VariantLiteral::Tuple(fields) => {
                         for f in fields {
-                            let f = f.as_bits(checked);
+                            let f = f.as_bits(checked, const_sizes);
                             wires[w..w + f.len()].copy_from_slice(&f);
                             w += f.len();
                         }
@@ -391,7 +425,7 @@ impl Literal {
             }
             Literal::Range((min, min_ty), (max, _)) => {
                 let elems: Vec<usize> = (*min as usize..*max as usize).collect();
-                let elem_size = Type::Unsigned(*min_ty).size_in_bits_for_defs(checked);
+                let elem_size = Type::Unsigned(*min_ty).size_in_bits_for_defs(checked, const_sizes);
                 let mut bits = Vec::with_capacity(elems.len() * elem_size);
                 for elem in elems {
                     unsigned_to_bits(elem as u64, elem_size, &mut bits);

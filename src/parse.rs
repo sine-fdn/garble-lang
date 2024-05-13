@@ -1285,19 +1285,28 @@ impl Parser {
                 };
                 if self.peek(&TokenEnum::Semicolon) {
                     self.expect(&TokenEnum::Semicolon)?;
-                    let size = if let Some(Token(TokenEnum::ConstantIndexOrSize(n), _)) =
-                        self.tokens.peek()
-                    {
-                        let n = *n;
-                        self.advance();
-                        n as usize
-                    } else {
-                        self.push_error_for_next(ParseErrorEnum::InvalidArraySize);
-                        return Err(());
-                    };
-                    let meta_end = self.expect(&TokenEnum::RightBracket)?;
-                    let meta = join_meta(meta, meta_end);
-                    Expr::untyped(ExprEnum::ArrayRepeatLiteral(Box::new(elem), size), meta)
+                    match self.tokens.peek().cloned() {
+                        Some(Token(TokenEnum::ConstantIndexOrSize(n), _)) => {
+                            self.advance();
+                            let meta_end = self.expect(&TokenEnum::RightBracket)?;
+                            let meta = join_meta(meta, meta_end);
+                            let size = n as usize;
+                            Expr::untyped(ExprEnum::ArrayRepeatLiteral(Box::new(elem), size), meta)
+                        }
+                        Some(Token(TokenEnum::Identifier(n), _)) => {
+                            self.advance();
+                            let meta_end = self.expect(&TokenEnum::RightBracket)?;
+                            let meta = join_meta(meta, meta_end);
+                            Expr::untyped(
+                                ExprEnum::ArrayRepeatLiteralConst(Box::new(elem), n),
+                                meta,
+                            )
+                        }
+                        _ => {
+                            self.push_error_for_next(ParseErrorEnum::InvalidArraySize);
+                            return Err(());
+                        }
+                    }
                 } else {
                     let mut elems = vec![elem];
                     while self.next_matches(&TokenEnum::Comma).is_some() {
@@ -1348,18 +1357,25 @@ impl Parser {
         } else if let Some(meta) = self.next_matches(&TokenEnum::LeftBracket) {
             let (ty, _) = self.parse_type()?;
             self.expect(&TokenEnum::Semicolon)?;
-            let size = if let Some(Token(TokenEnum::ConstantIndexOrSize(n), _)) = self.tokens.peek()
-            {
-                let n = *n;
-                self.advance();
-                n as usize
-            } else {
-                self.push_error_for_next(ParseErrorEnum::InvalidArraySize);
-                return Err(());
-            };
-            let meta_end = self.expect(&TokenEnum::RightBracket)?;
-            let meta = join_meta(meta, meta_end);
-            Ok((Type::Array(Box::new(ty), size), meta))
+            match self.tokens.peek().cloned() {
+                Some(Token(TokenEnum::ConstantIndexOrSize(n), _)) => {
+                    self.advance();
+                    let size = n as usize;
+                    let meta_end = self.expect(&TokenEnum::RightBracket)?;
+                    let meta = join_meta(meta, meta_end);
+                    Ok((Type::Array(Box::new(ty), size), meta))
+                }
+                Some(Token(TokenEnum::Identifier(n), _)) => {
+                    self.advance();
+                    let meta_end = self.expect(&TokenEnum::RightBracket)?;
+                    let meta = join_meta(meta, meta_end);
+                    Ok((Type::ArrayConst(Box::new(ty), n), meta))
+                }
+                _ => {
+                    self.push_error_for_next(ParseErrorEnum::InvalidArraySize);
+                    return Err(());
+                }
+            }
         } else {
             let (ty, meta) = self.expect_identifier()?;
             let ty = match ty.as_str() {

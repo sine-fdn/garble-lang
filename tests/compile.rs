@@ -1890,8 +1890,7 @@ fn compile_const_usize() -> Result<(), Error> {
     let prg = "
 const MY_CONST: usize = PARTY_0::MY_CONST;
 pub fn main(x: u16) -> u16 {
-    // breaks if I use 2usize instead of 2
-    let array = [2u16; 2usize];
+    let array = [2u16; MY_CONST];
     x + array[1]
 }
 ";

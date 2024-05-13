@@ -161,6 +161,8 @@ pub enum Type {
     Fn(Vec<Type>, Box<Type>),
     /// Array type of a fixed size, containing elements of the specified type.
     Array(Box<Type>, usize),
+    /// Array type of a fixed size, with the size specified by a constant.
+    ArrayConst(Box<Type>, String),
     /// Tuple type containing fields of the specified types.
     Tuple(Vec<Type>),
     /// A struct or an enum, depending on the top level definitions (used only before typechecking).
@@ -191,6 +193,13 @@ impl std::fmt::Display for Type {
                 ret_ty.fmt(f)
             }
             Type::Array(ty, size) => {
+                f.write_str("[")?;
+                ty.fmt(f)?;
+                f.write_str("; ")?;
+                size.fmt(f)?;
+                f.write_str("]")
+            }
+            Type::ArrayConst(ty, size) => {
                 f.write_str("[")?;
                 ty.fmt(f)?;
                 f.write_str("; ")?;
@@ -303,6 +312,8 @@ pub enum ExprEnum<T> {
     ArrayLiteral(Vec<Expr<T>>),
     /// Array "repeat expression", which specifies 1 element, to be repeated a number of times.
     ArrayRepeatLiteral(Box<Expr<T>>, usize),
+    /// Array "repeat expression", with the size specified by a constant.
+    ArrayRepeatLiteralConst(Box<Expr<T>>, String),
     /// Access of an array at the specified index, returning its element.
     ArrayAccess(Box<Expr<T>>, Box<Expr<T>>),
     /// Tuple literal containing the specified fields.

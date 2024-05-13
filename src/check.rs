@@ -113,6 +113,8 @@ pub enum TypeErrorEnum {
     PatternsAreNotExhaustive(Vec<PatternStack>),
     /// The expression cannot be matched upon.
     TypeDoesNotSupportPatternMatching(Type),
+    /// The specified identifier is not a constant.
+    ArraySizeNotConst(String),
 }
 
 impl std::fmt::Display for TypeErrorEnum {
@@ -223,6 +225,9 @@ impl std::fmt::Display for TypeErrorEnum {
             TypeErrorEnum::TypeDoesNotSupportPatternMatching(ty) => {
                 f.write_fmt(format_args!("Type {ty} does not support pattern matching"))
             }
+            TypeErrorEnum::ArraySizeNotConst(identifier) => {
+                f.write_fmt(format_args!("Array sizes must be constants, but '{identifier}' is a variable"))
+            }
         }
     }
 }
@@ -251,6 +256,10 @@ impl Type {
             Type::Array(elem, size) => {
                 let elem = elem.as_concrete_type(types)?;
                 Type::Array(Box::new(elem), *size)
+            }
+            Type::ArrayConst(elem, size) => {
+                let elem = elem.as_concrete_type(types)?;
+                Type::ArrayConst(Box::new(elem), size.clone())
             }
             Type::Tuple(fields) => {
                 let mut concrete_fields = Vec::with_capacity(fields.len());
@@ -792,6 +801,37 @@ impl UntypedExpr {
                 let ty = Type::Array(Box::new(value.ty.clone()), *size);
                 (ExprEnum::ArrayRepeatLiteral(Box::new(value), *size), ty)
             }
+            ExprEnum::ArrayRepeatLiteralConst(value, size) => match env.get(size) {
+                None => match defs.consts.get(size.as_str()) {
+                    Some(&ty) if ty == &Type::Unsigned(UnsignedNumType::Usize) => {
+                        let value = value.type_check(top_level_defs, env, fns, defs)?;
+                        let ty = Type::ArrayConst(Box::new(value.ty.clone()), size.clone());
+                        (
+                            ExprEnum::ArrayRepeatLiteralConst(Box::new(value), size.clone()),
+                            ty,
+                        )
+                    }
+                    Some(&ty) => {
+                        let e = TypeErrorEnum::UnexpectedType {
+                            expected: Type::Unsigned(UnsignedNumType::Usize),
+                            actual: ty.clone(),
+                        };
+                        return Err(vec![Some(TypeError(e, meta))]);
+                    }
+                    None => {
+                        return Err(vec![Some(TypeError(
+                            TypeErrorEnum::UnknownIdentifier(size.clone()),
+                            meta,
+                        ))]);
+                    }
+                },
+                Some(_) => {
+                    return Err(vec![Some(TypeError(
+                        TypeErrorEnum::ArraySizeNotConst(size.clone()),
+                        meta,
+                    ))]);
+                }
+            },
             ExprEnum::ArrayAccess(arr, index) => {
                 let arr = arr.type_check(top_level_defs, env, fns, defs)?;
                 let mut index = index.type_check(top_level_defs, env, fns, defs)?;
@@ -1124,7 +1164,7 @@ impl UntypedExpr {
                     | Type::Tuple(_)
                     | Type::Struct(_)
                     | Type::Enum(_) => {}
-                    Type::Fn(_, _) | Type::Array(_, _) => {
+                    Type::Fn(_, _) | Type::Array(_, _) | Type::ArrayConst(_, _) => {
                         let e = TypeErrorEnum::TypeDoesNotSupportPatternMatching(ty.clone());
                         return Err(vec![Some(TypeError(e, meta))]);
                     }
@@ -1519,6 +1559,7 @@ enum Ctor {
     Struct(String, Vec<(String, Type)>),
     Variant(String, String, Option<Vec<Type>>),
     Array(Box<Type>, usize),
+    ArrayConst(Box<Type>, String),
 }
 
 type PatternStack = Vec<TypedPattern>;
@@ -1587,7 +1628,7 @@ fn specialize(ctor: &Ctor, pattern: &[TypedPattern]) -> Vec<PatternStack> {
             }
             _ => vec![],
         },
-        Ctor::Array(_, _) => match head_enum {
+        Ctor::Array(_, _) | Ctor::ArrayConst(_, _) => match head_enum {
             PatternEnum::Identifier(_) => vec![tail.collect()],
             _ => vec![],
         },
@@ -1793,6 +1834,7 @@ fn split_ctor(patterns: &[PatternStack], q: &[TypedPattern], defs: &Defs) -> Vec
             vec![Ctor::Tuple(fields.clone())]
         }
         Type::Array(elem_ty, size) => vec![Ctor::Array(elem_ty.clone(), *size)],
+        Type::ArrayConst(elem_ty, size) => vec![Ctor::ArrayConst(elem_ty.clone(), size.clone())],
         Type::Fn(_, _) => {
             panic!("Type {ty:?} does not support pattern matching")
         }
@@ -1886,6 +1928,14 @@ fn usefulness(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> Vec<
                             Pattern::typed(
                                 PatternEnum::Identifier("_".to_string()),
                                 Type::Array(elem_ty.clone(), *size),
+                                meta,
+                            ),
+                        ),
+                        Ctor::ArrayConst(elem_ty, size) => witness.insert(
+                            0,
+                            Pattern::typed(
+                                PatternEnum::Identifier("_".to_string()),
+                                Type::ArrayConst(elem_ty.clone(), size.clone()),
                                 meta,
                             ),
                         ),

@@ -1,6 +1,6 @@
 //! Evaluates a [`crate::circuit::Circuit`] with inputs supplied by different parties.
 
-use std::fmt::Debug;
+use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
     ast::Type,
@@ -20,6 +20,7 @@ pub struct Evaluator<'a> {
     /// The compiled circuit.
     pub circuit: &'a Circuit,
     inputs: Vec<Vec<bool>>,
+    const_sizes: HashMap<String, usize>,
 }
 
 impl<'a> Evaluator<'a> {
@@ -30,6 +31,37 @@ impl<'a> Evaluator<'a> {
             main_fn,
             circuit,
             inputs: vec![],
+            const_sizes: HashMap::new(),
+        }
+    }
+
+    /// Scans, parses, type-checks and then compiles a program for later evaluation.
+    pub fn new_with_constants(
+        program: &'a TypedProgram,
+        main_fn: &'a TypedFnDef,
+        circuit: &'a Circuit,
+        consts: &HashMap<String, HashMap<String, Literal>>,
+    ) -> Self {
+        let mut const_sizes = HashMap::new();
+        for (party, deps) in program.const_deps.iter() {
+            for (c, (identifier, _)) in deps {
+                let Some(party_deps) = consts.get(party) else {
+                    todo!("missing party dep for {party}");
+                };
+                let Some(literal) = party_deps.get(c) else {
+                    todo!("missing value {party}::{c}");
+                };
+                if let Literal::NumUnsigned(size, UnsignedNumType::Usize) = literal {
+                    const_sizes.insert(identifier.clone(), *size as usize);
+                }
+            }
+        }
+        Self {
+            program,
+            main_fn,
+            circuit,
+            inputs: vec![],
+            const_sizes,
         }
     }
 }
@@ -111,6 +143,7 @@ impl<'a> Evaluator<'a> {
             program: self.program,
             main_fn: self.main_fn,
             output,
+            const_sizes: self.const_sizes.clone(),
         })
     }
 
@@ -188,7 +221,7 @@ impl<'a> Evaluator<'a> {
                 self.inputs
                     .last_mut()
                     .unwrap()
-                    .extend(literal.as_bits(self.program));
+                    .extend(literal.as_bits(self.program, &self.const_sizes));
                 Ok(())
             } else {
                 Err(EvalError::InvalidLiteralType(literal, ty.clone()))
@@ -218,6 +251,7 @@ pub struct EvalOutput<'a> {
     program: &'a TypedProgram,
     main_fn: &'a TypedFnDef,
     output: Vec<bool>,
+    const_sizes: HashMap<String, usize>,
 }
 
 impl<'a> TryFrom<EvalOutput<'a>> for bool {
@@ -336,7 +370,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for Vec<bool> {
 impl<'a> EvalOutput<'a> {
     fn into_unsigned(self, ty: Type) -> Result<u64, EvalError> {
         let output = EvalPanic::parse(&self.output)?;
-        let size = ty.size_in_bits_for_defs(self.program);
+        let size = ty.size_in_bits_for_defs(self.program, &self.const_sizes);
         if output.len() == size {
             let mut n = 0;
             for (i, output) in output.iter().copied().enumerate() {
@@ -353,7 +387,7 @@ impl<'a> EvalOutput<'a> {
 
     fn into_signed(self, ty: Type) -> Result<i64, EvalError> {
         let output = EvalPanic::parse(&self.output)?;
-        let size = ty.size_in_bits_for_defs(self.program);
+        let size = ty.size_in_bits_for_defs(self.program, &self.const_sizes);
         if output.len() == size {
             let mut n = 0;
             for (i, output) in output.iter().copied().enumerate() {
@@ -376,6 +410,6 @@ impl<'a> EvalOutput<'a> {
     /// Decodes the evaluated result as a literal (with enums looked up in the program).
     pub fn into_literal(self) -> Result<Literal, EvalError> {
         let ret_ty = &self.main_fn.ty;
-        Literal::from_result_bits(self.program, ret_ty, &self.output)
+        Literal::from_result_bits(self.program, ret_ty, &self.output, &self.const_sizes)
     }
 }

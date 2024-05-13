@@ -53,7 +53,7 @@ use std::{
     collections::HashMap,
     fmt::{Display, Write as _},
 };
-use token::MetaInfo;
+use token::{MetaInfo, UnsignedNumType};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -107,6 +107,8 @@ pub fn compile(prg: &str) -> Result<GarbleProgram, Error> {
         program,
         main,
         circuit,
+        consts: HashMap::new(),
+        const_sizes: HashMap::new(),
     })
 }
 
@@ -116,12 +118,28 @@ pub fn compile_with_constants(
     consts: HashMap<String, HashMap<String, Literal>>,
 ) -> Result<GarbleProgram, Error> {
     let program = check(prg)?;
-    let (circuit, main) = program.compile_with_constants("main", consts)?;
+    let (circuit, main) = program.compile_with_constants("main", consts.clone())?;
     let main = main.clone();
+    let mut const_sizes = HashMap::new();
+    for (party, deps) in program.const_deps.iter() {
+        for (c, (identifier, _)) in deps {
+            let Some(party_deps) = consts.get(party) else {
+                todo!("missing party dep for {party}");
+            };
+            let Some(literal) = party_deps.get(c) else {
+                todo!("missing value {party}::{c}");
+            };
+            if let Literal::NumUnsigned(size, UnsignedNumType::Usize) = literal {
+                const_sizes.insert(identifier.clone(), *size as usize);
+            }
+        }
+    }
     Ok(GarbleProgram {
         program,
         main,
         circuit,
+        consts,
+        const_sizes,
     })
 }
 
@@ -135,16 +153,19 @@ pub struct GarbleProgram {
     pub main: TypedFnDef,
     /// The compilation output, as a circuit of boolean gates.
     pub circuit: Circuit,
+    /// The constants used for compiling the circuit.
+    pub consts: HashMap<String, HashMap<String, Literal>>,
+    const_sizes: HashMap<String, usize>,
 }
 
 /// An input argument for a Garble program and circuit.
 #[derive(Debug, Clone)]
-pub struct GarbleArgument<'a>(Literal, &'a TypedProgram);
+pub struct GarbleArgument<'a>(Literal, &'a TypedProgram, &'a HashMap<String, usize>);
 
 impl GarbleProgram {
     /// Returns an evaluator that can be used to run the compiled circuit.
     pub fn evaluator(&self) -> Evaluator<'_> {
-        Evaluator::new(&self.program, &self.main, &self.circuit)
+        Evaluator::new_with_constants(&self.program, &self.main, &self.circuit, &self.consts)
     }
 
     /// Type-checks and uses the literal as the circuit input argument with the given index.
@@ -159,7 +180,7 @@ impl GarbleProgram {
         if !literal.is_of_type(&self.program, &param.ty) {
             return Err(EvalError::InvalidLiteralType(literal, param.ty.clone()));
         }
-        Ok(GarbleArgument(literal, &self.program))
+        Ok(GarbleArgument(literal, &self.program, &self.const_sizes))
     }
 
     /// Tries to parse the string as the circuit input argument with the given index.
@@ -173,19 +194,19 @@ impl GarbleProgram {
         };
         let literal = Literal::parse(&self.program, &param.ty, literal)
             .map_err(EvalError::LiteralParseError)?;
-        Ok(GarbleArgument(literal, &self.program))
+        Ok(GarbleArgument(literal, &self.program, &self.const_sizes))
     }
 
     /// Tries to convert the circuit output back to a Garble literal.
     pub fn parse_output(&self, bits: &[bool]) -> Result<Literal, EvalError> {
-        Literal::from_result_bits(&self.program, &self.main.ty, bits)
+        Literal::from_result_bits(&self.program, &self.main.ty, bits, &self.const_sizes)
     }
 }
 
 impl GarbleArgument<'_> {
     /// Converts the argument to input bits for the compiled circuit.
     pub fn as_bits(&self) -> Vec<bool> {
-        self.0.as_bits(self.1)
+        self.0.as_bits(self.1, self.2)
     }
 
     /// Converts the argument to a Garble literal.
