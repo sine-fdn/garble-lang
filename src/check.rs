@@ -306,7 +306,7 @@ impl<'a> Defs<'a> {
             fns: HashMap::new(),
         };
         for (const_name, ty) in const_defs.iter() {
-            defs.consts.insert(const_name, &ty);
+            defs.consts.insert(const_name, ty);
         }
         for (struct_name, struct_def) in struct_defs.iter() {
             let mut field_names = Vec::with_capacity(struct_def.fields.len());
@@ -391,17 +391,15 @@ impl UntypedProgram {
                                 );
                             }
                             Err(errs) => {
-                                for e in errs {
-                                    if let Some(e) = e {
-                                        if let TypeError(TypeErrorEnum::UnknownEnum(p, n), _) = e {
-                                            // ignore this error, constant can be provided later during compilation
-                                            const_deps.entry(p).or_default().insert(
-                                                n,
-                                                (const_name.clone(), const_def.ty.clone()),
-                                            );
-                                        } else {
-                                            errors.push(Some(e));
-                                        }
+                                for e in errs.into_iter().flatten() {
+                                    if let TypeError(TypeErrorEnum::UnknownEnum(p, n), _) = e {
+                                        // ignore this error, constant can be provided later during compilation
+                                        const_deps
+                                            .entry(p)
+                                            .or_default()
+                                            .insert(n, (const_name.clone(), const_def.ty.clone()));
+                                    } else {
+                                        errors.push(Some(e));
                                     }
                                 }
                             }
@@ -681,7 +679,7 @@ impl UntypedStmt {
             ast::StmtEnum::ArrayAssign(identifier, index, value) => {
                 match env.get(identifier) {
                     Some((Some(array_ty), Mutability::Mutable)) => {
-                        let (elem_ty, _) = expect_array_type(&array_ty, meta)?;
+                        let elem_ty = expect_array_type(&array_ty, meta)?;
 
                         let mut index = index.type_check(top_level_defs, env, fns, defs)?;
                         check_type(&mut index, &Type::Unsigned(UnsignedNumType::Usize))?;
@@ -710,7 +708,7 @@ impl UntypedStmt {
             }
             ast::StmtEnum::ForEachLoop(var, binding, body) => {
                 let binding = binding.type_check(top_level_defs, env, fns, defs)?;
-                let (elem_ty, _) = expect_array_type(&binding.ty, meta)?;
+                let elem_ty = expect_array_type(&binding.ty, meta)?;
                 let mut body_typed = Vec::with_capacity(body.len());
                 env.push();
                 env.let_in_current_scope(var.clone(), (Some(elem_ty), Mutability::Immutable));
@@ -835,7 +833,7 @@ impl UntypedExpr {
             ExprEnum::ArrayAccess(arr, index) => {
                 let arr = arr.type_check(top_level_defs, env, fns, defs)?;
                 let mut index = index.type_check(top_level_defs, env, fns, defs)?;
-                let (elem_ty, _) = expect_array_type(&arr.ty, arr.meta)?;
+                let elem_ty = expect_array_type(&arr.ty, arr.meta)?;
                 check_type(&mut index, &Type::Unsigned(UnsignedNumType::Usize))?;
                 (
                     ExprEnum::ArrayAccess(Box::new(arr), Box::new(index)),
@@ -1948,9 +1946,9 @@ fn usefulness(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> Vec<
     }
 }
 
-fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<(Type, usize), TypeErrors> {
+fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<Type, TypeErrors> {
     match ty {
-        Type::Array(elem, size) => Ok((*elem.clone(), *size)),
+        Type::Array(elem, _) | Type::ArrayConst(elem, _) => Ok(*elem.clone()),
         _ => Err(vec![Some(TypeError(
             TypeErrorEnum::ExpectedArrayType(ty.clone()),
             meta,

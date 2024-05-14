@@ -4,7 +4,7 @@ use std::{cmp::max, collections::HashMap};
 
 use crate::{
     ast::{
-        EnumDef, ExprEnum, Op, Pattern, PatternEnum, StmtEnum, StructDef, Type, UnaryOp,
+        ConstExpr, EnumDef, ExprEnum, Op, Pattern, PatternEnum, StmtEnum, StructDef, Type, UnaryOp,
         VariantExpr, VariantExprEnum,
     },
     circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, PanicResult, USIZE_BITS},
@@ -96,6 +96,17 @@ impl TypedProgram {
                 env.let_in_current_scope(param.name.clone(), wires);
             }
             let mut circuit = CircuitBuilder::new(input_gates, const_sizes);
+            for (identifier, const_def) in self.const_defs.iter() {
+                match &const_def.value {
+                    ConstExpr::Literal(expr) => {
+                        if let ExprEnum::EnumLiteral(_, _) = expr.inner {
+                        } else {
+                            let bits = expr.compile(self, &mut env, &mut circuit);
+                            env.let_in_current_scope(identifier.clone(), bits);
+                        }
+                    }
+                }
+            }
             let output_gates = compile_block(&fn_def.body, self, &mut env, &mut circuit);
             Ok((circuit.build(output_gates), fn_def))
         } else {
@@ -298,6 +309,7 @@ impl TypedExpr {
             ExprEnum::ArrayAccess(array, index) => {
                 let num_elems = match &array.ty {
                     Type::Array(_, size) => *size,
+                    Type::ArrayConst(_, size) => *circuit.const_sizes().get(size).unwrap(),
                     _ => panic!("Found a non-array value in an array access expr"),
                 };
                 let elem_bits = ty.size_in_bits_for_defs(prg, circuit.const_sizes());

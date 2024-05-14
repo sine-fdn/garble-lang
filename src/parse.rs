@@ -440,13 +440,13 @@ impl Parser {
     fn parse_stmts(&mut self) -> Result<Vec<UntypedStmt>, ()> {
         let mut stmts = vec![];
         let mut has_error = false;
-        while !self.peek(&TokenEnum::RightBrace)
+        while self.tokens.peek().is_some()
+            && !self.peek(&TokenEnum::RightBrace)
             && !self.peek(&TokenEnum::Comma)
             && !self.peek(&TokenEnum::KeywordPub)
             && !self.peek(&TokenEnum::KeywordFn)
             && !self.peek(&TokenEnum::KeywordStruct)
             && !self.peek(&TokenEnum::KeywordEnum)
-            && !self.tokens.peek().is_none()
         {
             if let Ok(stmt) = self.parse_stmt() {
                 stmts.push(stmt);
