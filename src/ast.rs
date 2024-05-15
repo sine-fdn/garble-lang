@@ -14,7 +14,7 @@ pub struct Program<T> {
     /// The external constants that the top level const definitions depend upon.
     pub const_deps: HashMap<String, HashMap<String, (String, T)>>,
     /// Top level const definitions.
-    pub const_defs: HashMap<String, ConstDef<T>>,
+    pub const_defs: HashMap<String, ConstDef>,
     /// Top level struct type definitions.
     pub struct_defs: HashMap<String, StructDef>,
     /// Top level enum type definitions.
@@ -26,11 +26,11 @@ pub struct Program<T> {
 /// A top level const definition.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct ConstDef<T> {
+pub struct ConstDef {
     /// The type of the constant.
     pub ty: Type,
     /// The value of the constant.
-    pub value: ConstExpr<T>,
+    pub value: ConstExpr,
     /// The location in the source code.
     pub meta: MetaInfo,
 }
@@ -38,9 +38,26 @@ pub struct ConstDef<T> {
 /// A constant value, either a literal or a namespaced symbol.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum ConstExpr<T> {
-    /// A constant value specified as a literal value.
-    Literal(Expr<T>),
+pub enum ConstExpr {
+    /// Boolean `true`.
+    True,
+    /// Boolean `false`.
+    False,
+    /// Unsigned integer.
+    NumUnsigned(u64, UnsignedNumType),
+    /// Signed integer.
+    NumSigned(i64, SignedNumType),
+    /// An external value supplied before compilation.
+    ExternalValue {
+        /// The party providing the value.
+        party: String,
+        /// The variable name of the value.
+        identifier: String,
+    },
+    /// The maximum of several constant expressions.
+    Max(Vec<ConstExpr>),
+    /// The minimum of several constant expressions.
+    Min(Vec<ConstExpr>),
 }
 
 /// A top level struct type definition.

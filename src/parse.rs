@@ -20,7 +20,7 @@ pub struct ParseError(pub ParseErrorEnum, pub MetaInfo);
 
 /// The different kinds of errors found during parsing.
 pub enum ParseErrorEnum {
-    /// The top level definition is not a valid enum or function declaration.
+    /// The top level definition is not a valid enum/struct/const/fn declaration.
     InvalidTopLevelDef,
     /// Arrays of the specified size are not supported.
     InvalidArraySize,
@@ -30,6 +30,8 @@ pub enum ParseErrorEnum {
     InvalidPattern,
     /// The literal is not valid.
     InvalidLiteral,
+    /// Expected a const expr, but found a non-const or invalid expr.
+    InvalidConstExpr,
     /// Expected a type, but found a non-type token.
     ExpectedType,
     /// Expected a statement, but found a non-statement token.
@@ -48,7 +50,7 @@ impl std::fmt::Display for ParseErrorEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ParseErrorEnum::InvalidTopLevelDef => {
-                f.write_str("Not a valid function or enum definition")
+                f.write_str("Not a valid top level declaration (struct/enum/const/fn)")
             }
             ParseErrorEnum::InvalidArraySize => {
                 let max = usize::MAX;
@@ -59,6 +61,7 @@ impl std::fmt::Display for ParseErrorEnum {
             ParseErrorEnum::InvalidRangeExpr => f.write_str("Invalid range expression"),
             ParseErrorEnum::InvalidPattern => f.write_str("Invalid pattern"),
             ParseErrorEnum::InvalidLiteral => f.write_str("Invalid literal"),
+            ParseErrorEnum::InvalidConstExpr => f.write_str("Invalid const expr"),
             ParseErrorEnum::ExpectedType => f.write_str("Expected a type"),
             ParseErrorEnum::ExpectedStmt => f.write_str("Expected a statement"),
             ParseErrorEnum::ExpectedExpr => f.write_str("Expected an expression"),
@@ -177,7 +180,7 @@ impl Parser {
         Err(self.errors)
     }
 
-    fn parse_const_def(&mut self, start: MetaInfo) -> Result<(String, ConstDef<()>), ()> {
+    fn parse_const_def(&mut self, start: MetaInfo) -> Result<(String, ConstDef), ()> {
         // const keyword was already consumed by the top-level parser
         let (identifier, _) = self.expect_identifier()?;
 
@@ -187,24 +190,60 @@ impl Parser {
 
         self.expect(&TokenEnum::Eq)?;
 
-        let Some(token) = self.tokens.next() else {
+        let Ok(expr) = self.parse_primary() else {
             self.push_error(ParseErrorEnum::InvalidTopLevelDef, start);
             return Err(());
         };
-        match self.parse_literal(token, true) {
-            Ok(literal) => {
+        fn parse_const_expr(
+            expr: UntypedExpr,
+        ) -> Result<ConstExpr, Vec<(ParseErrorEnum, MetaInfo)>> {
+            match expr.inner {
+                ExprEnum::True => Ok(ConstExpr::True),
+                ExprEnum::False => Ok(ConstExpr::False),
+                ExprEnum::NumUnsigned(n, ty) => Ok(ConstExpr::NumUnsigned(n, ty)),
+                ExprEnum::NumSigned(n, ty) => Ok(ConstExpr::NumSigned(n, ty)),
+                ExprEnum::EnumLiteral(party, variant) => {
+                    // TODO: check that this is a unit variant
+                    let VariantExpr(identifier, _, _) = *variant;
+                    Ok(ConstExpr::ExternalValue { party, identifier })
+                }
+                ExprEnum::FnCall(f, args) if f == "max" || f == "min" => {
+                    let mut const_exprs = vec![];
+                    let mut arg_errs = vec![];
+                    for arg in args {
+                        match parse_const_expr(arg) {
+                            Ok(value) => {
+                                const_exprs.push(value);
+                            }
+                            Err(errs) => {
+                                arg_errs.extend(errs);
+                            }
+                        }
+                    }
+                    if !arg_errs.is_empty() {
+                        return Err(arg_errs);
+                    }
+                    if f == "max" {
+                        Ok(ConstExpr::Max(const_exprs))
+                    } else {
+                        Ok(ConstExpr::Min(const_exprs))
+                    }
+                }
+                _ => Err(vec![(ParseErrorEnum::InvalidConstExpr, expr.meta)]),
+            }
+        }
+        match parse_const_expr(expr) {
+            Ok(value) => {
                 let end = self.expect(&TokenEnum::Semicolon)?;
                 let meta = join_meta(start, end);
-                Ok((
-                    identifier,
-                    ConstDef {
-                        ty,
-                        value: ConstExpr::Literal(literal),
-                        meta,
-                    },
-                ))
+                Ok((identifier, ConstDef { ty, value, meta }))
             }
-            Err(_) => todo!("non-literal const def"),
+            Err(errs) => {
+                for (e, meta) in errs {
+                    self.push_error(e, meta);
+                }
+                return Err(());
+            }
         }
     }
 

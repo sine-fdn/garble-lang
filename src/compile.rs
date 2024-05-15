@@ -98,13 +98,37 @@ impl TypedProgram {
             let mut circuit = CircuitBuilder::new(input_gates, const_sizes);
             for (identifier, const_def) in self.const_defs.iter() {
                 match &const_def.value {
-                    ConstExpr::Literal(expr) => {
-                        if let ExprEnum::EnumLiteral(_, _) = expr.inner {
-                        } else {
-                            let bits = expr.compile(self, &mut env, &mut circuit);
-                            env.let_in_current_scope(identifier.clone(), bits);
-                        }
+                    ConstExpr::True => env.let_in_current_scope(identifier.clone(), vec![1]),
+                    ConstExpr::False => env.let_in_current_scope(identifier.clone(), vec![0]),
+                    ConstExpr::NumUnsigned(n, ty) => {
+                        let ty = Type::Unsigned(*ty);
+                        let mut bits = Vec::with_capacity(
+                            ty.size_in_bits_for_defs(self, circuit.const_sizes()),
+                        );
+                        unsigned_to_bits(
+                            *n,
+                            ty.size_in_bits_for_defs(self, circuit.const_sizes()),
+                            &mut bits,
+                        );
+                        let bits = bits.into_iter().map(|b| b as usize).collect();
+                        env.let_in_current_scope(identifier.clone(), bits);
                     }
+                    ConstExpr::NumSigned(n, ty) => {
+                        let ty = Type::Signed(*ty);
+                        let mut bits = Vec::with_capacity(
+                            ty.size_in_bits_for_defs(self, circuit.const_sizes()),
+                        );
+                        signed_to_bits(
+                            *n,
+                            ty.size_in_bits_for_defs(self, circuit.const_sizes()),
+                            &mut bits,
+                        );
+                        let bits = bits.into_iter().map(|b| b as usize).collect();
+                        env.let_in_current_scope(identifier.clone(), bits);
+                    }
+                    ConstExpr::ExternalValue { .. } => {}
+                    ConstExpr::Max(_) => todo!("compile max"),
+                    ConstExpr::Min(_) => todo!("compile min"),
                 }
             }
             let output_gates = compile_block(&fn_def.body, self, &mut env, &mut circuit);
