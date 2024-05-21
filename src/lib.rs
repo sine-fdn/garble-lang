@@ -122,7 +122,7 @@ pub fn compile_with_constants(
     let main = main.clone();
     let mut const_sizes = HashMap::new();
     for (party, deps) in program.const_deps.iter() {
-        for (c, (identifier, _)) in deps {
+        for (c, _) in deps {
             let Some(party_deps) = consts.get(party) else {
                 todo!("missing party dep for {party}");
             };
@@ -130,7 +130,8 @@ pub fn compile_with_constants(
                 todo!("missing value {party}::{c}");
             };
             if let Literal::NumUnsigned(size, UnsignedNumType::Usize) = literal {
-                const_sizes.insert(identifier.clone(), *size as usize);
+                let identifier = format!("{party}::{c}");
+                const_sizes.insert(identifier, *size as usize);
             }
         }
     }

@@ -12,7 +12,7 @@ use crate::token::{MetaInfo, SignedNumType, UnsignedNumType};
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Program<T> {
     /// The external constants that the top level const definitions depend upon.
-    pub const_deps: HashMap<String, HashMap<String, (String, T)>>,
+    pub const_deps: HashMap<String, HashMap<String, T>>,
     /// Top level const definitions.
     pub const_defs: HashMap<String, ConstDef>,
     /// Top level struct type definitions.

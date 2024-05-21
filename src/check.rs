@@ -354,18 +354,18 @@ impl UntypedProgram {
             struct_names,
             enum_names,
         };
-        let mut const_deps: HashMap<String, HashMap<String, (String, Type)>> = HashMap::new();
+        let mut const_deps: HashMap<String, HashMap<String, Type>> = HashMap::new();
         let mut const_types = HashMap::with_capacity(self.const_defs.len());
         let mut const_defs = HashMap::with_capacity(self.const_defs.len());
         {
             for (const_name, const_def) in self.const_defs.iter() {
                 fn check_const_expr(
-                    const_name: &String,
+                    value: &ConstExpr,
                     const_def: &ConstDef,
                     errors: &mut Vec<Option<TypeError>>,
-                    const_deps: &mut HashMap<String, HashMap<String, (String, Type)>>,
+                    const_deps: &mut HashMap<String, HashMap<String, Type>>,
                 ) {
-                    match &const_def.value {
+                    match value {
                         ConstExpr::True | ConstExpr::False => {
                             if const_def.ty != Type::Bool {
                                 let e = TypeErrorEnum::UnexpectedType {
@@ -396,52 +396,21 @@ impl UntypedProgram {
                             }
                         }
                         ConstExpr::ExternalValue { party, identifier } => {
-                            const_deps.entry(party.clone()).or_default().insert(
-                                identifier.clone(),
-                                (const_name.clone(), const_def.ty.clone()),
-                            );
+                            const_deps
+                                .entry(party.clone())
+                                .or_default()
+                                .insert(identifier.clone(), const_def.ty.clone());
                         }
-                        ConstExpr::Max(args) => for arg in args {},
-                        ConstExpr::Min(_) => todo!(),
+                        ConstExpr::Max(args) | ConstExpr::Min(args) => {
+                            for arg in args {
+                                check_const_expr(arg, const_def, errors, const_deps);
+                            }
+                        }
                     }
                 }
-                check_const_expr(&const_name, &const_def, &mut errors, &mut const_deps);
+                check_const_expr(&const_def.value, &const_def, &mut errors, &mut const_deps);
                 const_defs.insert(const_name.clone(), const_def.clone());
                 const_types.insert(const_name.clone(), const_def.ty.clone());
-                // TODO: remove the following:
-                /*match &const_def.value {
-                    ConstExpr::Literal(expr) => {
-                        match expr.type_check(&top_level_defs, &mut env, &mut fns, &defs) {
-                            Ok(mut expr) => {
-                                if let Err(errs) = check_type(&mut expr, &const_def.ty) {
-                                    errors.extend(errs);
-                                }
-                                const_defs.insert(
-                                    const_name.clone(),
-                                    ConstDef {
-                                        ty: const_def.ty.clone(),
-                                        value: ConstExpr::Literal(expr),
-                                        meta: const_def.meta,
-                                    },
-                                );
-                            }
-                            Err(errs) => {
-                                for e in errs.into_iter().flatten() {
-                                    if let TypeError(TypeErrorEnum::UnknownEnum(p, n), _) = e {
-                                        // ignore this error, constant can be provided later during compilation
-                                        const_deps
-                                            .entry(p)
-                                            .or_default()
-                                            .insert(n, (const_name.clone(), const_def.ty.clone()));
-                                    } else {
-                                        errors.push(Some(e));
-                                    }
-                                }
-                            }
-                        }
-                        const_types.insert(const_name.clone(), const_def.ty.clone());
-                    }
-                }*/
             }
         }
         let mut struct_defs = HashMap::with_capacity(self.struct_defs.len());
