@@ -1,13 +1,19 @@
 [package]
 name = "garble_lang"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.60.0"
 description = "Turing-Incomplete Programming Language for Multi-Party Computation with Garbled Circuits"
 repository = "https://github.com/sine-fdn/garble/"
 license = "MIT"
 categories = ["command-line-utilities", "compilers"]
-keywords = ["programming-language", "secure-computation", "garbled-circuits", "circuit-description", "smpc"]
+keywords = [
+    "programming-language",
+    "secure-computation",
+    "garbled-circuits",
+    "circuit-description",
+    "smpc",
+]
 
 [[bin]]
 name = "garble"
