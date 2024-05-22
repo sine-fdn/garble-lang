@@ -6,8 +6,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     ast::{
         self, ConstDef, ConstExpr, EnumDef, Expr, ExprEnum, Mutability, Op, ParamDef, Pattern,
-        PatternEnum, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant, VariantExpr,
-        VariantExprEnum,
+        PatternEnum, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant, VariantExprEnum,
     },
     env::Env,
     token::{MetaInfo, SignedNumType, UnsignedNumType},
@@ -376,7 +375,7 @@ impl UntypedProgram {
                             }
                         }
                         ConstExpr::NumUnsigned(_, ty) => {
-                            let ty = Type::Unsigned(ty.clone());
+                            let ty = Type::Unsigned(*ty);
                             if const_def.ty != ty {
                                 let e = TypeErrorEnum::UnexpectedType {
                                     expected: const_def.ty.clone(),
@@ -386,7 +385,7 @@ impl UntypedProgram {
                             }
                         }
                         ConstExpr::NumSigned(_, ty) => {
-                            let ty = Type::Signed(ty.clone());
+                            let ty = Type::Signed(*ty);
                             if const_def.ty != ty {
                                 let e = TypeErrorEnum::UnexpectedType {
                                     expected: const_def.ty.clone(),
@@ -408,7 +407,7 @@ impl UntypedProgram {
                         }
                     }
                 }
-                check_const_expr(&const_def.value, &const_def, &mut errors, &mut const_deps);
+                check_const_expr(&const_def.value, const_def, &mut errors, &mut const_deps);
                 const_defs.insert(const_name.clone(), const_def.clone());
                 const_types.insert(const_name.clone(), const_def.ty.clone());
             }
@@ -1076,24 +1075,18 @@ impl UntypedExpr {
                     ty,
                 )
             }
-            ExprEnum::EnumLiteral(identifier, variant) => {
-                let VariantExpr(variant_name, variant, variant_meta) = variant.as_ref();
+            ExprEnum::EnumLiteral(identifier, variant_name, variant) => {
                 if let Some(enum_def) = defs.enums.get(identifier.as_str()) {
-                    let meta = *variant_meta;
                     if let Some(types) = enum_def.get(variant_name.as_str()) {
                         match (variant, types) {
-                            (VariantExprEnum::Unit, None) => {
-                                let variant = VariantExpr(
-                                    variant_name.to_string(),
+                            (VariantExprEnum::Unit, None) => (
+                                ExprEnum::EnumLiteral(
+                                    identifier.clone(),
+                                    variant_name.clone(),
                                     VariantExprEnum::Unit,
-                                    meta,
-                                );
-                                let ty = Type::Enum(identifier.clone());
-                                (
-                                    ExprEnum::EnumLiteral(identifier.clone(), Box::new(variant)),
-                                    ty,
-                                )
-                            }
+                                ),
+                                Type::Enum(identifier.clone()),
+                            ),
                             (VariantExprEnum::Tuple(values), Some(types)) => {
                                 if values.len() != types.len() {
                                     let e = TypeErrorEnum::UnexpectedEnumVariantArity {
@@ -1115,19 +1108,14 @@ impl UntypedExpr {
                                         Err(e) => errors.extend(e),
                                     }
                                 }
-                                let variant = VariantExpr(
-                                    variant_name.to_string(),
-                                    VariantExprEnum::Tuple(exprs),
-                                    meta,
-                                );
-                                let ty = Type::Enum(identifier.clone());
                                 if errors.is_empty() {
                                     (
                                         ExprEnum::EnumLiteral(
                                             identifier.clone(),
-                                            Box::new(variant),
+                                            variant_name.clone(),
+                                            VariantExprEnum::Tuple(exprs),
                                         ),
-                                        ty,
+                                        Type::Enum(identifier.clone()),
                                     )
                                 } else {
                                     return Err(errors);

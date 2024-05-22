@@ -342,7 +342,7 @@ pub enum ExprEnum<T> {
     /// Struct literal with the specified fields.
     StructLiteral(String, Vec<(String, Expr<T>)>),
     /// Enum literal of the specified variant, possibly with fields.
-    EnumLiteral(String, Box<VariantExpr<T>>),
+    EnumLiteral(String, String, VariantExprEnum<T>),
     /// Matching the specified expression with a list of clauses (pattern + expression).
     Match(Box<Expr<T>>, Vec<(Pattern<T>, Expr<T>)>),
     /// Application of a unary operator.
@@ -360,11 +360,6 @@ pub enum ExprEnum<T> {
     /// Range of numbers from the specified min (inclusive) to the specified max (exclusive).
     Range((u64, UnsignedNumType), (u64, UnsignedNumType)),
 }
-
-/// A variant literal, used by [`ExprEnum::EnumLiteral`], with its location in the source code.
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct VariantExpr<T>(pub String, pub VariantExprEnum<T>, pub MetaInfo);
 
 /// The different kinds of variant literals.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

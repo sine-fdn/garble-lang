@@ -5,7 +5,7 @@ use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 use crate::{
     ast::{
         ConstDef, ConstExpr, EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum,
-        Program, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant, VariantExpr, VariantExprEnum,
+        Program, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant, VariantExprEnum,
     },
     scan::Tokens,
     token::{MetaInfo, SignedNumType, Token, TokenEnum, UnsignedNumType},
@@ -202,9 +202,7 @@ impl Parser {
                 ExprEnum::False => Ok(ConstExpr::False),
                 ExprEnum::NumUnsigned(n, ty) => Ok(ConstExpr::NumUnsigned(n, ty)),
                 ExprEnum::NumSigned(n, ty) => Ok(ConstExpr::NumSigned(n, ty)),
-                ExprEnum::EnumLiteral(party, variant) => {
-                    // TODO: check that this is a unit variant
-                    let VariantExpr(identifier, _, _) = *variant;
+                ExprEnum::EnumLiteral(party, identifier, VariantExprEnum::Unit) => {
                     Ok(ConstExpr::ExternalValue { party, identifier })
                 }
                 ExprEnum::FnCall(f, args) if f == "max" || f == "min" => {
@@ -242,7 +240,7 @@ impl Parser {
                 for (e, meta) in errs {
                     self.push_error(e, meta);
                 }
-                return Err(());
+                Err(())
             }
         }
     }
@@ -1189,7 +1187,7 @@ impl Parser {
                 "false" => Expr::untyped(ExprEnum::False, meta),
                 _ => {
                     if self.next_matches(&TokenEnum::DoubleColon).is_some() {
-                        let (variant_name, variant_meta) = self.expect_identifier()?;
+                        let (variant_name, _) = self.expect_identifier()?;
                         let variant = if self.next_matches(&TokenEnum::LeftParen).is_some() {
                             let mut fields = vec![];
                             if !self.peek(&TokenEnum::RightParen) {
@@ -1211,13 +1209,15 @@ impl Parser {
                                     fields.push(child);
                                 }
                             }
-                            let end = self.expect(&TokenEnum::RightParen)?;
-                            let variant_meta = join_meta(variant_meta, end);
-                            VariantExpr(variant_name, VariantExprEnum::Tuple(fields), variant_meta)
+                            self.expect(&TokenEnum::RightParen)?;
+                            VariantExprEnum::Tuple(fields)
                         } else {
-                            VariantExpr(variant_name, VariantExprEnum::Unit, variant_meta)
+                            VariantExprEnum::Unit
                         };
-                        Expr::untyped(ExprEnum::EnumLiteral(identifier, Box::new(variant)), meta)
+                        Expr::untyped(
+                            ExprEnum::EnumLiteral(identifier, variant_name, variant),
+                            meta,
+                        )
                     } else if self.next_matches(&TokenEnum::LeftBrace).is_some()
                         && self.struct_literals_allowed
                     {

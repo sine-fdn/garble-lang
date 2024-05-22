@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use garble_lang::{
     check,
     circuit::Circuit,
@@ -89,7 +91,8 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
             )],
         );
 
-        let mut init_eval = Evaluator::new(&program, init_fn, &init_circuit);
+        let const_sizes = HashMap::new();
+        let mut init_eval = Evaluator::new(&program, init_fn, &init_circuit, &const_sizes);
         init_eval
             .set_literal(website_signing_key.clone())
             .map_err(|e| pretty_print(e, smart_cookie))?;
@@ -104,8 +107,12 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
 
         for (i, interest) in interests.iter().enumerate() {
             println!("  {i}: logging '{interest}'");
-            let mut log_interest_eval =
-                Evaluator::new(&program, log_interest_fn, &log_interest_circuit);
+            let mut log_interest_eval = Evaluator::new(
+                &program,
+                log_interest_fn,
+                &log_interest_circuit,
+                &const_sizes,
+            );
             let interest = Literal::Enum(
                 "UserInterest".to_string(),
                 interest.to_string(),
@@ -133,7 +140,8 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
                 .unwrap();
         }
 
-        let mut decide_ad_eval = Evaluator::new(&program, decide_ad_fn, &decide_ad_circuit);
+        let mut decide_ad_eval =
+            Evaluator::new(&program, decide_ad_fn, &decide_ad_circuit, &const_sizes);
         decide_ad_eval
             .set_literal(website_signing_key)
             .map_err(|e| pretty_print(e, smart_cookie))?;

@@ -8,7 +8,7 @@ use std::{
 use crate::{
     ast::{
         ConstExpr, EnumDef, ExprEnum, Op, Pattern, PatternEnum, StmtEnum, StructDef, Type, UnaryOp,
-        VariantExpr, VariantExprEnum,
+        VariantExprEnum,
     },
     circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, PanicResult, USIZE_BITS},
     env::Env,
@@ -24,6 +24,8 @@ pub enum CompilerError {
     FnNotFound(String),
     /// The provided constant was not of the required type.
     InvalidLiteralType(Literal, Type),
+    /// The constant was declared in the program but not provided during compilation.
+    MissingConstant(String, String),
 }
 
 impl std::fmt::Display for CompilerError {
@@ -35,6 +37,9 @@ impl std::fmt::Display for CompilerError {
             CompilerError::InvalidLiteralType(literal, ty) => {
                 f.write_fmt(format_args!("The literal is not of type '{ty}': {literal}"))
             }
+            CompilerError::MissingConstant(party, identifier) => f.write_fmt(format_args!(
+                "The constant {party}::{identifier} was declared in the program but never provided"
+            )),
         }
     }
 }
@@ -46,6 +51,7 @@ impl TypedProgram {
     /// incompatible types are found that should have been caught by the type-checker.
     pub fn compile(&self, fn_name: &str) -> Result<(Circuit, &TypedFnDef), CompilerError> {
         self.compile_with_constants(fn_name, HashMap::new())
+            .map(|(c, f, _)| (c, f))
     }
 
     /// Compiles the (type-checked) program with provided constants, producing a circuit of gates.
@@ -56,7 +62,7 @@ impl TypedProgram {
         &self,
         fn_name: &str,
         consts: HashMap<String, HashMap<String, Literal>>,
-    ) -> Result<(Circuit, &TypedFnDef), CompilerError> {
+    ) -> Result<(Circuit, &TypedFnDef, HashMap<String, usize>), CompilerError> {
         let mut env = Env::new();
         let mut const_sizes = HashMap::new();
         let mut consts_unsigned = HashMap::new();
@@ -64,10 +70,10 @@ impl TypedProgram {
         for (party, deps) in self.const_deps.iter() {
             for (c, ty) in deps {
                 let Some(party_deps) = consts.get(party) else {
-                    todo!("missing party dep for {party}");
+                    return Err(CompilerError::MissingConstant(party.clone(), c.clone()));
                 };
                 let Some(literal) = party_deps.get(c) else {
-                    todo!("missing value {party}::{c}");
+                    return Err(CompilerError::MissingConstant(party.clone(), c.clone()));
                 };
                 let identifier = format!("{party}::{c}");
                 match literal {
@@ -174,7 +180,7 @@ impl TypedProgram {
                 const_sizes.insert(const_name.clone(), n as usize);
             }
         }
-        let mut circuit = CircuitBuilder::new(input_gates, const_sizes);
+        let mut circuit = CircuitBuilder::new(input_gates, const_sizes.clone());
         for (const_name, const_def) in self.const_defs.iter() {
             match &const_def.value {
                 ConstExpr::True => env.let_in_current_scope(const_name.clone(), vec![1]),
@@ -245,7 +251,7 @@ impl TypedProgram {
             }
         }
         let output_gates = compile_block(&fn_def.body, self, &mut env, &mut circuit);
-        Ok((circuit.build(output_gates), fn_def))
+        Ok((circuit.build(output_gates), fn_def, const_sizes))
     }
 }
 
@@ -848,12 +854,11 @@ impl TypedExpr {
                 }
                 array
             }
-            ExprEnum::EnumLiteral(identifier, variant) => {
+            ExprEnum::EnumLiteral(identifier, variant_name, variant) => {
                 let enum_def = prg.enum_defs.get(identifier).unwrap();
                 let tag_size = enum_tag_size(enum_def);
                 let max_size = enum_max_size(enum_def, prg, circuit.const_sizes());
                 let mut wires = vec![0; max_size];
-                let VariantExpr(variant_name, variant, _) = variant.as_ref();
                 let tag_number = enum_tag_number(enum_def, variant_name);
                 for (i, wire) in wires.iter_mut().enumerate().take(tag_size) {
                     *wire = (tag_number >> (tag_size - i - 1)) & 1;

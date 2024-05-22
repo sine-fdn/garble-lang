@@ -41,7 +41,7 @@
 #![deny(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
 
-use ast::{Expr, FnDef, Pattern, Program, Stmt, Type, VariantExpr};
+use ast::{Expr, FnDef, Pattern, Program, Stmt, Type};
 use check::TypeError;
 use circuit::Circuit;
 use compile::CompilerError;
@@ -53,7 +53,7 @@ use std::{
     collections::HashMap,
     fmt::{Display, Write as _},
 };
-use token::{MetaInfo, UnsignedNumType};
+use token::MetaInfo;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -79,8 +79,6 @@ pub type TypedStmt = Stmt<Type>;
 pub type TypedExpr = Expr<Type>;
 /// [`crate::ast::Pattern`] after typechecking.
 pub type TypedPattern = Pattern<Type>;
-/// [`crate::ast::VariantExpr`] after typechecking.
-pub type TypedVariantExpr = VariantExpr<Type>;
 
 pub mod ast;
 pub mod check;
@@ -118,23 +116,8 @@ pub fn compile_with_constants(
     consts: HashMap<String, HashMap<String, Literal>>,
 ) -> Result<GarbleProgram, Error> {
     let program = check(prg)?;
-    let (circuit, main) = program.compile_with_constants("main", consts.clone())?;
+    let (circuit, main, const_sizes) = program.compile_with_constants("main", consts.clone())?;
     let main = main.clone();
-    let mut const_sizes = HashMap::new();
-    for (party, deps) in program.const_deps.iter() {
-        for (c, _) in deps {
-            let Some(party_deps) = consts.get(party) else {
-                todo!("missing party dep for {party}");
-            };
-            let Some(literal) = party_deps.get(c) else {
-                todo!("missing value {party}::{c}");
-            };
-            if let Literal::NumUnsigned(size, UnsignedNumType::Usize) = literal {
-                let identifier = format!("{party}::{c}");
-                const_sizes.insert(identifier, *size as usize);
-            }
-        }
-    }
     Ok(GarbleProgram {
         program,
         main,
@@ -166,7 +149,7 @@ pub struct GarbleArgument<'a>(Literal, &'a TypedProgram, &'a HashMap<String, usi
 impl GarbleProgram {
     /// Returns an evaluator that can be used to run the compiled circuit.
     pub fn evaluator(&self) -> Evaluator<'_> {
-        Evaluator::new_with_constants(&self.program, &self.main, &self.circuit, &self.consts)
+        Evaluator::new(&self.program, &self.main, &self.circuit, &self.const_sizes)
     }
 
     /// Type-checks and uses the literal as the circuit input argument with the given index.

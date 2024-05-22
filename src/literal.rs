@@ -10,7 +10,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ast::{Expr, ExprEnum, Type, Variant, VariantExpr, VariantExprEnum},
+    ast::{Expr, ExprEnum, Type, Variant, VariantExprEnum},
     check::{check_type, Defs, TopLevelTypes, TypeError, TypedFns},
     circuit::EvalPanic,
     compile::{enum_max_size, enum_tag_number, enum_tag_size, signed_to_bits, unsigned_to_bits},
@@ -18,7 +18,7 @@ use crate::{
     eval::EvalError,
     scan::scan,
     token::{SignedNumType, UnsignedNumType},
-    CompileTimeError, TypedExpr, TypedProgram, TypedVariantExpr,
+    CompileTimeError, TypedExpr, TypedProgram,
 };
 
 /// A subset of [`crate::ast::Expr`] that is used as input / output by an
@@ -545,24 +545,17 @@ impl TypedExpr {
                     .map(|(name, value)| (name, value.into_literal()))
                     .collect(),
             ),
-            ExprEnum::EnumLiteral(name, variant) => {
-                let VariantExpr(variant_name, _, _) = &variant.as_ref();
-                Literal::Enum(name, variant_name.clone(), variant.into_literal())
+            ExprEnum::EnumLiteral(name, variant_name, variant) => {
+                let variant = match variant {
+                    VariantExprEnum::Unit => VariantLiteral::Unit,
+                    VariantExprEnum::Tuple(fields) => VariantLiteral::Tuple(
+                        fields.into_iter().map(|f| f.into_literal()).collect(),
+                    ),
+                };
+                Literal::Enum(name, variant_name.clone(), variant)
             }
             ExprEnum::Range(min, max) => Literal::Range(min, max),
             _ => unreachable!("This should result in a literal parse error instead"),
-        }
-    }
-}
-
-impl TypedVariantExpr {
-    fn into_literal(self) -> VariantLiteral {
-        let VariantExpr(_, variant, _) = self;
-        match variant {
-            VariantExprEnum::Unit => VariantLiteral::Unit,
-            VariantExprEnum::Tuple(fields) => {
-                VariantLiteral::Tuple(fields.into_iter().map(|f| f.into_literal()).collect())
-            }
         }
     }
 }

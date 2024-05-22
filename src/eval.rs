@@ -20,43 +20,17 @@ pub struct Evaluator<'a> {
     /// The compiled circuit.
     pub circuit: &'a Circuit,
     inputs: Vec<Vec<bool>>,
-    const_sizes: HashMap<String, usize>,
+    const_sizes: &'a HashMap<String, usize>,
 }
 
 impl<'a> Evaluator<'a> {
     /// Scans, parses, type-checks and then compiles a program for later evaluation.
-    pub fn new(program: &'a TypedProgram, main_fn: &'a TypedFnDef, circuit: &'a Circuit) -> Self {
-        Self {
-            program,
-            main_fn,
-            circuit,
-            inputs: vec![],
-            const_sizes: HashMap::new(),
-        }
-    }
-
-    /// Scans, parses, type-checks and then compiles a program for later evaluation.
-    pub fn new_with_constants(
+    pub fn new(
         program: &'a TypedProgram,
         main_fn: &'a TypedFnDef,
         circuit: &'a Circuit,
-        consts: &HashMap<String, HashMap<String, Literal>>,
+        const_sizes: &'a HashMap<String, usize>,
     ) -> Self {
-        let mut const_sizes = HashMap::new();
-        for (party, deps) in program.const_deps.iter() {
-            for (c, _) in deps {
-                let Some(party_deps) = consts.get(party) else {
-                    todo!("missing party dep for {party}");
-                };
-                let Some(literal) = party_deps.get(c) else {
-                    todo!("missing value {party}::{c}");
-                };
-                if let Literal::NumUnsigned(size, UnsignedNumType::Usize) = literal {
-                    let identifier = format!("{party}::{c}");
-                    const_sizes.insert(identifier, *size as usize);
-                }
-            }
-        }
         Self {
             program,
             main_fn,
@@ -222,7 +196,7 @@ impl<'a> Evaluator<'a> {
                 self.inputs
                     .last_mut()
                     .unwrap()
-                    .extend(literal.as_bits(self.program, &self.const_sizes));
+                    .extend(literal.as_bits(self.program, self.const_sizes));
                 Ok(())
             } else {
                 Err(EvalError::InvalidLiteralType(literal, ty.clone()))

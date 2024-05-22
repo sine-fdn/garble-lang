@@ -123,7 +123,7 @@ pub fn main(x: i32) -> i32 {
 }
 ```
 
-Garble supports for-each loops as the only looping / recursion construct in the language. For-each loops can only loop over _fixed-size_ arrays. This is by design, as it disallows any form of unbounded recursion and thus enables the Garble compiler to generate fixed circuits consisting only of boolean gates. Garble programs are thus computationally equivalent to [LOOP programs](https://en.wikipedia.org/wiki/LOOP_(programming_language)) and capture the class of _primitive recursive functions_.
+Garble supports for-each loops as the only looping / recursion construct in the language. For-each loops can only loop over _fixed-size_ arrays. This is by design, as it disallows any form of unbounded recursion and thus enables the Garble compiler to generate fixed circuits consisting only of boolean gates. Garble programs are thus computationally equivalent to [LOOP programs](<https://en.wikipedia.org/wiki/LOOP_(programming_language)>) and capture the class of _primitive recursive functions_.
 
 ```rust
 pub fn main(_x: i32) -> i32 {
@@ -196,7 +196,7 @@ Panic due to Overflow on line 17:43.
 
 Garble will also panic on integer overflows caused by other arithmetic operations (such as subtraction and multiplication), divisions by zero, and out-of-bounds array indexing.
 
-*Circuit logic for panics is always compiled into the final circuit (and includes the line and column number of the code that caused the panic), it is your responsibility to ensure that no sensitive information can be leaked by causing a panic.*
+_Circuit logic for panics is always compiled into the final circuit (and includes the line and column number of the code that caused the panic), it is your responsibility to ensure that no sensitive information can be leaked by causing a panic._
 
 ## Collection Types
 
@@ -366,13 +366,37 @@ The patterns are not exhaustive. Missing cases:
        | }
 ```
 
+### Constants
+
+Garble supports boolean and integer constants, which need to be declared at the top level and must be provided before compilation. This can be helpful for modelling "pseudo-dynamic" collections, i.e. collections whose size is not known during type-checking but will be known before compilation and execution:
+
+```rust
+const MY_CONST: usize = PARTY_0::MY_CONST;
+
+pub fn main(x: u16) -> u16 {
+    let array = [2u16; MY_CONST];
+    x + array[1]
+}
+```
+
+Garble also supports taking the minimum / maximum of several constants as part of the declaration of a constant, which can be useful to set the size of a collection to the size of the biggest collection provided by different parties:
+
+```rust
+const MY_CONST: usize = max(PARTY_0::MY_CONST, PARTY_1::MY_CONST);
+
+pub fn main(x: u16) -> u16 {
+    let array = [2u16; MY_CONST];
+    x + array[1]
+}
+```
+
 ## Mental Model of Garble Programs
 
-Garble programs are boolean *circuits* consisting of a graph of logic gates, not a sequentially executed program of instructions on a von Neumann architecture with main memory and CPU. This has deep consequences for the programming style that leads to efficient Garble programs, with programs that would be efficient in "normal" programming languages resulting in highly inefficient circuits and vice versa.
+Garble programs are boolean _circuits_ consisting of a graph of logic gates, not a sequentially executed program of instructions on a von Neumann architecture with main memory and CPU. This has deep consequences for the programming style that leads to efficient Garble programs, with programs that would be efficient in "normal" programming languages resulting in highly inefficient circuits and vice versa.
 
 One example has already been mentioned: Copying whole arrays in Garble is essentially free, because arrays (and their elements) are just a collection of output wires from a bunch of boolean logic gates. Duplicating these wires does not increase the complexity of the circuit, because no additional logic gates are required.
 
-Replacing the element at a *constant* index in an array with a new value is equally cheap, because the Garble compiler can just duplicate the output wires of all the other elements and only has to use the wires of the replacement element where previously the old element was being used. In contrast, replacing the element at a *non-constant* index (i.e. an index that depends on a runtime value) is a much more expensive operation in a boolean circuit than it would be on a normal computer, because the Garble compiler has to generate a nested multiplexer circuit.
+Replacing the element at a _constant_ index in an array with a new value is equally cheap, because the Garble compiler can just duplicate the output wires of all the other elements and only has to use the wires of the replacement element where previously the old element was being used. In contrast, replacing the element at a _non-constant_ index (i.e. an index that depends on a runtime value) is a much more expensive operation in a boolean circuit than it would be on a normal computer, because the Garble compiler has to generate a nested multiplexer circuit.
 
 Here's an additional example: Let's assume that you want to implement an MPC function that on each invocation adds a value into a (fixed-size) collection of values, overwriting previous values if the buffer is full. In most languages, this could be easily done using a ring buffer and the same is possible in Garble:
 
@@ -402,4 +426,4 @@ The difference in circuit size is staggering: While the first version (with `i` 
 
 Such an example might be a bit contrived, since it is possible to infer the inputs of both parties (except for the element that is dropped from the array) from the output of the above function, defeating the purpose of MPC, which is to keep each party's input private. But it does highlight how unintuitive the computational model of pure boolean circuits can be from the perspective of a load-and-store architecture with main memory and CPU.
 
-It can be helpful to think of Garble programs as being executed on a computer with infinite memory, free copying and no garbage collection: Nothing ever goes out of scope, it is therefore trivial to reuse old values. But any form of branching or looping needs to be compiled into a circuit where each possible branch or loop invocation is "unrolled" and requires its own dedicated logic gates. In normal programming languages, looping a few additional times does not increase the program size, but in Garble programs additional gates are necessary. The size of Garble programs therefore reflects the *worst case* algorithm performance: While normal programming languages can return early and will often require much less time in the best or average case than in the worst case, the evaluation of Garble programs will always take constant time, because the full circuit must always be evaluated.
+It can be helpful to think of Garble programs as being executed on a computer with infinite memory, free copying and no garbage collection: Nothing ever goes out of scope, it is therefore trivial to reuse old values. But any form of branching or looping needs to be compiled into a circuit where each possible branch or loop invocation is "unrolled" and requires its own dedicated logic gates. In normal programming languages, looping a few additional times does not increase the program size, but in Garble programs additional gates are necessary. The size of Garble programs therefore reflects the _worst case_ algorithm performance: While normal programming languages can return early and will often require much less time in the best or average case than in the worst case, the evaluation of Garble programs will always take constant time, because the full circuit must always be evaluated.
