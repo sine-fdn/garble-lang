@@ -139,7 +139,8 @@ pub struct GarbleProgram {
     pub circuit: Circuit,
     /// The constants used for compiling the circuit.
     pub consts: HashMap<String, HashMap<String, Literal>>,
-    const_sizes: HashMap<String, usize>,
+    /// The values of usize constants used for compiling the circuit.
+    pub const_sizes: HashMap<String, usize>,
 }
 
 /// An input argument for a Garble program and circuit.
