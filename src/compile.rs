@@ -67,6 +67,7 @@ impl TypedProgram {
         let mut const_sizes = HashMap::new();
         let mut consts_unsigned = HashMap::new();
         let mut consts_signed = HashMap::new();
+
         for (party, deps) in self.const_deps.iter() {
             for (c, ty) in deps {
                 let Some(party_deps) = consts.get(party) else {
@@ -86,37 +87,11 @@ impl TypedProgram {
                     _ => {}
                 }
                 if literal.is_of_type(self, ty) {
-                    let bits = literal
-                        .as_bits(self, &const_sizes)
-                        .iter()
-                        .map(|b| *b as usize)
-                        .collect();
-                    env.let_in_current_scope(identifier.clone(), bits);
                     if let Literal::NumUnsigned(size, UnsignedNumType::Usize) = literal {
                         const_sizes.insert(identifier, *size as usize);
                     }
-                } else {
-                    return Err(CompilerError::InvalidLiteralType(
-                        literal.clone(),
-                        ty.clone(),
-                    ));
                 }
             }
-        }
-        let mut input_gates = vec![];
-        let mut wire = 2;
-        let Some(fn_def) = self.fn_defs.get(fn_name) else {
-            return Err(CompilerError::FnNotFound(fn_name.to_string()));
-        };
-        for param in fn_def.params.iter() {
-            let type_size = param.ty.size_in_bits_for_defs(self, &const_sizes);
-            let mut wires = Vec::with_capacity(type_size);
-            for _ in 0..type_size {
-                wires.push(wire);
-                wire += 1;
-            }
-            input_gates.push(type_size);
-            env.let_in_current_scope(param.name.clone(), wires);
         }
         fn resolve_const_expr_unsigned(
             expr: &ConstExpr,
@@ -179,6 +154,46 @@ impl TypedProgram {
                 let n = resolve_const_expr_unsigned(&const_def.value, &consts_unsigned);
                 const_sizes.insert(const_name.clone(), n as usize);
             }
+        }
+
+        for (party, deps) in self.const_deps.iter() {
+            for (c, ty) in deps {
+                let Some(party_deps) = consts.get(party) else {
+                    return Err(CompilerError::MissingConstant(party.clone(), c.clone()));
+                };
+                let Some(literal) = party_deps.get(c) else {
+                    return Err(CompilerError::MissingConstant(party.clone(), c.clone()));
+                };
+                let identifier = format!("{party}::{c}");
+                if literal.is_of_type(self, ty) {
+                    let bits = literal
+                        .as_bits(self, &const_sizes)
+                        .iter()
+                        .map(|b| *b as usize)
+                        .collect();
+                    env.let_in_current_scope(identifier.clone(), bits);
+                } else {
+                    return Err(CompilerError::InvalidLiteralType(
+                        literal.clone(),
+                        ty.clone(),
+                    ));
+                }
+            }
+        }
+        let mut input_gates = vec![];
+        let mut wire = 2;
+        let Some(fn_def) = self.fn_defs.get(fn_name) else {
+            return Err(CompilerError::FnNotFound(fn_name.to_string()));
+        };
+        for param in fn_def.params.iter() {
+            let type_size = param.ty.size_in_bits_for_defs(self, &const_sizes);
+            let mut wires = Vec::with_capacity(type_size);
+            for _ in 0..type_size {
+                wires.push(wire);
+                wire += 1;
+            }
+            input_gates.push(type_size);
+            env.let_in_current_scope(param.name.clone(), wires);
         }
         let mut circuit = CircuitBuilder::new(input_gates, const_sizes.clone());
         for (const_name, const_def) in self.const_defs.iter() {

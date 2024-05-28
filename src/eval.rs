@@ -191,7 +191,8 @@ impl<'a> Evaluator<'a> {
     pub fn set_literal(&mut self, literal: Literal) -> Result<(), EvalError> {
         if self.inputs.len() < self.main_fn.params.len() {
             let ty = &self.main_fn.params[self.inputs.len()].ty;
-            if literal.is_of_type(self.program, ty) {
+            let ty = resolve_const_type(&ty, self.const_sizes);
+            if literal.is_of_type(self.program, &ty) {
                 self.inputs.push(vec![]);
                 self.inputs
                     .last_mut()
@@ -210,13 +211,40 @@ impl<'a> Evaluator<'a> {
     pub fn parse_literal(&mut self, literal: &str) -> Result<(), EvalError> {
         if self.inputs.len() < self.main_fn.params.len() {
             let ty = &self.main_fn.params[self.inputs.len()].ty;
+            let ty = resolve_const_type(&ty, self.const_sizes);
             let parsed =
-                Literal::parse(self.program, ty, literal).map_err(EvalError::LiteralParseError)?;
+                Literal::parse(self.program, &ty, literal).map_err(EvalError::LiteralParseError)?;
             self.set_literal(parsed)?;
             Ok(())
         } else {
             Err(EvalError::UnexpectedNumberOfParties)
         }
+    }
+}
+
+fn resolve_const_type(ty: &Type, const_sizes: &HashMap<String, usize>) -> Type {
+    match ty {
+        Type::Fn(params, ret_ty) => Type::Fn(
+            params
+                .iter()
+                .map(|ty| resolve_const_type(ty, const_sizes))
+                .collect(),
+            Box::new(resolve_const_type(ret_ty, const_sizes)),
+        ),
+        Type::Array(elem_ty, size) => {
+            Type::Array(Box::new(resolve_const_type(elem_ty, const_sizes)), *size)
+        }
+        Type::ArrayConst(elem_ty, size) => Type::Array(
+            Box::new(resolve_const_type(elem_ty, const_sizes)),
+            *const_sizes.get(size).unwrap(),
+        ),
+        Type::Tuple(elems) => Type::Tuple(
+            elems
+                .iter()
+                .map(|ty| resolve_const_type(ty, const_sizes))
+                .collect(),
+        ),
+        ty => ty.clone(),
     }
 }
 
