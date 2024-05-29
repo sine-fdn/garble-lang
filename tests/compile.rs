@@ -2015,3 +2015,39 @@ pub fn main(array: [u16; MY_CONST]) -> u16 {
     assert_eq!(u16::try_from(output).map_err(|e| pretty_print(e, prg))?, 8);
     Ok(())
 }
+
+#[test]
+fn compile_const_size_for_each_loop() -> Result<(), Error> {
+    let prg = "
+const MY_CONST: usize = max(PARTY_0::MY_CONST, PARTY_1::MY_CONST);
+pub fn main(array: [u16; MY_CONST]) -> u16 {
+    let mut result = 0u16;
+    for elem in array {
+        result = result + elem;
+    }
+    result
+}
+";
+    let consts = HashMap::from_iter(vec![
+        (
+            "PARTY_0".to_string(),
+            HashMap::from_iter(vec![(
+                "MY_CONST".to_string(),
+                Literal::NumUnsigned(1, UnsignedNumType::Usize),
+            )]),
+        ),
+        (
+            "PARTY_1".to_string(),
+            HashMap::from_iter(vec![(
+                "MY_CONST".to_string(),
+                Literal::NumUnsigned(2, UnsignedNumType::Usize),
+            )]),
+        ),
+    ]);
+    let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.parse_literal("[7u16, 8u16]").unwrap();
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(u16::try_from(output).map_err(|e| pretty_print(e, prg))?, 15);
+    Ok(())
+}

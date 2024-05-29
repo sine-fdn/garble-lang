@@ -360,7 +360,7 @@ impl TypedStmt {
             }
             StmtEnum::ForEachLoop(var, array, body) => {
                 let elem_in_bits = match &array.ty {
-                    Type::Array(elem_ty, _size) => {
+                    Type::Array(elem_ty, _) | Type::ArrayConst(elem_ty, _) => {
                         elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes())
                     }
                     _ => panic!("Found a non-array value in an array access expr"),
