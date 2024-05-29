@@ -379,7 +379,7 @@ pub fn main(x: u16) -> u16 {
 }
 ```
 
-Garble also supports taking the minimum / maximum of several constants as part of the declaration of a constant, which can be useful to set the size of a collection to the size of the biggest collection provided by different parties:
+Garble also supports taking the minimum / maximum of several constants as part of the declaration of a constant, which, for instance, can be useful to set the size of a collection to the size of the biggest collection provided by different parties:
 
 ```rust
 const MY_CONST: usize = max(PARTY_0::MY_CONST, PARTY_1::MY_CONST);
