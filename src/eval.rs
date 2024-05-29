@@ -191,7 +191,7 @@ impl<'a> Evaluator<'a> {
     pub fn set_literal(&mut self, literal: Literal) -> Result<(), EvalError> {
         if self.inputs.len() < self.main_fn.params.len() {
             let ty = &self.main_fn.params[self.inputs.len()].ty;
-            let ty = resolve_const_type(&ty, self.const_sizes);
+            let ty = resolve_const_type(ty, self.const_sizes);
             if literal.is_of_type(self.program, &ty) {
                 self.inputs.push(vec![]);
                 self.inputs
@@ -211,7 +211,7 @@ impl<'a> Evaluator<'a> {
     pub fn parse_literal(&mut self, literal: &str) -> Result<(), EvalError> {
         if self.inputs.len() < self.main_fn.params.len() {
             let ty = &self.main_fn.params[self.inputs.len()].ty;
-            let ty = resolve_const_type(&ty, self.const_sizes);
+            let ty = resolve_const_type(ty, self.const_sizes);
             let parsed =
                 Literal::parse(self.program, &ty, literal).map_err(EvalError::LiteralParseError)?;
             self.set_literal(parsed)?;
