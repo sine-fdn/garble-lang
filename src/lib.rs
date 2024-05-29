@@ -45,7 +45,7 @@ use ast::{Expr, FnDef, Pattern, Program, Stmt, Type};
 use check::TypeError;
 use circuit::Circuit;
 use compile::CompilerError;
-use eval::{EvalError, Evaluator};
+use eval::{resolve_const_type, EvalError, Evaluator};
 use literal::Literal;
 use parse::ParseError;
 use scan::{scan, ScanError};
@@ -162,8 +162,9 @@ impl GarbleProgram {
         let Some(param) = self.main.params.get(arg_index) else {
             return Err(EvalError::InvalidArgIndex(arg_index));
         };
-        if !literal.is_of_type(&self.program, &param.ty) {
-            return Err(EvalError::InvalidLiteralType(literal, param.ty.clone()));
+        let ty = resolve_const_type(&param.ty, &self.const_sizes);
+        if !literal.is_of_type(&self.program, &ty) {
+            return Err(EvalError::InvalidLiteralType(literal, ty));
         }
         Ok(GarbleArgument(literal, &self.program, &self.const_sizes))
     }

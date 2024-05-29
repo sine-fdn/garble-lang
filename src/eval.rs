@@ -222,7 +222,7 @@ impl<'a> Evaluator<'a> {
     }
 }
 
-fn resolve_const_type(ty: &Type, const_sizes: &HashMap<String, usize>) -> Type {
+pub(crate) fn resolve_const_type(ty: &Type, const_sizes: &HashMap<String, usize>) -> Type {
     match ty {
         Type::Fn(params, ret_ty) => Type::Fn(
             params
