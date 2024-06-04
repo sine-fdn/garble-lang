@@ -118,6 +118,7 @@ impl Parser {
             TokenEnum::KeywordFn,
             TokenEnum::KeywordStruct,
             TokenEnum::KeywordEnum,
+            TokenEnum::KeywordConst,
         ];
         let mut const_defs = HashMap::new();
         let mut struct_defs = HashMap::new();
