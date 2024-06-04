@@ -7,8 +7,8 @@ use std::{
 
 use crate::{
     ast::{
-        ConstExpr, EnumDef, ExprEnum, Op, Pattern, PatternEnum, StmtEnum, StructDef, Type, UnaryOp,
-        VariantExprEnum,
+        ConstExpr, ConstExprEnum, EnumDef, ExprEnum, Op, Pattern, PatternEnum, StmtEnum, StructDef,
+        Type, UnaryOp, VariantExprEnum,
     },
     circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, PanicResult, USIZE_BITS},
     env::Env,
@@ -94,22 +94,22 @@ impl TypedProgram {
             }
         }
         fn resolve_const_expr_unsigned(
-            expr: &ConstExpr,
+            ConstExpr(expr, _): &ConstExpr,
             consts_unsigned: &HashMap<String, u64>,
         ) -> u64 {
             match expr {
-                ConstExpr::NumUnsigned(n, _) => *n,
-                ConstExpr::ExternalValue { party, identifier } => *consts_unsigned
+                ConstExprEnum::NumUnsigned(n, _) => *n,
+                ConstExprEnum::ExternalValue { party, identifier } => *consts_unsigned
                     .get(&format!("{party}::{identifier}"))
                     .unwrap(),
-                ConstExpr::Max(args) => {
+                ConstExprEnum::Max(args) => {
                     let mut result = 0;
                     for arg in args {
                         result = max(result, resolve_const_expr_unsigned(arg, consts_unsigned));
                     }
                     result
                 }
-                ConstExpr::Min(args) => {
+                ConstExprEnum::Min(args) => {
                     let mut result = u64::MAX;
                     for arg in args {
                         result = min(result, resolve_const_expr_unsigned(arg, consts_unsigned));
@@ -120,22 +120,22 @@ impl TypedProgram {
             }
         }
         fn resolve_const_expr_signed(
-            expr: &ConstExpr,
+            ConstExpr(expr, _): &ConstExpr,
             consts_signed: &HashMap<String, i64>,
         ) -> i64 {
             match expr {
-                ConstExpr::NumSigned(n, _) => *n,
-                ConstExpr::ExternalValue { party, identifier } => *consts_signed
+                ConstExprEnum::NumSigned(n, _) => *n,
+                ConstExprEnum::ExternalValue { party, identifier } => *consts_signed
                     .get(&format!("{party}::{identifier}"))
                     .unwrap(),
-                ConstExpr::Max(args) => {
+                ConstExprEnum::Max(args) => {
                     let mut result = 0;
                     for arg in args {
                         result = max(result, resolve_const_expr_signed(arg, consts_signed));
                     }
                     result
                 }
-                ConstExpr::Min(args) => {
+                ConstExprEnum::Min(args) => {
                     let mut result = i64::MAX;
                     for arg in args {
                         result = min(result, resolve_const_expr_signed(arg, consts_signed));
@@ -147,7 +147,9 @@ impl TypedProgram {
         }
         for (const_name, const_def) in self.const_defs.iter() {
             if let Type::Unsigned(UnsignedNumType::Usize) = const_def.ty {
-                if let ConstExpr::ExternalValue { party, identifier } = &const_def.value {
+                if let ConstExpr(ConstExprEnum::ExternalValue { party, identifier }, _) =
+                    &const_def.value
+                {
                     let identifier = format!("{party}::{identifier}");
                     const_sizes.insert(const_name.clone(), *const_sizes.get(&identifier).unwrap());
                 }
@@ -197,10 +199,11 @@ impl TypedProgram {
         }
         let mut circuit = CircuitBuilder::new(input_gates, const_sizes.clone());
         for (const_name, const_def) in self.const_defs.iter() {
-            match &const_def.value {
-                ConstExpr::True => env.let_in_current_scope(const_name.clone(), vec![1]),
-                ConstExpr::False => env.let_in_current_scope(const_name.clone(), vec![0]),
-                ConstExpr::NumUnsigned(n, ty) => {
+            let ConstExpr(expr, _) = &const_def.value;
+            match expr {
+                ConstExprEnum::True => env.let_in_current_scope(const_name.clone(), vec![1]),
+                ConstExprEnum::False => env.let_in_current_scope(const_name.clone(), vec![0]),
+                ConstExprEnum::NumUnsigned(n, ty) => {
                     let ty = Type::Unsigned(*ty);
                     let mut bits =
                         Vec::with_capacity(ty.size_in_bits_for_defs(self, circuit.const_sizes()));
@@ -212,7 +215,7 @@ impl TypedProgram {
                     let bits = bits.into_iter().map(|b| b as usize).collect();
                     env.let_in_current_scope(const_name.clone(), bits);
                 }
-                ConstExpr::NumSigned(n, ty) => {
+                ConstExprEnum::NumSigned(n, ty) => {
                     let ty = Type::Signed(*ty);
                     let mut bits =
                         Vec::with_capacity(ty.size_in_bits_for_defs(self, circuit.const_sizes()));
@@ -224,13 +227,14 @@ impl TypedProgram {
                     let bits = bits.into_iter().map(|b| b as usize).collect();
                     env.let_in_current_scope(const_name.clone(), bits);
                 }
-                ConstExpr::ExternalValue { party, identifier } => {
+                ConstExprEnum::ExternalValue { party, identifier } => {
                     let bits = env.get(&format!("{party}::{identifier}")).unwrap();
                     env.let_in_current_scope(const_name.clone(), bits);
                 }
-                expr @ (ConstExpr::Max(_) | ConstExpr::Min(_)) => {
+                ConstExprEnum::Max(_) | ConstExprEnum::Min(_) => {
                     if let Type::Unsigned(_) = const_def.ty {
-                        let result = resolve_const_expr_unsigned(expr, &consts_unsigned);
+                        let result =
+                            resolve_const_expr_unsigned(&const_def.value, &consts_unsigned);
                         let mut bits = Vec::with_capacity(
                             const_def
                                 .ty
@@ -246,7 +250,7 @@ impl TypedProgram {
                         let bits = bits.into_iter().map(|b| b as usize).collect();
                         env.let_in_current_scope(const_name.clone(), bits);
                     } else {
-                        let result = resolve_const_expr_signed(expr, &consts_signed);
+                        let result = resolve_const_expr_signed(&const_def.value, &consts_signed);
                         let mut bits = Vec::with_capacity(
                             const_def
                                 .ty

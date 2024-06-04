@@ -4,8 +4,8 @@ use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        ConstDef, ConstExpr, EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum,
-        Program, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant, VariantExprEnum,
+        ConstDef, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern,
+        PatternEnum, Program, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant, VariantExprEnum,
     },
     scan::Tokens,
     token::{MetaInfo, SignedNumType, Token, TokenEnum, UnsignedNumType},
@@ -199,13 +199,18 @@ impl Parser {
             expr: UntypedExpr,
         ) -> Result<ConstExpr, Vec<(ParseErrorEnum, MetaInfo)>> {
             match expr.inner {
-                ExprEnum::True => Ok(ConstExpr::True),
-                ExprEnum::False => Ok(ConstExpr::False),
-                ExprEnum::NumUnsigned(n, ty) => Ok(ConstExpr::NumUnsigned(n, ty)),
-                ExprEnum::NumSigned(n, ty) => Ok(ConstExpr::NumSigned(n, ty)),
-                ExprEnum::EnumLiteral(party, identifier, VariantExprEnum::Unit) => {
-                    Ok(ConstExpr::ExternalValue { party, identifier })
+                ExprEnum::True => Ok(ConstExpr(ConstExprEnum::True, expr.meta)),
+                ExprEnum::False => Ok(ConstExpr(ConstExprEnum::False, expr.meta)),
+                ExprEnum::NumUnsigned(n, ty) => {
+                    Ok(ConstExpr(ConstExprEnum::NumUnsigned(n, ty), expr.meta))
                 }
+                ExprEnum::NumSigned(n, ty) => {
+                    Ok(ConstExpr(ConstExprEnum::NumSigned(n, ty), expr.meta))
+                }
+                ExprEnum::EnumLiteral(party, identifier, VariantExprEnum::Unit) => Ok(ConstExpr(
+                    ConstExprEnum::ExternalValue { party, identifier },
+                    expr.meta,
+                )),
                 ExprEnum::FnCall(f, args) if f == "max" || f == "min" => {
                     let mut const_exprs = vec![];
                     let mut arg_errs = vec![];
@@ -223,9 +228,9 @@ impl Parser {
                         return Err(arg_errs);
                     }
                     if f == "max" {
-                        Ok(ConstExpr::Max(const_exprs))
+                        Ok(ConstExpr(ConstExprEnum::Max(const_exprs), expr.meta))
                     } else {
-                        Ok(ConstExpr::Min(const_exprs))
+                        Ok(ConstExpr(ConstExprEnum::Min(const_exprs), expr.meta))
                     }
                 }
                 _ => Err(vec![(ParseErrorEnum::InvalidConstExpr, expr.meta)]),

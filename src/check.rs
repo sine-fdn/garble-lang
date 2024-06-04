@@ -5,8 +5,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::{
-        self, ConstDef, ConstExpr, EnumDef, Expr, ExprEnum, Mutability, Op, ParamDef, Pattern,
-        PatternEnum, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant, VariantExprEnum,
+        self, ConstDef, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, Mutability, Op,
+        ParamDef, Pattern, PatternEnum, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant,
+        VariantExprEnum,
     },
     env::Env,
     token::{MetaInfo, SignedNumType, UnsignedNumType},
@@ -364,43 +365,45 @@ impl UntypedProgram {
                     errors: &mut Vec<Option<TypeError>>,
                     const_deps: &mut HashMap<String, HashMap<String, Type>>,
                 ) {
+                    let ConstExpr(value, meta) = value;
+                    let meta = *meta;
                     match value {
-                        ConstExpr::True | ConstExpr::False => {
+                        ConstExprEnum::True | ConstExprEnum::False => {
                             if const_def.ty != Type::Bool {
                                 let e = TypeErrorEnum::UnexpectedType {
                                     expected: const_def.ty.clone(),
                                     actual: Type::Bool,
                                 };
-                                errors.extend(vec![Some(TypeError(e, const_def.meta))]);
+                                errors.extend(vec![Some(TypeError(e, meta))]);
                             }
                         }
-                        ConstExpr::NumUnsigned(_, ty) => {
+                        ConstExprEnum::NumUnsigned(_, ty) => {
                             let ty = Type::Unsigned(*ty);
                             if const_def.ty != ty {
                                 let e = TypeErrorEnum::UnexpectedType {
                                     expected: const_def.ty.clone(),
                                     actual: ty,
                                 };
-                                errors.extend(vec![Some(TypeError(e, const_def.meta))]);
+                                errors.extend(vec![Some(TypeError(e, meta))]);
                             }
                         }
-                        ConstExpr::NumSigned(_, ty) => {
+                        ConstExprEnum::NumSigned(_, ty) => {
                             let ty = Type::Signed(*ty);
                             if const_def.ty != ty {
                                 let e = TypeErrorEnum::UnexpectedType {
                                     expected: const_def.ty.clone(),
                                     actual: ty,
                                 };
-                                errors.extend(vec![Some(TypeError(e, const_def.meta))]);
+                                errors.extend(vec![Some(TypeError(e, meta))]);
                             }
                         }
-                        ConstExpr::ExternalValue { party, identifier } => {
+                        ConstExprEnum::ExternalValue { party, identifier } => {
                             const_deps
                                 .entry(party.clone())
                                 .or_default()
                                 .insert(identifier.clone(), const_def.ty.clone());
                         }
-                        ConstExpr::Max(args) | ConstExpr::Min(args) => {
+                        ConstExprEnum::Max(args) | ConstExprEnum::Min(args) => {
                             for arg in args {
                                 check_const_expr(arg, const_def, errors, const_deps);
                             }

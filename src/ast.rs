@@ -35,10 +35,15 @@ pub struct ConstDef {
     pub meta: MetaInfo,
 }
 
-/// A constant value, either a literal or a namespaced symbol.
+/// A constant value, either a literal, a namespaced symbol or an aggregate.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum ConstExpr {
+pub struct ConstExpr(pub ConstExprEnum, pub MetaInfo);
+
+/// The different kinds of constant expressions.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ConstExprEnum {
     /// Boolean `true`.
     True,
     /// Boolean `false`.
