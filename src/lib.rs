@@ -217,7 +217,7 @@ pub enum CompileTimeError {
     /// Errors originating in the type-checking phase.
     TypeError(Vec<TypeError>),
     /// Errors originating in the compilation phase.
-    CompilerError(CompilerError),
+    CompilerError(Vec<CompilerError>),
 }
 
 /// A generic error that combines compile-time and run-time errors.
@@ -249,8 +249,8 @@ impl From<Vec<TypeError>> for CompileTimeError {
     }
 }
 
-impl From<CompilerError> for CompileTimeError {
-    fn from(e: CompilerError) -> Self {
+impl From<Vec<CompilerError>> for CompileTimeError {
+    fn from(e: Vec<CompilerError>) -> Self {
         Self::CompilerError(e)
     }
 }
@@ -323,12 +323,12 @@ impl CompileTimeError {
                     errs_for_display.push(("Type error", format!("{e}"), *meta));
                 }
             }
-            CompileTimeError::CompilerError(e) => {
-                let meta = MetaInfo {
-                    start: (0, 0),
-                    end: (0, 0),
-                };
-                errs_for_display.push(("Compiler error", format!("{e}"), meta))
+            CompileTimeError::CompilerError(errs) => {
+                let mut pretty = String::new();
+                for e in errs {
+                    pretty += &format!("\nCompiler error: {e}");
+                }
+                return pretty;
             }
         }
         let mut msg = "".to_string();

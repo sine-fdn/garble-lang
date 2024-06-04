@@ -44,12 +44,14 @@ impl std::fmt::Display for CompilerError {
     }
 }
 
+type CompiledProgram<'a> = (Circuit, &'a TypedFnDef, HashMap<String, usize>);
+
 impl TypedProgram {
     /// Compiles the (type-checked) program, producing a circuit of gates.
     ///
     /// Assumes that the input program has been correctly type-checked and **panics** if
     /// incompatible types are found that should have been caught by the type-checker.
-    pub fn compile(&self, fn_name: &str) -> Result<(Circuit, &TypedFnDef), CompilerError> {
+    pub fn compile(&self, fn_name: &str) -> Result<(Circuit, &TypedFnDef), Vec<CompilerError>> {
         self.compile_with_constants(fn_name, HashMap::new())
             .map(|(c, f, _)| (c, f))
     }
@@ -62,19 +64,22 @@ impl TypedProgram {
         &self,
         fn_name: &str,
         consts: HashMap<String, HashMap<String, Literal>>,
-    ) -> Result<(Circuit, &TypedFnDef, HashMap<String, usize>), CompilerError> {
+    ) -> Result<CompiledProgram, Vec<CompilerError>> {
         let mut env = Env::new();
         let mut const_sizes = HashMap::new();
         let mut consts_unsigned = HashMap::new();
         let mut consts_signed = HashMap::new();
 
+        let mut errs = vec![];
         for (party, deps) in self.const_deps.iter() {
             for (c, ty) in deps {
                 let Some(party_deps) = consts.get(party) else {
-                    return Err(CompilerError::MissingConstant(party.clone(), c.clone()));
+                    errs.push(CompilerError::MissingConstant(party.clone(), c.clone()));
+                    continue;
                 };
                 let Some(literal) = party_deps.get(c) else {
-                    return Err(CompilerError::MissingConstant(party.clone(), c.clone()));
+                    errs.push(CompilerError::MissingConstant(party.clone(), c.clone()));
+                    continue;
                 };
                 let identifier = format!("{party}::{c}");
                 match literal {
@@ -92,6 +97,9 @@ impl TypedProgram {
                     }
                 }
             }
+        }
+        if !errs.is_empty() {
+            return Err(errs);
         }
         fn resolve_const_expr_unsigned(
             ConstExpr(expr, _): &ConstExpr,
@@ -158,13 +166,14 @@ impl TypedProgram {
             }
         }
 
+        let mut errs = vec![];
         for (party, deps) in self.const_deps.iter() {
             for (c, ty) in deps {
                 let Some(party_deps) = consts.get(party) else {
-                    return Err(CompilerError::MissingConstant(party.clone(), c.clone()));
+                    continue;
                 };
                 let Some(literal) = party_deps.get(c) else {
-                    return Err(CompilerError::MissingConstant(party.clone(), c.clone()));
+                    continue;
                 };
                 let identifier = format!("{party}::{c}");
                 if literal.is_of_type(self, ty) {
@@ -175,17 +184,20 @@ impl TypedProgram {
                         .collect();
                     env.let_in_current_scope(identifier.clone(), bits);
                 } else {
-                    return Err(CompilerError::InvalidLiteralType(
+                    errs.push(CompilerError::InvalidLiteralType(
                         literal.clone(),
                         ty.clone(),
                     ));
                 }
             }
         }
+        if !errs.is_empty() {
+            return Err(errs);
+        }
         let mut input_gates = vec![];
         let mut wire = 2;
         let Some(fn_def) = self.fn_defs.get(fn_name) else {
-            return Err(CompilerError::FnNotFound(fn_name.to_string()));
+            return Err(vec![CompilerError::FnNotFound(fn_name.to_string())]);
         };
         for param in fn_def.params.iter() {
             let type_size = param.ty.size_in_bits_for_defs(self, &const_sizes);
