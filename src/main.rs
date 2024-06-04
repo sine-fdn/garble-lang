@@ -60,8 +60,10 @@ fn run(file: PathBuf, inputs: Vec<String>, function: String) -> Result<(), std::
         eprintln!("{}", e.prettify(&prg));
         exit(65);
     });
-    let (circuit, main_fn) = program.compile(&function).unwrap_or_else(|e| {
-        eprintln!("{e}");
+    let (circuit, main_fn) = program.compile(&function).unwrap_or_else(|errs| {
+        for e in errs {
+            eprintln!("{e}");
+        }
         exit(65);
     });
 
