@@ -23,7 +23,7 @@ use crate::{
 
 /// A subset of [`crate::ast::Expr`] that is used as input / output by an
 /// [`crate::eval::Evaluator`].
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Literal {
     /// Literal `true`.
@@ -49,7 +49,7 @@ pub enum Literal {
 }
 
 /// A variant literal (either of unit type or containing fields), used by [`Literal::Enum`].
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum VariantLiteral {
     /// A unit variant, containing no fields.

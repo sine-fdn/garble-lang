@@ -176,7 +176,7 @@ impl std::fmt::Display for TokenEnum {
 }
 
 /// A suffix indicating the explicit unsigned number type of the literal.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum UnsignedNumType {
     /// Unsigned integer type used to index arrays, length depends on the host platform.
@@ -217,7 +217,7 @@ impl std::fmt::Display for UnsignedNumType {
 }
 
 /// A suffix indicating the explicit signed number type of the literal.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum SignedNumType {
     /// 8-bit signed integer type.

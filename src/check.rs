@@ -1,7 +1,7 @@
 //! Type-checker, transforming an untyped [`crate::ast::Program`] into a typed
 //! [`crate::ast::Program`].
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::{
@@ -354,7 +354,7 @@ impl UntypedProgram {
             struct_names,
             enum_names,
         };
-        let mut const_deps: BTreeMap<String, BTreeMap<String, (Type, MetaInfo)>> = BTreeMap::new();
+        let mut const_deps: HashMap<String, HashMap<String, (Type, MetaInfo)>> = HashMap::new();
         let mut const_types = HashMap::with_capacity(self.const_defs.len());
         let mut const_defs = HashMap::with_capacity(self.const_defs.len());
         {
@@ -363,7 +363,7 @@ impl UntypedProgram {
                     value: &ConstExpr,
                     const_def: &ConstDef,
                     errors: &mut Vec<Option<TypeError>>,
-                    const_deps: &mut BTreeMap<String, BTreeMap<String, (Type, MetaInfo)>>,
+                    const_deps: &mut HashMap<String, HashMap<String, (Type, MetaInfo)>>,
                 ) {
                     let ConstExpr(value, meta) = value;
                     let meta = *meta;

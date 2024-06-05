@@ -1,10 +1,6 @@
 //! Parses a stream of [`crate::scan::Tokens`] into an untyped [`crate::ast::Program`].
 
-use std::{
-    collections::{BTreeMap, HashMap},
-    iter::Peekable,
-    vec::IntoIter,
-};
+use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
@@ -175,7 +171,7 @@ impl Parser {
         }
         if self.errors.is_empty() {
             return Ok(Program {
-                const_deps: BTreeMap::new(),
+                const_deps: HashMap::new(),
                 const_defs,
                 struct_defs,
                 enum_defs,

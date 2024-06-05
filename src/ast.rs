@@ -1,6 +1,6 @@
 //! The untyped Abstract Syntax Tree (AST).
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,7 @@ use crate::token::{MetaInfo, SignedNumType, UnsignedNumType};
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Program<T> {
     /// The external constants that the top level const definitions depend upon.
-    pub const_deps: BTreeMap<String, BTreeMap<String, (T, MetaInfo)>>,
+    pub const_deps: HashMap<String, HashMap<String, (T, MetaInfo)>>,
     /// Top level const definitions.
     pub const_defs: HashMap<String, ConstDef>,
     /// Top level struct type definitions.

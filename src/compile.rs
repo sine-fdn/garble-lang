@@ -18,7 +18,7 @@ use crate::{
 };
 
 /// An error that occurred during compilation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompilerError {
     /// The specified function could not be compiled, as it was not found in the program.
     FnNotFound(String),
@@ -26,6 +26,36 @@ pub enum CompilerError {
     InvalidLiteralType(Literal, Type),
     /// The constant was declared in the program but not provided during compilation.
     MissingConstant(String, String, MetaInfo),
+}
+
+impl PartialOrd for CompilerError {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for CompilerError {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (CompilerError::FnNotFound(fn1), CompilerError::FnNotFound(fn2)) => fn1.cmp(fn2),
+            (CompilerError::FnNotFound(_), _) => std::cmp::Ordering::Less,
+            (CompilerError::InvalidLiteralType(_, _), CompilerError::FnNotFound(_)) => {
+                std::cmp::Ordering::Greater
+            }
+            (
+                CompilerError::InvalidLiteralType(literal1, _),
+                CompilerError::InvalidLiteralType(literal2, _),
+            ) => literal1.cmp(literal2),
+            (CompilerError::InvalidLiteralType(_, _), CompilerError::MissingConstant(_, _, _)) => {
+                std::cmp::Ordering::Less
+            }
+            (
+                CompilerError::MissingConstant(_, _, meta1),
+                CompilerError::MissingConstant(_, _, meta2),
+            ) => meta1.cmp(meta2),
+            (CompilerError::MissingConstant(_, _, _), _) => std::cmp::Ordering::Greater,
+        }
+    }
 }
 
 impl std::fmt::Display for CompilerError {
@@ -107,6 +137,7 @@ impl TypedProgram {
             }
         }
         if !errs.is_empty() {
+            errs.sort();
             return Err(errs);
         }
         fn resolve_const_expr_unsigned(
@@ -200,6 +231,7 @@ impl TypedProgram {
             }
         }
         if !errs.is_empty() {
+            errs.sort();
             return Err(errs);
         }
         let mut input_gates = vec![];
