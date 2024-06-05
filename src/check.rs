@@ -354,7 +354,7 @@ impl UntypedProgram {
             struct_names,
             enum_names,
         };
-        let mut const_deps: BTreeMap<String, BTreeMap<String, Type>> = BTreeMap::new();
+        let mut const_deps: BTreeMap<String, BTreeMap<String, (Type, MetaInfo)>> = BTreeMap::new();
         let mut const_types = HashMap::with_capacity(self.const_defs.len());
         let mut const_defs = HashMap::with_capacity(self.const_defs.len());
         {
@@ -363,7 +363,7 @@ impl UntypedProgram {
                     value: &ConstExpr,
                     const_def: &ConstDef,
                     errors: &mut Vec<Option<TypeError>>,
-                    const_deps: &mut BTreeMap<String, BTreeMap<String, Type>>,
+                    const_deps: &mut BTreeMap<String, BTreeMap<String, (Type, MetaInfo)>>,
                 ) {
                     let ConstExpr(value, meta) = value;
                     let meta = *meta;
@@ -401,7 +401,7 @@ impl UntypedProgram {
                             const_deps
                                 .entry(party.clone())
                                 .or_default()
-                                .insert(identifier.clone(), const_def.ty.clone());
+                                .insert(identifier.clone(), (const_def.ty.clone(), meta));
                         }
                         ConstExprEnum::Max(args) | ConstExprEnum::Min(args) => {
                             for arg in args {

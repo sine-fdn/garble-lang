@@ -13,7 +13,7 @@ use crate::{
     circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, PanicResult, USIZE_BITS},
     env::Env,
     literal::Literal,
-    token::{SignedNumType, UnsignedNumType},
+    token::{MetaInfo, SignedNumType, UnsignedNumType},
     TypedExpr, TypedFnDef, TypedPattern, TypedProgram, TypedStmt,
 };
 
@@ -25,7 +25,7 @@ pub enum CompilerError {
     /// The provided constant was not of the required type.
     InvalidLiteralType(Literal, Type),
     /// The constant was declared in the program but not provided during compilation.
-    MissingConstant(String, String),
+    MissingConstant(String, String, MetaInfo),
 }
 
 impl std::fmt::Display for CompilerError {
@@ -37,7 +37,7 @@ impl std::fmt::Display for CompilerError {
             CompilerError::InvalidLiteralType(literal, ty) => {
                 f.write_fmt(format_args!("The literal is not of type '{ty}': {literal}"))
             }
-            CompilerError::MissingConstant(party, identifier) => f.write_fmt(format_args!(
+            CompilerError::MissingConstant(party, identifier, _) => f.write_fmt(format_args!(
                 "The constant {party}::{identifier} was declared in the program but never provided"
             )),
         }
@@ -72,13 +72,21 @@ impl TypedProgram {
 
         let mut errs = vec![];
         for (party, deps) in self.const_deps.iter() {
-            for (c, ty) in deps {
+            for (c, (ty, meta)) in deps {
                 let Some(party_deps) = consts.get(party) else {
-                    errs.push(CompilerError::MissingConstant(party.clone(), c.clone()));
+                    errs.push(CompilerError::MissingConstant(
+                        party.clone(),
+                        c.clone(),
+                        *meta,
+                    ));
                     continue;
                 };
                 let Some(literal) = party_deps.get(c) else {
-                    errs.push(CompilerError::MissingConstant(party.clone(), c.clone()));
+                    errs.push(CompilerError::MissingConstant(
+                        party.clone(),
+                        c.clone(),
+                        *meta,
+                    ));
                     continue;
                 };
                 let identifier = format!("{party}::{c}");
@@ -168,7 +176,7 @@ impl TypedProgram {
 
         let mut errs = vec![];
         for (party, deps) in self.const_deps.iter() {
-            for (c, ty) in deps {
+            for (c, (ty, _)) in deps {
                 let Some(party_deps) = consts.get(party) else {
                     continue;
                 };

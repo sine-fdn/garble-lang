@@ -310,39 +310,48 @@ impl CompileTimeError {
         match self {
             CompileTimeError::ScanErrors(errs) => {
                 for ScanError(e, meta) in errs {
-                    errs_for_display.push(("Scan error", format!("{e}"), *meta));
+                    errs_for_display.push(("Scan error", format!("{e}"), Some(*meta)));
                 }
             }
             CompileTimeError::ParseError(errs) => {
                 for ParseError(e, meta) in errs {
-                    errs_for_display.push(("Parse error", format!("{e}"), *meta));
+                    errs_for_display.push(("Parse error", format!("{e}"), Some(*meta)));
                 }
             }
             CompileTimeError::TypeError(errs) => {
                 for TypeError(e, meta) in errs {
-                    errs_for_display.push(("Type error", format!("{e}"), *meta));
+                    errs_for_display.push(("Type error", format!("{e}"), Some(*meta)));
                 }
             }
             CompileTimeError::CompilerError(errs) => {
-                let mut pretty = String::new();
                 for e in errs {
-                    pretty += &format!("\nCompiler error: {e}");
+                    match e {
+                        CompilerError::MissingConstant(_, _, meta) => {
+                            errs_for_display.push(("Compiler error", format!("{e}"), Some(*meta)))
+                        }
+                        e => errs_for_display.push(("Compiler error", format!("{e}"), None)),
+                    }
                 }
-                return pretty;
             }
         }
         let mut msg = "".to_string();
         for (err_type, err, meta) in errs_for_display {
-            writeln!(
-                msg,
-                "\n{} on line {}:{}.",
-                err_type,
-                meta.start.0 + 1,
-                meta.start.1 + 1
-            )
-            .unwrap();
+            if let Some(meta) = meta {
+                writeln!(
+                    msg,
+                    "\n{} on line {}:{}.",
+                    err_type,
+                    meta.start.0 + 1,
+                    meta.start.1 + 1
+                )
+                .unwrap();
+            } else {
+                writeln!(msg, "\n{}:", err_type).unwrap();
+            }
             writeln!(msg, "{err}:").unwrap();
-            msg += &prettify_meta(prg, meta);
+            if let Some(meta) = meta {
+                msg += &prettify_meta(prg, meta);
+            }
         }
         msg
     }
