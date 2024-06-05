@@ -1,4 +1,4 @@
-use std::{fs::File, io::Read, path::PathBuf, process::exit};
+use std::{collections::HashMap, fs::File, io::Read, path::PathBuf, process::exit};
 
 use garble_lang::{check, eval::Evaluator, literal::Literal};
 
@@ -60,8 +60,10 @@ fn run(file: PathBuf, inputs: Vec<String>, function: String) -> Result<(), std::
         eprintln!("{}", e.prettify(&prg));
         exit(65);
     });
-    let (circuit, main_fn) = program.compile(&function).unwrap_or_else(|e| {
-        eprintln!("{e}");
+    let (circuit, main_fn) = program.compile(&function).unwrap_or_else(|errs| {
+        for e in errs {
+            eprintln!("{e}");
+        }
         exit(65);
     });
 
@@ -82,7 +84,8 @@ fn run(file: PathBuf, inputs: Vec<String>, function: String) -> Result<(), std::
         arguments.push(input);
     }
 
-    let mut evaluator = Evaluator::new(&program, main_fn, &circuit);
+    let const_sizes = HashMap::new();
+    let mut evaluator = Evaluator::new(&program, main_fn, &circuit, &const_sizes);
     let main_params = &evaluator.main_fn.params;
     if main_params.len() != arguments.len() {
         eprintln!(

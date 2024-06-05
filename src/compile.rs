@@ -1,23 +1,61 @@
 //! Compiles a [`crate::ast::Program`] to a [`crate::circuit::Circuit`].
 
-use std::{cmp::max, collections::HashMap};
+use std::{
+    cmp::{max, min},
+    collections::HashMap,
+};
 
 use crate::{
     ast::{
-        EnumDef, ExprEnum, Op, Pattern, PatternEnum, StmtEnum, StructDef, Type, UnaryOp,
-        VariantExpr, VariantExprEnum,
+        ConstExpr, ConstExprEnum, EnumDef, ExprEnum, Op, Pattern, PatternEnum, StmtEnum, StructDef,
+        Type, UnaryOp, VariantExprEnum,
     },
     circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, PanicResult, USIZE_BITS},
     env::Env,
-    token::{SignedNumType, UnsignedNumType},
+    literal::Literal,
+    token::{MetaInfo, SignedNumType, UnsignedNumType},
     TypedExpr, TypedFnDef, TypedPattern, TypedProgram, TypedStmt,
 };
 
 /// An error that occurred during compilation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompilerError {
     /// The specified function could not be compiled, as it was not found in the program.
     FnNotFound(String),
+    /// The provided constant was not of the required type.
+    InvalidLiteralType(Literal, Type),
+    /// The constant was declared in the program but not provided during compilation.
+    MissingConstant(String, String, MetaInfo),
+}
+
+impl PartialOrd for CompilerError {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for CompilerError {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (CompilerError::FnNotFound(fn1), CompilerError::FnNotFound(fn2)) => fn1.cmp(fn2),
+            (CompilerError::FnNotFound(_), _) => std::cmp::Ordering::Less,
+            (CompilerError::InvalidLiteralType(_, _), CompilerError::FnNotFound(_)) => {
+                std::cmp::Ordering::Greater
+            }
+            (
+                CompilerError::InvalidLiteralType(literal1, _),
+                CompilerError::InvalidLiteralType(literal2, _),
+            ) => literal1.cmp(literal2),
+            (CompilerError::InvalidLiteralType(_, _), CompilerError::MissingConstant(_, _, _)) => {
+                std::cmp::Ordering::Less
+            }
+            (
+                CompilerError::MissingConstant(_, _, meta1),
+                CompilerError::MissingConstant(_, _, meta2),
+            ) => meta1.cmp(meta2),
+            (CompilerError::MissingConstant(_, _, _), _) => std::cmp::Ordering::Greater,
+        }
+    }
 }
 
 impl std::fmt::Display for CompilerError {
@@ -26,36 +64,265 @@ impl std::fmt::Display for CompilerError {
             CompilerError::FnNotFound(fn_name) => f.write_fmt(format_args!(
                 "Could not find any function with name '{fn_name}'"
             )),
+            CompilerError::InvalidLiteralType(literal, ty) => {
+                f.write_fmt(format_args!("The literal is not of type '{ty}': {literal}"))
+            }
+            CompilerError::MissingConstant(party, identifier, _) => f.write_fmt(format_args!(
+                "The constant {party}::{identifier} was declared in the program but never provided"
+            )),
         }
     }
 }
+
+type CompiledProgram<'a> = (Circuit, &'a TypedFnDef, HashMap<String, usize>);
 
 impl TypedProgram {
     /// Compiles the (type-checked) program, producing a circuit of gates.
     ///
     /// Assumes that the input program has been correctly type-checked and **panics** if
     /// incompatible types are found that should have been caught by the type-checker.
-    pub fn compile(&self, fn_name: &str) -> Result<(Circuit, &TypedFnDef), CompilerError> {
+    pub fn compile(&self, fn_name: &str) -> Result<(Circuit, &TypedFnDef), Vec<CompilerError>> {
+        self.compile_with_constants(fn_name, HashMap::new())
+            .map(|(c, f, _)| (c, f))
+    }
+
+    /// Compiles the (type-checked) program with provided constants, producing a circuit of gates.
+    ///
+    /// Assumes that the input program has been correctly type-checked and **panics** if
+    /// incompatible types are found that should have been caught by the type-checker.
+    pub fn compile_with_constants(
+        &self,
+        fn_name: &str,
+        consts: HashMap<String, HashMap<String, Literal>>,
+    ) -> Result<CompiledProgram, Vec<CompilerError>> {
         let mut env = Env::new();
+        let mut const_sizes = HashMap::new();
+        let mut consts_unsigned = HashMap::new();
+        let mut consts_signed = HashMap::new();
+
+        let mut errs = vec![];
+        for (party, deps) in self.const_deps.iter() {
+            for (c, (ty, meta)) in deps {
+                let Some(party_deps) = consts.get(party) else {
+                    errs.push(CompilerError::MissingConstant(
+                        party.clone(),
+                        c.clone(),
+                        *meta,
+                    ));
+                    continue;
+                };
+                let Some(literal) = party_deps.get(c) else {
+                    errs.push(CompilerError::MissingConstant(
+                        party.clone(),
+                        c.clone(),
+                        *meta,
+                    ));
+                    continue;
+                };
+                let identifier = format!("{party}::{c}");
+                match literal {
+                    Literal::NumUnsigned(n, _) => {
+                        consts_unsigned.insert(identifier.clone(), *n);
+                    }
+                    Literal::NumSigned(n, _) => {
+                        consts_signed.insert(identifier.clone(), *n);
+                    }
+                    _ => {}
+                }
+                if literal.is_of_type(self, ty) {
+                    if let Literal::NumUnsigned(size, UnsignedNumType::Usize) = literal {
+                        const_sizes.insert(identifier, *size as usize);
+                    }
+                }
+            }
+        }
+        if !errs.is_empty() {
+            errs.sort();
+            return Err(errs);
+        }
+        fn resolve_const_expr_unsigned(
+            ConstExpr(expr, _): &ConstExpr,
+            consts_unsigned: &HashMap<String, u64>,
+        ) -> u64 {
+            match expr {
+                ConstExprEnum::NumUnsigned(n, _) => *n,
+                ConstExprEnum::ExternalValue { party, identifier } => *consts_unsigned
+                    .get(&format!("{party}::{identifier}"))
+                    .unwrap(),
+                ConstExprEnum::Max(args) => {
+                    let mut result = 0;
+                    for arg in args {
+                        result = max(result, resolve_const_expr_unsigned(arg, consts_unsigned));
+                    }
+                    result
+                }
+                ConstExprEnum::Min(args) => {
+                    let mut result = u64::MAX;
+                    for arg in args {
+                        result = min(result, resolve_const_expr_unsigned(arg, consts_unsigned));
+                    }
+                    result
+                }
+                expr => panic!("Not an unsigned const expr: {expr:?}"),
+            }
+        }
+        fn resolve_const_expr_signed(
+            ConstExpr(expr, _): &ConstExpr,
+            consts_signed: &HashMap<String, i64>,
+        ) -> i64 {
+            match expr {
+                ConstExprEnum::NumSigned(n, _) => *n,
+                ConstExprEnum::ExternalValue { party, identifier } => *consts_signed
+                    .get(&format!("{party}::{identifier}"))
+                    .unwrap(),
+                ConstExprEnum::Max(args) => {
+                    let mut result = 0;
+                    for arg in args {
+                        result = max(result, resolve_const_expr_signed(arg, consts_signed));
+                    }
+                    result
+                }
+                ConstExprEnum::Min(args) => {
+                    let mut result = i64::MAX;
+                    for arg in args {
+                        result = min(result, resolve_const_expr_signed(arg, consts_signed));
+                    }
+                    result
+                }
+                expr => panic!("Not an unsigned const expr: {expr:?}"),
+            }
+        }
+        for (const_name, const_def) in self.const_defs.iter() {
+            if let Type::Unsigned(UnsignedNumType::Usize) = const_def.ty {
+                if let ConstExpr(ConstExprEnum::ExternalValue { party, identifier }, _) =
+                    &const_def.value
+                {
+                    let identifier = format!("{party}::{identifier}");
+                    const_sizes.insert(const_name.clone(), *const_sizes.get(&identifier).unwrap());
+                }
+                let n = resolve_const_expr_unsigned(&const_def.value, &consts_unsigned);
+                const_sizes.insert(const_name.clone(), n as usize);
+            }
+        }
+
+        let mut errs = vec![];
+        for (party, deps) in self.const_deps.iter() {
+            for (c, (ty, _)) in deps {
+                let Some(party_deps) = consts.get(party) else {
+                    continue;
+                };
+                let Some(literal) = party_deps.get(c) else {
+                    continue;
+                };
+                let identifier = format!("{party}::{c}");
+                if literal.is_of_type(self, ty) {
+                    let bits = literal
+                        .as_bits(self, &const_sizes)
+                        .iter()
+                        .map(|b| *b as usize)
+                        .collect();
+                    env.let_in_current_scope(identifier.clone(), bits);
+                } else {
+                    errs.push(CompilerError::InvalidLiteralType(
+                        literal.clone(),
+                        ty.clone(),
+                    ));
+                }
+            }
+        }
+        if !errs.is_empty() {
+            errs.sort();
+            return Err(errs);
+        }
         let mut input_gates = vec![];
         let mut wire = 2;
-        if let Some(fn_def) = self.fn_defs.get(fn_name) {
-            for param in fn_def.params.iter() {
-                let type_size = param.ty.size_in_bits_for_defs(self);
-                let mut wires = Vec::with_capacity(type_size);
-                for _ in 0..type_size {
-                    wires.push(wire);
-                    wire += 1;
-                }
-                input_gates.push(type_size);
-                env.let_in_current_scope(param.name.clone(), wires);
+        let Some(fn_def) = self.fn_defs.get(fn_name) else {
+            return Err(vec![CompilerError::FnNotFound(fn_name.to_string())]);
+        };
+        for param in fn_def.params.iter() {
+            let type_size = param.ty.size_in_bits_for_defs(self, &const_sizes);
+            let mut wires = Vec::with_capacity(type_size);
+            for _ in 0..type_size {
+                wires.push(wire);
+                wire += 1;
             }
-            let mut circuit = CircuitBuilder::new(input_gates);
-            let output_gates = compile_block(&fn_def.body, self, &mut env, &mut circuit);
-            Ok((circuit.build(output_gates), fn_def))
-        } else {
-            Err(CompilerError::FnNotFound(fn_name.to_string()))
+            input_gates.push(type_size);
+            env.let_in_current_scope(param.name.clone(), wires);
         }
+        let mut circuit = CircuitBuilder::new(input_gates, const_sizes.clone());
+        for (const_name, const_def) in self.const_defs.iter() {
+            let ConstExpr(expr, _) = &const_def.value;
+            match expr {
+                ConstExprEnum::True => env.let_in_current_scope(const_name.clone(), vec![1]),
+                ConstExprEnum::False => env.let_in_current_scope(const_name.clone(), vec![0]),
+                ConstExprEnum::NumUnsigned(n, ty) => {
+                    let ty = Type::Unsigned(*ty);
+                    let mut bits =
+                        Vec::with_capacity(ty.size_in_bits_for_defs(self, circuit.const_sizes()));
+                    unsigned_to_bits(
+                        *n,
+                        ty.size_in_bits_for_defs(self, circuit.const_sizes()),
+                        &mut bits,
+                    );
+                    let bits = bits.into_iter().map(|b| b as usize).collect();
+                    env.let_in_current_scope(const_name.clone(), bits);
+                }
+                ConstExprEnum::NumSigned(n, ty) => {
+                    let ty = Type::Signed(*ty);
+                    let mut bits =
+                        Vec::with_capacity(ty.size_in_bits_for_defs(self, circuit.const_sizes()));
+                    signed_to_bits(
+                        *n,
+                        ty.size_in_bits_for_defs(self, circuit.const_sizes()),
+                        &mut bits,
+                    );
+                    let bits = bits.into_iter().map(|b| b as usize).collect();
+                    env.let_in_current_scope(const_name.clone(), bits);
+                }
+                ConstExprEnum::ExternalValue { party, identifier } => {
+                    let bits = env.get(&format!("{party}::{identifier}")).unwrap();
+                    env.let_in_current_scope(const_name.clone(), bits);
+                }
+                ConstExprEnum::Max(_) | ConstExprEnum::Min(_) => {
+                    if let Type::Unsigned(_) = const_def.ty {
+                        let result =
+                            resolve_const_expr_unsigned(&const_def.value, &consts_unsigned);
+                        let mut bits = Vec::with_capacity(
+                            const_def
+                                .ty
+                                .size_in_bits_for_defs(self, circuit.const_sizes()),
+                        );
+                        unsigned_to_bits(
+                            result,
+                            const_def
+                                .ty
+                                .size_in_bits_for_defs(self, circuit.const_sizes()),
+                            &mut bits,
+                        );
+                        let bits = bits.into_iter().map(|b| b as usize).collect();
+                        env.let_in_current_scope(const_name.clone(), bits);
+                    } else {
+                        let result = resolve_const_expr_signed(&const_def.value, &consts_signed);
+                        let mut bits = Vec::with_capacity(
+                            const_def
+                                .ty
+                                .size_in_bits_for_defs(self, circuit.const_sizes()),
+                        );
+                        signed_to_bits(
+                            result,
+                            const_def
+                                .ty
+                                .size_in_bits_for_defs(self, circuit.const_sizes()),
+                            &mut bits,
+                        );
+                        let bits = bits.into_iter().map(|b| b as usize).collect();
+                        env.let_in_current_scope(const_name.clone(), bits);
+                    }
+                }
+            }
+        }
+        let output_gates = compile_block(&fn_def.body, self, &mut env, &mut circuit);
+        Ok((circuit.build(output_gates), fn_def, const_sizes))
     }
 }
 
@@ -99,12 +366,13 @@ impl TypedStmt {
                 vec![]
             }
             StmtEnum::ArrayAssign(identifier, index, value) => {
-                let elem_bits = value.ty.size_in_bits_for_defs(prg);
+                let elem_bits = value.ty.size_in_bits_for_defs(prg, circuit.const_sizes());
                 let mut array = env.get(identifier).unwrap();
                 let size = array.len() / elem_bits;
                 let mut index = index.compile(prg, env, circuit);
                 let value = value.compile(prg, env, circuit);
-                let index_bits = Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(prg);
+                let index_bits = Type::Unsigned(UnsignedNumType::Usize)
+                    .size_in_bits_for_defs(prg, circuit.const_sizes());
                 extend_to_bits(
                     &mut index,
                     &Type::Unsigned(UnsignedNumType::Usize),
@@ -148,7 +416,9 @@ impl TypedStmt {
             }
             StmtEnum::ForEachLoop(var, array, body) => {
                 let elem_in_bits = match &array.ty {
-                    Type::Array(elem_ty, _size) => elem_ty.size_in_bits_for_defs(prg),
+                    Type::Array(elem_ty, _) | Type::ArrayConst(elem_ty, _) => {
+                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes())
+                    }
                     _ => panic!("Found a non-array value in an array access expr"),
                 };
                 env.push();
@@ -188,18 +458,29 @@ impl TypedExpr {
                 vec![0]
             }
             ExprEnum::NumUnsigned(n, _) => {
-                let mut bits = Vec::with_capacity(ty.size_in_bits_for_defs(prg));
-                unsigned_to_bits(*n, ty.size_in_bits_for_defs(prg), &mut bits);
+                let mut bits =
+                    Vec::with_capacity(ty.size_in_bits_for_defs(prg, circuit.const_sizes()));
+                unsigned_to_bits(
+                    *n,
+                    ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                    &mut bits,
+                );
                 bits.into_iter().map(|b| b as usize).collect()
             }
             ExprEnum::NumSigned(n, _) => {
-                let mut bits = Vec::with_capacity(ty.size_in_bits_for_defs(prg));
-                signed_to_bits(*n, ty.size_in_bits_for_defs(prg), &mut bits);
+                let mut bits =
+                    Vec::with_capacity(ty.size_in_bits_for_defs(prg, circuit.const_sizes()));
+                signed_to_bits(
+                    *n,
+                    ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                    &mut bits,
+                );
                 bits.into_iter().map(|b| b as usize).collect()
             }
             ExprEnum::Identifier(s) => env.get(s).unwrap(),
             ExprEnum::ArrayLiteral(elems) => {
-                let mut wires = Vec::with_capacity(ty.size_in_bits_for_defs(prg));
+                let mut wires =
+                    Vec::with_capacity(ty.size_in_bits_for_defs(prg, circuit.const_sizes()));
                 for elem in elems {
                     wires.extend(elem.compile(prg, env, circuit));
                 }
@@ -208,10 +489,30 @@ impl TypedExpr {
             ExprEnum::ArrayRepeatLiteral(elem, size) => {
                 let elem_ty = elem.ty.clone();
                 let mut elem = elem.compile(prg, env, circuit);
-                extend_to_bits(&mut elem, &elem_ty, elem_ty.size_in_bits_for_defs(prg));
-                let bits = ty.size_in_bits_for_defs(prg);
+                extend_to_bits(
+                    &mut elem,
+                    &elem_ty,
+                    elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                );
+                let bits = ty.size_in_bits_for_defs(prg, circuit.const_sizes());
                 let mut array = Vec::with_capacity(bits);
                 for _ in 0..*size {
+                    array.extend_from_slice(&elem);
+                }
+                array
+            }
+            ExprEnum::ArrayRepeatLiteralConst(elem, size) => {
+                let size = *circuit.const_sizes().get(size).unwrap();
+                let elem_ty = elem.ty.clone();
+                let mut elem = elem.compile(prg, env, circuit);
+                extend_to_bits(
+                    &mut elem,
+                    &elem_ty,
+                    elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                );
+                let bits = ty.size_in_bits_for_defs(prg, circuit.const_sizes());
+                let mut array = Vec::with_capacity(bits);
+                for _ in 0..size {
                     array.extend_from_slice(&elem);
                 }
                 array
@@ -219,12 +520,14 @@ impl TypedExpr {
             ExprEnum::ArrayAccess(array, index) => {
                 let num_elems = match &array.ty {
                     Type::Array(_, size) => *size,
+                    Type::ArrayConst(_, size) => *circuit.const_sizes().get(size).unwrap(),
                     _ => panic!("Found a non-array value in an array access expr"),
                 };
-                let elem_bits = ty.size_in_bits_for_defs(prg);
+                let elem_bits = ty.size_in_bits_for_defs(prg, circuit.const_sizes());
                 let mut array = array.compile(prg, env, circuit);
                 let mut index = index.compile(prg, env, circuit);
-                let index_bits = Type::Unsigned(UnsignedNumType::Usize).size_in_bits_for_defs(prg);
+                let index_bits = Type::Unsigned(UnsignedNumType::Usize)
+                    .size_in_bits_for_defs(prg, circuit.const_sizes());
                 extend_to_bits(
                     &mut index,
                     &Type::Unsigned(UnsignedNumType::Usize),
@@ -267,7 +570,8 @@ impl TypedExpr {
                 }
             }
             ExprEnum::TupleLiteral(tuple) => {
-                let mut wires = Vec::with_capacity(ty.size_in_bits_for_defs(prg));
+                let mut wires =
+                    Vec::with_capacity(ty.size_in_bits_for_defs(prg, circuit.const_sizes()));
                 for value in tuple {
                     wires.extend(value.compile(prg, env, circuit));
                 }
@@ -278,9 +582,12 @@ impl TypedExpr {
                     Type::Tuple(values) => {
                         let mut wires_before = 0;
                         for v in values[0..*index].iter() {
-                            wires_before += v.size_in_bits_for_defs(prg);
+                            wires_before += v.size_in_bits_for_defs(prg, circuit.const_sizes());
                         }
-                        (wires_before, values[*index].size_in_bits_for_defs(prg))
+                        (
+                            wires_before,
+                            values[*index].size_in_bits_for_defs(prg, circuit.const_sizes()),
+                        )
                     }
                     _ => panic!("Expected a tuple type, but found {:?}", tuple.meta),
                 };
@@ -595,7 +902,7 @@ impl TypedExpr {
             ExprEnum::Cast(ty, expr) => {
                 let ty_expr = &expr.ty;
                 let mut expr = expr.compile(prg, env, circuit);
-                let size_after_cast = ty.size_in_bits_for_defs(prg);
+                let size_after_cast = ty.size_in_bits_for_defs(prg, circuit.const_sizes());
 
                 match size_after_cast.cmp(&expr.len()) {
                     std::cmp::Ordering::Equal => expr,
@@ -608,7 +915,8 @@ impl TypedExpr {
             }
             ExprEnum::Range((from, elem_ty), (to, _)) => {
                 let size = (to - from) as usize;
-                let elem_bits = Type::Unsigned(*elem_ty).size_in_bits_for_defs(prg);
+                let elem_bits =
+                    Type::Unsigned(*elem_ty).size_in_bits_for_defs(prg, circuit.const_sizes());
                 let mut array = Vec::with_capacity(elem_bits * size);
                 for i in *from..*to {
                     for b in (0..elem_bits).rev() {
@@ -617,12 +925,11 @@ impl TypedExpr {
                 }
                 array
             }
-            ExprEnum::EnumLiteral(identifier, variant) => {
+            ExprEnum::EnumLiteral(identifier, variant_name, variant) => {
                 let enum_def = prg.enum_defs.get(identifier).unwrap();
                 let tag_size = enum_tag_size(enum_def);
-                let max_size = enum_max_size(enum_def, prg);
+                let max_size = enum_max_size(enum_def, prg, circuit.const_sizes());
                 let mut wires = vec![0; max_size];
-                let VariantExpr(variant_name, variant, _) = variant.as_ref();
                 let tag_number = enum_tag_number(enum_def, variant_name);
                 for (i, wire) in wires.iter_mut().enumerate().take(tag_size) {
                     *wire = (tag_number >> (tag_size - i - 1)) & 1;
@@ -641,7 +948,7 @@ impl TypedExpr {
                 wires
             }
             ExprEnum::Match(expr, clauses) => {
-                let bits = ty.size_in_bits_for_defs(prg);
+                let bits = ty.size_in_bits_for_defs(prg, circuit.const_sizes());
                 let expr = expr.compile(prg, env, circuit);
                 let mut has_prev_match = 0;
                 let mut muxed_ret_expr = vec![0; bits];
@@ -681,7 +988,8 @@ impl TypedExpr {
                     let struct_def = prg.struct_defs.get(name.as_str()).unwrap();
                     let mut bits = 0;
                     for (field_name, field_ty) in struct_def.fields.iter() {
-                        let bits_of_field = field_ty.size_in_bits_for_defs(prg);
+                        let bits_of_field =
+                            field_ty.size_in_bits_for_defs(prg, circuit.const_sizes());
                         if field_name == field {
                             return struct_expr[bits..bits + bits_of_field].to_vec();
                         }
@@ -695,7 +1003,8 @@ impl TypedExpr {
             ExprEnum::StructLiteral(struct_name, fields) => {
                 let fields: HashMap<_, _> = fields.iter().cloned().collect();
                 let struct_def = prg.struct_defs.get(struct_name.as_str()).unwrap();
-                let mut wires = Vec::with_capacity(ty.size_in_bits_for_defs(prg));
+                let mut wires =
+                    Vec::with_capacity(ty.size_in_bits_for_defs(prg, circuit.const_sizes()));
                 for (field_name, _) in struct_def.fields.iter() {
                     let value = fields.get(field_name).unwrap();
                     wires.extend(value.compile(prg, env, circuit));
@@ -729,7 +1038,7 @@ impl TypedPattern {
                 circuit.push_not(match_expr[0])
             }
             PatternEnum::NumUnsigned(n, _) => {
-                let bits = ty.size_in_bits_for_defs(prg);
+                let bits = ty.size_in_bits_for_defs(prg, circuit.const_sizes());
                 let n = unsigned_as_wires(*n, bits);
                 let mut acc = 1;
                 for i in 0..bits {
@@ -739,7 +1048,7 @@ impl TypedPattern {
                 acc
             }
             PatternEnum::NumSigned(n, _) => {
-                let bits = ty.size_in_bits_for_defs(prg);
+                let bits = ty.size_in_bits_for_defs(prg, circuit.const_sizes());
                 let n = signed_as_wires(*n, bits);
                 let mut acc = 1;
                 for i in 0..bits {
@@ -749,7 +1058,7 @@ impl TypedPattern {
                 acc
             }
             PatternEnum::UnsignedInclusiveRange(min, max, _) => {
-                let bits = ty.size_in_bits_for_defs(prg);
+                let bits = ty.size_in_bits_for_defs(prg, circuit.const_sizes());
                 let min = unsigned_as_wires(*min, bits);
                 let max = unsigned_as_wires(*max, bits);
                 let signed = is_signed(ty);
@@ -762,7 +1071,7 @@ impl TypedPattern {
                 circuit.push_and(not_lt_min, not_gt_max)
             }
             PatternEnum::SignedInclusiveRange(min, max, _) => {
-                let bits = ty.size_in_bits_for_defs(prg);
+                let bits = ty.size_in_bits_for_defs(prg, circuit.const_sizes());
                 let min = signed_as_wires(*min, bits);
                 let max = signed_as_wires(*max, bits);
                 let signed = is_signed(ty);
@@ -779,7 +1088,7 @@ impl TypedPattern {
                 let mut w = 0;
                 for field in fields {
                     let Pattern(_, _, field_type) = field;
-                    let field_bits = field_type.size_in_bits_for_defs(prg);
+                    let field_bits = field_type.size_in_bits_for_defs(prg, circuit.const_sizes());
                     let match_expr = &match_expr[w..w + field_bits];
                     let is_field_match = field.compile(match_expr, prg, env, circuit);
                     is_match = circuit.push_and(is_match, is_field_match);
@@ -794,7 +1103,7 @@ impl TypedPattern {
                 let mut is_match = 1;
                 let mut w = 0;
                 for (field_name, field_type) in struct_def.fields.iter() {
-                    let field_bits = field_type.size_in_bits_for_defs(prg);
+                    let field_bits = field_type.size_in_bits_for_defs(prg, circuit.const_sizes());
                     if let Some(field_pattern) = fields.get(field_name) {
                         let match_expr = &match_expr[w..w + field_bits];
                         let is_field_match = field_pattern.compile(match_expr, prg, env, circuit);
@@ -829,7 +1138,8 @@ impl TypedPattern {
                             .types()
                             .unwrap_or_default();
                         for (field, field_type) in fields.iter().zip(field_types) {
-                            let field_bits = field_type.size_in_bits_for_defs(prg);
+                            let field_bits =
+                                field_type.size_in_bits_for_defs(prg, circuit.const_sizes());
                             let match_expr = &match_expr[w..w + field_bits];
                             let is_field_match = field.compile(match_expr, prg, env, circuit);
                             is_match = circuit.push_and(is_match, is_field_match);
@@ -845,7 +1155,11 @@ impl TypedPattern {
 }
 
 impl Type {
-    pub(crate) fn size_in_bits_for_defs(&self, prg: &TypedProgram) -> usize {
+    pub(crate) fn size_in_bits_for_defs(
+        &self,
+        prg: &TypedProgram,
+        const_sizes: &HashMap<String, usize>,
+    ) -> usize {
         match self {
             Type::Bool => 1,
             Type::Unsigned(UnsignedNumType::Usize) => USIZE_BITS,
@@ -853,17 +1167,20 @@ impl Type {
             Type::Unsigned(UnsignedNumType::U16) | Type::Signed(SignedNumType::I16) => 16,
             Type::Unsigned(UnsignedNumType::U32) | Type::Signed(SignedNumType::I32) => 32,
             Type::Unsigned(UnsignedNumType::U64) | Type::Signed(SignedNumType::I64) => 64,
-            Type::Array(elem, size) => elem.size_in_bits_for_defs(prg) * size,
+            Type::Array(elem, size) => elem.size_in_bits_for_defs(prg, const_sizes) * size,
+            Type::ArrayConst(elem, size) => {
+                elem.size_in_bits_for_defs(prg, const_sizes) * const_sizes.get(size).unwrap()
+            }
             Type::Tuple(values) => {
                 let mut size = 0;
                 for v in values {
-                    size += v.size_in_bits_for_defs(prg)
+                    size += v.size_in_bits_for_defs(prg, const_sizes)
                 }
                 size
             }
             Type::Fn(_, _) => panic!("Fn types cannot be directly mapped to bits"),
-            Type::Struct(name) => struct_size(prg.struct_defs.get(name).unwrap(), prg),
-            Type::Enum(name) => enum_max_size(prg.enum_defs.get(name).unwrap(), prg),
+            Type::Struct(name) => struct_size(prg.struct_defs.get(name).unwrap(), prg, const_sizes),
+            Type::Enum(name) => enum_max_size(prg.enum_defs.get(name).unwrap(), prg, const_sizes),
             Type::UntypedTopLevelDefinition(_, _) => {
                 unreachable!("Untyped top level types should have been typechecked at this point")
             }
@@ -871,10 +1188,14 @@ impl Type {
     }
 }
 
-pub(crate) fn struct_size(struct_def: &StructDef, prg: &TypedProgram) -> usize {
+pub(crate) fn struct_size(
+    struct_def: &StructDef,
+    prg: &TypedProgram,
+    const_sizes: &HashMap<String, usize>,
+) -> usize {
     let mut total_size = 0;
     for (_, field_ty) in struct_def.fields.iter() {
-        total_size += field_ty.size_in_bits_for_defs(prg);
+        total_size += field_ty.size_in_bits_for_defs(prg, const_sizes);
     }
     total_size
 }
@@ -896,12 +1217,16 @@ pub(crate) fn enum_tag_size(enum_def: &EnumDef) -> usize {
     bits
 }
 
-pub(crate) fn enum_max_size(enum_def: &EnumDef, prg: &TypedProgram) -> usize {
+pub(crate) fn enum_max_size(
+    enum_def: &EnumDef,
+    prg: &TypedProgram,
+    const_sizes: &HashMap<String, usize>,
+) -> usize {
     let mut max = 0;
     for variant in enum_def.variants.iter() {
         let mut sum = 0;
         for field in variant.types().unwrap_or_default() {
-            sum += field.size_in_bits_for_defs(prg);
+            sum += field.size_in_bits_for_defs(prg, const_sizes);
         }
         if sum > max {
             max = sum;

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use garble_lang::{ast::Type, check, circuit::Circuit, eval::Evaluator, literal::Literal, Error};
 
 #[test]
@@ -126,7 +128,13 @@ fn credit_scoring_single_run() -> Result<(), Error> {
     )?;
 
     let (compute_score_circuit, compute_score_fn) = typed_prg.compile("compute_score")?;
-    let mut eval = Evaluator::new(&typed_prg, compute_score_fn, &compute_score_circuit);
+    let const_sizes = HashMap::new();
+    let mut eval = Evaluator::new(
+        &typed_prg,
+        compute_score_fn,
+        &compute_score_circuit,
+        &const_sizes,
+    );
 
     eval.set_literal(scoring_algorithm)?;
     eval.set_literal(user)?;

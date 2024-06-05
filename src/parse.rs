@@ -4,8 +4,8 @@ use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern, PatternEnum, Program, Stmt,
-        StmtEnum, StructDef, Type, UnaryOp, Variant, VariantExpr, VariantExprEnum,
+        ConstDef, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern,
+        PatternEnum, Program, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant, VariantExprEnum,
     },
     scan::Tokens,
     token::{MetaInfo, SignedNumType, Token, TokenEnum, UnsignedNumType},
@@ -20,7 +20,7 @@ pub struct ParseError(pub ParseErrorEnum, pub MetaInfo);
 
 /// The different kinds of errors found during parsing.
 pub enum ParseErrorEnum {
-    /// The top level definition is not a valid enum or function declaration.
+    /// The top level definition is not a valid enum/struct/const/fn declaration.
     InvalidTopLevelDef,
     /// Arrays of the specified size are not supported.
     InvalidArraySize,
@@ -30,6 +30,8 @@ pub enum ParseErrorEnum {
     InvalidPattern,
     /// The literal is not valid.
     InvalidLiteral,
+    /// Expected a const expr, but found a non-const or invalid expr.
+    InvalidConstExpr,
     /// Expected a type, but found a non-type token.
     ExpectedType,
     /// Expected a statement, but found a non-statement token.
@@ -48,7 +50,7 @@ impl std::fmt::Display for ParseErrorEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ParseErrorEnum::InvalidTopLevelDef => {
-                f.write_str("Not a valid function or enum definition")
+                f.write_str("Not a valid top level declaration (struct/enum/const/fn)")
             }
             ParseErrorEnum::InvalidArraySize => {
                 let max = usize::MAX;
@@ -59,6 +61,7 @@ impl std::fmt::Display for ParseErrorEnum {
             ParseErrorEnum::InvalidRangeExpr => f.write_str("Invalid range expression"),
             ParseErrorEnum::InvalidPattern => f.write_str("Invalid pattern"),
             ParseErrorEnum::InvalidLiteral => f.write_str("Invalid literal"),
+            ParseErrorEnum::InvalidConstExpr => f.write_str("Invalid const expr"),
             ParseErrorEnum::ExpectedType => f.write_str("Expected a type"),
             ParseErrorEnum::ExpectedStmt => f.write_str("Expected a statement"),
             ParseErrorEnum::ExpectedExpr => f.write_str("Expected an expression"),
@@ -115,7 +118,9 @@ impl Parser {
             TokenEnum::KeywordFn,
             TokenEnum::KeywordStruct,
             TokenEnum::KeywordEnum,
+            TokenEnum::KeywordConst,
         ];
+        let mut const_defs = HashMap::new();
         let mut struct_defs = HashMap::new();
         let mut enum_defs = HashMap::new();
         let mut fn_defs = HashMap::new();
@@ -124,6 +129,14 @@ impl Parser {
             match token_enum {
                 TokenEnum::KeywordPub if is_pub.is_none() => {
                     is_pub = Some(meta);
+                }
+                TokenEnum::KeywordConst => {
+                    if let Ok((const_name, const_def)) = self.parse_const_def(meta) {
+                        const_defs.insert(const_name, const_def);
+                    } else {
+                        self.consume_until_one_of(&top_level_keywords);
+                    }
+                    is_pub = None;
                 }
                 TokenEnum::KeywordStruct => {
                     if let Ok((struct_name, struct_def)) = self.parse_struct_def(meta) {
@@ -158,12 +171,84 @@ impl Parser {
         }
         if self.errors.is_empty() {
             return Ok(Program {
+                const_deps: HashMap::new(),
+                const_defs,
                 struct_defs,
                 enum_defs,
                 fn_defs,
             });
         }
         Err(self.errors)
+    }
+
+    fn parse_const_def(&mut self, start: MetaInfo) -> Result<(String, ConstDef), ()> {
+        // const keyword was already consumed by the top-level parser
+        let (identifier, _) = self.expect_identifier()?;
+
+        self.expect(&TokenEnum::Colon)?;
+
+        let (ty, _) = self.parse_type()?;
+
+        self.expect(&TokenEnum::Eq)?;
+
+        let Ok(expr) = self.parse_primary() else {
+            self.push_error(ParseErrorEnum::InvalidTopLevelDef, start);
+            return Err(());
+        };
+        fn parse_const_expr(
+            expr: UntypedExpr,
+        ) -> Result<ConstExpr, Vec<(ParseErrorEnum, MetaInfo)>> {
+            match expr.inner {
+                ExprEnum::True => Ok(ConstExpr(ConstExprEnum::True, expr.meta)),
+                ExprEnum::False => Ok(ConstExpr(ConstExprEnum::False, expr.meta)),
+                ExprEnum::NumUnsigned(n, ty) => {
+                    Ok(ConstExpr(ConstExprEnum::NumUnsigned(n, ty), expr.meta))
+                }
+                ExprEnum::NumSigned(n, ty) => {
+                    Ok(ConstExpr(ConstExprEnum::NumSigned(n, ty), expr.meta))
+                }
+                ExprEnum::EnumLiteral(party, identifier, VariantExprEnum::Unit) => Ok(ConstExpr(
+                    ConstExprEnum::ExternalValue { party, identifier },
+                    expr.meta,
+                )),
+                ExprEnum::FnCall(f, args) if f == "max" || f == "min" => {
+                    let mut const_exprs = vec![];
+                    let mut arg_errs = vec![];
+                    for arg in args {
+                        match parse_const_expr(arg) {
+                            Ok(value) => {
+                                const_exprs.push(value);
+                            }
+                            Err(errs) => {
+                                arg_errs.extend(errs);
+                            }
+                        }
+                    }
+                    if !arg_errs.is_empty() {
+                        return Err(arg_errs);
+                    }
+                    if f == "max" {
+                        Ok(ConstExpr(ConstExprEnum::Max(const_exprs), expr.meta))
+                    } else {
+                        Ok(ConstExpr(ConstExprEnum::Min(const_exprs), expr.meta))
+                    }
+                }
+                _ => Err(vec![(ParseErrorEnum::InvalidConstExpr, expr.meta)]),
+            }
+        }
+        match parse_const_expr(expr) {
+            Ok(value) => {
+                let end = self.expect(&TokenEnum::Semicolon)?;
+                let meta = join_meta(start, end);
+                Ok((identifier, ConstDef { ty, value, meta }))
+            }
+            Err(errs) => {
+                for (e, meta) in errs {
+                    self.push_error(e, meta);
+                }
+                Err(())
+            }
+        }
     }
 
     fn parse_struct_def(&mut self, start: MetaInfo) -> Result<(String, StructDef), ()> {
@@ -321,10 +406,7 @@ impl Parser {
                     self.expect(&TokenEnum::Semicolon)?;
                     return Ok(Stmt::new(StmtEnum::Let(pattern, binding), meta));
                 } else {
-                    self.push_error_for_next(ParseErrorEnum::ExpectedStmt);
                     self.consume_until_one_of(&[TokenEnum::Semicolon]);
-                    self.advance();
-                    self.parse_expr()?;
                     self.expect(&TokenEnum::Semicolon)?;
                 }
             }
@@ -401,7 +483,8 @@ impl Parser {
     fn parse_stmts(&mut self) -> Result<Vec<UntypedStmt>, ()> {
         let mut stmts = vec![];
         let mut has_error = false;
-        while !self.peek(&TokenEnum::RightBrace)
+        while self.tokens.peek().is_some()
+            && !self.peek(&TokenEnum::RightBrace)
             && !self.peek(&TokenEnum::Comma)
             && !self.peek(&TokenEnum::KeywordPub)
             && !self.peek(&TokenEnum::KeywordFn)
@@ -1111,6 +1194,7 @@ impl Parser {
                 _ => {
                     if self.next_matches(&TokenEnum::DoubleColon).is_some() {
                         let (variant_name, variant_meta) = self.expect_identifier()?;
+                        let meta = join_meta(meta, variant_meta);
                         let variant = if self.next_matches(&TokenEnum::LeftParen).is_some() {
                             let mut fields = vec![];
                             if !self.peek(&TokenEnum::RightParen) {
@@ -1132,13 +1216,15 @@ impl Parser {
                                     fields.push(child);
                                 }
                             }
-                            let end = self.expect(&TokenEnum::RightParen)?;
-                            let variant_meta = join_meta(variant_meta, end);
-                            VariantExpr(variant_name, VariantExprEnum::Tuple(fields), variant_meta)
+                            self.expect(&TokenEnum::RightParen)?;
+                            VariantExprEnum::Tuple(fields)
                         } else {
-                            VariantExpr(variant_name, VariantExprEnum::Unit, variant_meta)
+                            VariantExprEnum::Unit
                         };
-                        Expr::untyped(ExprEnum::EnumLiteral(identifier, Box::new(variant)), meta)
+                        Expr::untyped(
+                            ExprEnum::EnumLiteral(identifier, variant_name, variant),
+                            meta,
+                        )
                     } else if self.next_matches(&TokenEnum::LeftBrace).is_some()
                         && self.struct_literals_allowed
                     {
@@ -1245,19 +1331,28 @@ impl Parser {
                 };
                 if self.peek(&TokenEnum::Semicolon) {
                     self.expect(&TokenEnum::Semicolon)?;
-                    let size = if let Some(Token(TokenEnum::ConstantIndexOrSize(n), _)) =
-                        self.tokens.peek()
-                    {
-                        let n = *n;
-                        self.advance();
-                        n as usize
-                    } else {
-                        self.push_error_for_next(ParseErrorEnum::InvalidArraySize);
-                        return Err(());
-                    };
-                    let meta_end = self.expect(&TokenEnum::RightBracket)?;
-                    let meta = join_meta(meta, meta_end);
-                    Expr::untyped(ExprEnum::ArrayRepeatLiteral(Box::new(elem), size), meta)
+                    match self.tokens.peek().cloned() {
+                        Some(Token(TokenEnum::ConstantIndexOrSize(n), _)) => {
+                            self.advance();
+                            let meta_end = self.expect(&TokenEnum::RightBracket)?;
+                            let meta = join_meta(meta, meta_end);
+                            let size = n as usize;
+                            Expr::untyped(ExprEnum::ArrayRepeatLiteral(Box::new(elem), size), meta)
+                        }
+                        Some(Token(TokenEnum::Identifier(n), _)) => {
+                            self.advance();
+                            let meta_end = self.expect(&TokenEnum::RightBracket)?;
+                            let meta = join_meta(meta, meta_end);
+                            Expr::untyped(
+                                ExprEnum::ArrayRepeatLiteralConst(Box::new(elem), n),
+                                meta,
+                            )
+                        }
+                        _ => {
+                            self.push_error_for_next(ParseErrorEnum::InvalidArraySize);
+                            return Err(());
+                        }
+                    }
                 } else {
                     let mut elems = vec![elem];
                     while self.next_matches(&TokenEnum::Comma).is_some() {
@@ -1308,18 +1403,25 @@ impl Parser {
         } else if let Some(meta) = self.next_matches(&TokenEnum::LeftBracket) {
             let (ty, _) = self.parse_type()?;
             self.expect(&TokenEnum::Semicolon)?;
-            let size = if let Some(Token(TokenEnum::ConstantIndexOrSize(n), _)) = self.tokens.peek()
-            {
-                let n = *n;
-                self.advance();
-                n as usize
-            } else {
-                self.push_error_for_next(ParseErrorEnum::InvalidArraySize);
-                return Err(());
-            };
-            let meta_end = self.expect(&TokenEnum::RightBracket)?;
-            let meta = join_meta(meta, meta_end);
-            Ok((Type::Array(Box::new(ty), size), meta))
+            match self.tokens.peek().cloned() {
+                Some(Token(TokenEnum::ConstantIndexOrSize(n), _)) => {
+                    self.advance();
+                    let size = n as usize;
+                    let meta_end = self.expect(&TokenEnum::RightBracket)?;
+                    let meta = join_meta(meta, meta_end);
+                    Ok((Type::Array(Box::new(ty), size), meta))
+                }
+                Some(Token(TokenEnum::Identifier(n), _)) => {
+                    self.advance();
+                    let meta_end = self.expect(&TokenEnum::RightBracket)?;
+                    let meta = join_meta(meta, meta_end);
+                    Ok((Type::ArrayConst(Box::new(ty), n), meta))
+                }
+                _ => {
+                    self.push_error_for_next(ParseErrorEnum::InvalidArraySize);
+                    return Err(());
+                }
+            }
         } else {
             let (ty, meta) = self.expect_identifier()?;
             let ty = match ty.as_str() {

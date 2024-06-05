@@ -18,10 +18,12 @@ pub enum TokenEnum {
     UnsignedNum(u64, UnsignedNumType),
     /// Signed number.
     SignedNum(i64, SignedNumType),
-    /// `enum` keyword.
-    KeywordEnum,
+    /// `const` keyword.
+    KeywordConst,
     /// `struct` keyword.
     KeywordStruct,
+    /// `enum` keyword.
+    KeywordEnum,
     /// `fn` keyword.
     KeywordFn,
     /// `let` keyword.
@@ -121,6 +123,7 @@ impl std::fmt::Display for TokenEnum {
             TokenEnum::ConstantIndexOrSize(num) => f.write_fmt(format_args!("{num}")),
             TokenEnum::UnsignedNum(num, suffix) => f.write_fmt(format_args!("{num}{suffix}")),
             TokenEnum::SignedNum(num, suffix) => f.write_fmt(format_args!("{num}{suffix}")),
+            TokenEnum::KeywordConst => f.write_str("const"),
             TokenEnum::KeywordStruct => f.write_str("struct"),
             TokenEnum::KeywordEnum => f.write_str("enum"),
             TokenEnum::KeywordFn => f.write_str("fn"),
@@ -173,7 +176,7 @@ impl std::fmt::Display for TokenEnum {
 }
 
 /// A suffix indicating the explicit unsigned number type of the literal.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum UnsignedNumType {
     /// Unsigned integer type used to index arrays, length depends on the host platform.
@@ -214,7 +217,7 @@ impl std::fmt::Display for UnsignedNumType {
 }
 
 /// A suffix indicating the explicit signed number type of the literal.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum SignedNumType {
     /// 8-bit signed integer type.

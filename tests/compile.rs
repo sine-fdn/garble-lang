@@ -1,4 +1,8 @@
-use garble_lang::{compile, Error};
+use std::collections::HashMap;
+
+use garble_lang::{
+    compile, compile_with_constants, literal::Literal, token::UnsignedNumType, Error,
+};
 
 fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
     let e: Error = e.into();
@@ -1832,5 +1836,218 @@ pub fn main(_a: i32, _b: i32) -> () {
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(r.to_string(), "()");
+    Ok(())
+}
+
+#[test]
+fn compile_const() -> Result<(), Error> {
+    let prg = "
+const MY_CONST: u16 = PARTY_0::MY_CONST;
+pub fn main(x: u16) -> u16 {
+    x + MY_CONST
+}
+";
+    let consts = HashMap::from_iter(vec![(
+        "PARTY_0".to_string(),
+        HashMap::from_iter(vec![(
+            "MY_CONST".to_string(),
+            Literal::NumUnsigned(2, UnsignedNumType::U16),
+        )]),
+    )]);
+    let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u16(255);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        257
+    );
+    Ok(())
+}
+
+#[test]
+fn compile_const_literal() -> Result<(), Error> {
+    let prg = "
+const MY_CONST: u16 = 2u16;
+pub fn main(x: u16) -> u16 {
+    x + MY_CONST
+}
+";
+    let consts = HashMap::from_iter(vec![]);
+    let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u16(255);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        257
+    );
+    Ok(())
+}
+
+#[test]
+fn compile_const_usize() -> Result<(), Error> {
+    let prg = "
+const MY_CONST: usize = PARTY_0::MY_CONST;
+pub fn main(x: u16) -> u16 {
+    let array = [2u16; MY_CONST];
+    x + array[1]
+}
+";
+    let consts = HashMap::from_iter(vec![(
+        "PARTY_0".to_string(),
+        HashMap::from_iter(vec![(
+            "MY_CONST".to_string(),
+            Literal::NumUnsigned(2, UnsignedNumType::Usize),
+        )]),
+    )]);
+    let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u16(255);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        257
+    );
+    Ok(())
+}
+
+#[test]
+fn compile_const_aggregated_max() -> Result<(), Error> {
+    let prg = "
+const MY_CONST: usize = max(PARTY_0::MY_CONST, PARTY_1::MY_CONST);
+pub fn main(x: u16) -> u16 {
+    let array = [2u16; MY_CONST];
+    x + array[1]
+}
+";
+    let consts = HashMap::from_iter(vec![
+        (
+            "PARTY_0".to_string(),
+            HashMap::from_iter(vec![(
+                "MY_CONST".to_string(),
+                Literal::NumUnsigned(1, UnsignedNumType::Usize),
+            )]),
+        ),
+        (
+            "PARTY_1".to_string(),
+            HashMap::from_iter(vec![(
+                "MY_CONST".to_string(),
+                Literal::NumUnsigned(2, UnsignedNumType::Usize),
+            )]),
+        ),
+    ]);
+    let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u16(255);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        257
+    );
+    Ok(())
+}
+
+#[test]
+fn compile_const_aggregated_min() -> Result<(), Error> {
+    let prg = "
+const MY_CONST: usize = min(PARTY_0::MY_CONST, PARTY_1::MY_CONST);
+pub fn main(x: u16) -> u16 {
+    let array = [2u16; MY_CONST];
+    x + array[1]
+}
+";
+    let consts = HashMap::from_iter(vec![
+        (
+            "PARTY_0".to_string(),
+            HashMap::from_iter(vec![(
+                "MY_CONST".to_string(),
+                Literal::NumUnsigned(3, UnsignedNumType::Usize),
+            )]),
+        ),
+        (
+            "PARTY_1".to_string(),
+            HashMap::from_iter(vec![(
+                "MY_CONST".to_string(),
+                Literal::NumUnsigned(2, UnsignedNumType::Usize),
+            )]),
+        ),
+    ]);
+    let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u16(255);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        257
+    );
+    Ok(())
+}
+
+#[test]
+fn compile_const_size_in_fn_param() -> Result<(), Error> {
+    let prg = "
+const MY_CONST: usize = max(PARTY_0::MY_CONST, PARTY_1::MY_CONST);
+pub fn main(array: [u16; MY_CONST]) -> u16 {
+    array[1]
+}
+";
+    let consts = HashMap::from_iter(vec![
+        (
+            "PARTY_0".to_string(),
+            HashMap::from_iter(vec![(
+                "MY_CONST".to_string(),
+                Literal::NumUnsigned(1, UnsignedNumType::Usize),
+            )]),
+        ),
+        (
+            "PARTY_1".to_string(),
+            HashMap::from_iter(vec![(
+                "MY_CONST".to_string(),
+                Literal::NumUnsigned(2, UnsignedNumType::Usize),
+            )]),
+        ),
+    ]);
+    let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.parse_literal("[7u16, 8u16]").unwrap();
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(u16::try_from(output).map_err(|e| pretty_print(e, prg))?, 8);
+    Ok(())
+}
+
+#[test]
+fn compile_const_size_for_each_loop() -> Result<(), Error> {
+    let prg = "
+const MY_CONST: usize = max(PARTY_0::MY_CONST, PARTY_1::MY_CONST);
+pub fn main(array: [u16; MY_CONST]) -> u16 {
+    let mut result = 0u16;
+    for elem in array {
+        result = result + elem;
+    }
+    result
+}
+";
+    let consts = HashMap::from_iter(vec![
+        (
+            "PARTY_0".to_string(),
+            HashMap::from_iter(vec![(
+                "MY_CONST".to_string(),
+                Literal::NumUnsigned(1, UnsignedNumType::Usize),
+            )]),
+        ),
+        (
+            "PARTY_1".to_string(),
+            HashMap::from_iter(vec![(
+                "MY_CONST".to_string(),
+                Literal::NumUnsigned(2, UnsignedNumType::Usize),
+            )]),
+        ),
+    ]);
+    let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.parse_literal("[7u16, 8u16]").unwrap();
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(u16::try_from(output).map_err(|e| pretty_print(e, prg))?, 15);
     Ok(())
 }

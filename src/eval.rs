@@ -1,6 +1,6 @@
 //! Evaluates a [`crate::circuit::Circuit`] with inputs supplied by different parties.
 
-use std::fmt::Debug;
+use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
     ast::Type,
@@ -20,16 +20,23 @@ pub struct Evaluator<'a> {
     /// The compiled circuit.
     pub circuit: &'a Circuit,
     inputs: Vec<Vec<bool>>,
+    const_sizes: &'a HashMap<String, usize>,
 }
 
 impl<'a> Evaluator<'a> {
     /// Scans, parses, type-checks and then compiles a program for later evaluation.
-    pub fn new(program: &'a TypedProgram, main_fn: &'a TypedFnDef, circuit: &'a Circuit) -> Self {
+    pub fn new(
+        program: &'a TypedProgram,
+        main_fn: &'a TypedFnDef,
+        circuit: &'a Circuit,
+        const_sizes: &'a HashMap<String, usize>,
+    ) -> Self {
         Self {
             program,
             main_fn,
             circuit,
             inputs: vec![],
+            const_sizes,
         }
     }
 }
@@ -111,6 +118,7 @@ impl<'a> Evaluator<'a> {
             program: self.program,
             main_fn: self.main_fn,
             output,
+            const_sizes: self.const_sizes.clone(),
         })
     }
 
@@ -183,12 +191,13 @@ impl<'a> Evaluator<'a> {
     pub fn set_literal(&mut self, literal: Literal) -> Result<(), EvalError> {
         if self.inputs.len() < self.main_fn.params.len() {
             let ty = &self.main_fn.params[self.inputs.len()].ty;
-            if literal.is_of_type(self.program, ty) {
+            let ty = resolve_const_type(ty, self.const_sizes);
+            if literal.is_of_type(self.program, &ty) {
                 self.inputs.push(vec![]);
                 self.inputs
                     .last_mut()
                     .unwrap()
-                    .extend(literal.as_bits(self.program));
+                    .extend(literal.as_bits(self.program, self.const_sizes));
                 Ok(())
             } else {
                 Err(EvalError::InvalidLiteralType(literal, ty.clone()))
@@ -202,13 +211,40 @@ impl<'a> Evaluator<'a> {
     pub fn parse_literal(&mut self, literal: &str) -> Result<(), EvalError> {
         if self.inputs.len() < self.main_fn.params.len() {
             let ty = &self.main_fn.params[self.inputs.len()].ty;
+            let ty = resolve_const_type(ty, self.const_sizes);
             let parsed =
-                Literal::parse(self.program, ty, literal).map_err(EvalError::LiteralParseError)?;
+                Literal::parse(self.program, &ty, literal).map_err(EvalError::LiteralParseError)?;
             self.set_literal(parsed)?;
             Ok(())
         } else {
             Err(EvalError::UnexpectedNumberOfParties)
         }
+    }
+}
+
+pub(crate) fn resolve_const_type(ty: &Type, const_sizes: &HashMap<String, usize>) -> Type {
+    match ty {
+        Type::Fn(params, ret_ty) => Type::Fn(
+            params
+                .iter()
+                .map(|ty| resolve_const_type(ty, const_sizes))
+                .collect(),
+            Box::new(resolve_const_type(ret_ty, const_sizes)),
+        ),
+        Type::Array(elem_ty, size) => {
+            Type::Array(Box::new(resolve_const_type(elem_ty, const_sizes)), *size)
+        }
+        Type::ArrayConst(elem_ty, size) => Type::Array(
+            Box::new(resolve_const_type(elem_ty, const_sizes)),
+            *const_sizes.get(size).unwrap(),
+        ),
+        Type::Tuple(elems) => Type::Tuple(
+            elems
+                .iter()
+                .map(|ty| resolve_const_type(ty, const_sizes))
+                .collect(),
+        ),
+        ty => ty.clone(),
     }
 }
 
@@ -218,6 +254,7 @@ pub struct EvalOutput<'a> {
     program: &'a TypedProgram,
     main_fn: &'a TypedFnDef,
     output: Vec<bool>,
+    const_sizes: HashMap<String, usize>,
 }
 
 impl<'a> TryFrom<EvalOutput<'a>> for bool {
@@ -336,7 +373,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for Vec<bool> {
 impl<'a> EvalOutput<'a> {
     fn into_unsigned(self, ty: Type) -> Result<u64, EvalError> {
         let output = EvalPanic::parse(&self.output)?;
-        let size = ty.size_in_bits_for_defs(self.program);
+        let size = ty.size_in_bits_for_defs(self.program, &self.const_sizes);
         if output.len() == size {
             let mut n = 0;
             for (i, output) in output.iter().copied().enumerate() {
@@ -353,7 +390,7 @@ impl<'a> EvalOutput<'a> {
 
     fn into_signed(self, ty: Type) -> Result<i64, EvalError> {
         let output = EvalPanic::parse(&self.output)?;
-        let size = ty.size_in_bits_for_defs(self.program);
+        let size = ty.size_in_bits_for_defs(self.program, &self.const_sizes);
         if output.len() == size {
             let mut n = 0;
             for (i, output) in output.iter().copied().enumerate() {
@@ -376,6 +413,6 @@ impl<'a> EvalOutput<'a> {
     /// Decodes the evaluated result as a literal (with enums looked up in the program).
     pub fn into_literal(self) -> Result<Literal, EvalError> {
         let ret_ty = &self.main_fn.ty;
-        Literal::from_result_bits(self.program, ret_ty, &self.output)
+        Literal::from_result_bits(self.program, ret_ty, &self.output, &self.const_sizes)
     }
 }

@@ -41,15 +41,18 @@
 #![deny(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
 
-use ast::{Expr, FnDef, Pattern, Program, Stmt, Type, VariantExpr};
+use ast::{Expr, FnDef, Pattern, Program, Stmt, Type};
 use check::TypeError;
 use circuit::Circuit;
 use compile::CompilerError;
-use eval::{EvalError, Evaluator};
+use eval::{resolve_const_type, EvalError, Evaluator};
 use literal::Literal;
 use parse::ParseError;
 use scan::{scan, ScanError};
-use std::fmt::{Display, Write as _};
+use std::{
+    collections::HashMap,
+    fmt::{Display, Write as _},
+};
 use token::MetaInfo;
 
 #[cfg(feature = "serde")]
@@ -76,8 +79,6 @@ pub type TypedStmt = Stmt<Type>;
 pub type TypedExpr = Expr<Type>;
 /// [`crate::ast::Pattern`] after typechecking.
 pub type TypedPattern = Pattern<Type>;
-/// [`crate::ast::VariantExpr`] after typechecking.
-pub type TypedVariantExpr = VariantExpr<Type>;
 
 pub mod ast;
 pub mod check;
@@ -104,6 +105,25 @@ pub fn compile(prg: &str) -> Result<GarbleProgram, Error> {
         program,
         main,
         circuit,
+        consts: HashMap::new(),
+        const_sizes: HashMap::new(),
+    })
+}
+
+/// Scans, parses, type-checks and then compiles the `"main"` fn of a program to a boolean circuit.
+pub fn compile_with_constants(
+    prg: &str,
+    consts: HashMap<String, HashMap<String, Literal>>,
+) -> Result<GarbleProgram, Error> {
+    let program = check(prg)?;
+    let (circuit, main, const_sizes) = program.compile_with_constants("main", consts.clone())?;
+    let main = main.clone();
+    Ok(GarbleProgram {
+        program,
+        main,
+        circuit,
+        consts,
+        const_sizes,
     })
 }
 
@@ -117,16 +137,20 @@ pub struct GarbleProgram {
     pub main: TypedFnDef,
     /// The compilation output, as a circuit of boolean gates.
     pub circuit: Circuit,
+    /// The constants used for compiling the circuit.
+    pub consts: HashMap<String, HashMap<String, Literal>>,
+    /// The values of usize constants used for compiling the circuit.
+    pub const_sizes: HashMap<String, usize>,
 }
 
 /// An input argument for a Garble program and circuit.
 #[derive(Debug, Clone)]
-pub struct GarbleArgument<'a>(Literal, &'a TypedProgram);
+pub struct GarbleArgument<'a>(Literal, &'a TypedProgram, &'a HashMap<String, usize>);
 
 impl GarbleProgram {
     /// Returns an evaluator that can be used to run the compiled circuit.
     pub fn evaluator(&self) -> Evaluator<'_> {
-        Evaluator::new(&self.program, &self.main, &self.circuit)
+        Evaluator::new(&self.program, &self.main, &self.circuit, &self.const_sizes)
     }
 
     /// Type-checks and uses the literal as the circuit input argument with the given index.
@@ -138,10 +162,11 @@ impl GarbleProgram {
         let Some(param) = self.main.params.get(arg_index) else {
             return Err(EvalError::InvalidArgIndex(arg_index));
         };
-        if !literal.is_of_type(&self.program, &param.ty) {
-            return Err(EvalError::InvalidLiteralType(literal, param.ty.clone()));
+        let ty = resolve_const_type(&param.ty, &self.const_sizes);
+        if !literal.is_of_type(&self.program, &ty) {
+            return Err(EvalError::InvalidLiteralType(literal, ty));
         }
-        Ok(GarbleArgument(literal, &self.program))
+        Ok(GarbleArgument(literal, &self.program, &self.const_sizes))
     }
 
     /// Tries to parse the string as the circuit input argument with the given index.
@@ -155,19 +180,19 @@ impl GarbleProgram {
         };
         let literal = Literal::parse(&self.program, &param.ty, literal)
             .map_err(EvalError::LiteralParseError)?;
-        Ok(GarbleArgument(literal, &self.program))
+        Ok(GarbleArgument(literal, &self.program, &self.const_sizes))
     }
 
     /// Tries to convert the circuit output back to a Garble literal.
     pub fn parse_output(&self, bits: &[bool]) -> Result<Literal, EvalError> {
-        Literal::from_result_bits(&self.program, &self.main.ty, bits)
+        Literal::from_result_bits(&self.program, &self.main.ty, bits, &self.const_sizes)
     }
 }
 
 impl GarbleArgument<'_> {
     /// Converts the argument to input bits for the compiled circuit.
     pub fn as_bits(&self) -> Vec<bool> {
-        self.0.as_bits(self.1)
+        self.0.as_bits(self.1, self.2)
     }
 
     /// Converts the argument to a Garble literal.
@@ -192,7 +217,7 @@ pub enum CompileTimeError {
     /// Errors originating in the type-checking phase.
     TypeError(Vec<TypeError>),
     /// Errors originating in the compilation phase.
-    CompilerError(CompilerError),
+    CompilerError(Vec<CompilerError>),
 }
 
 /// A generic error that combines compile-time and run-time errors.
@@ -224,8 +249,8 @@ impl From<Vec<TypeError>> for CompileTimeError {
     }
 }
 
-impl From<CompilerError> for CompileTimeError {
-    fn from(e: CompilerError) -> Self {
+impl From<Vec<CompilerError>> for CompileTimeError {
+    fn from(e: Vec<CompilerError>) -> Self {
         Self::CompilerError(e)
     }
 }
@@ -285,39 +310,48 @@ impl CompileTimeError {
         match self {
             CompileTimeError::ScanErrors(errs) => {
                 for ScanError(e, meta) in errs {
-                    errs_for_display.push(("Scan error", format!("{e}"), *meta));
+                    errs_for_display.push(("Scan error", format!("{e}"), Some(*meta)));
                 }
             }
             CompileTimeError::ParseError(errs) => {
                 for ParseError(e, meta) in errs {
-                    errs_for_display.push(("Parse error", format!("{e}"), *meta));
+                    errs_for_display.push(("Parse error", format!("{e}"), Some(*meta)));
                 }
             }
             CompileTimeError::TypeError(errs) => {
                 for TypeError(e, meta) in errs {
-                    errs_for_display.push(("Type error", format!("{e}"), *meta));
+                    errs_for_display.push(("Type error", format!("{e}"), Some(*meta)));
                 }
             }
-            CompileTimeError::CompilerError(e) => {
-                let meta = MetaInfo {
-                    start: (0, 0),
-                    end: (0, 0),
-                };
-                errs_for_display.push(("Compiler error", format!("{e}"), meta))
+            CompileTimeError::CompilerError(errs) => {
+                for e in errs {
+                    match e {
+                        CompilerError::MissingConstant(_, _, meta) => {
+                            errs_for_display.push(("Compiler error", format!("{e}"), Some(*meta)))
+                        }
+                        e => errs_for_display.push(("Compiler error", format!("{e}"), None)),
+                    }
+                }
             }
         }
         let mut msg = "".to_string();
         for (err_type, err, meta) in errs_for_display {
-            writeln!(
-                msg,
-                "\n{} on line {}:{}.",
-                err_type,
-                meta.start.0 + 1,
-                meta.start.1 + 1
-            )
-            .unwrap();
+            if let Some(meta) = meta {
+                writeln!(
+                    msg,
+                    "\n{} on line {}:{}.",
+                    err_type,
+                    meta.start.0 + 1,
+                    meta.start.1 + 1
+                )
+                .unwrap();
+            } else {
+                writeln!(msg, "\n{}:", err_type).unwrap();
+            }
             writeln!(msg, "{err}:").unwrap();
-            msg += &prettify_meta(prg, meta);
+            if let Some(meta) = meta {
+                msg += &prettify_meta(prg, meta);
+            }
         }
         msg
     }

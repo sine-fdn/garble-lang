@@ -11,12 +11,58 @@ use crate::token::{MetaInfo, SignedNumType, UnsignedNumType};
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Program<T> {
+    /// The external constants that the top level const definitions depend upon.
+    pub const_deps: HashMap<String, HashMap<String, (T, MetaInfo)>>,
+    /// Top level const definitions.
+    pub const_defs: HashMap<String, ConstDef>,
     /// Top level struct type definitions.
     pub struct_defs: HashMap<String, StructDef>,
     /// Top level enum type definitions.
     pub enum_defs: HashMap<String, EnumDef>,
     /// Top level function definitions.
     pub fn_defs: HashMap<String, FnDef<T>>,
+}
+
+/// A top level const definition.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ConstDef {
+    /// The type of the constant.
+    pub ty: Type,
+    /// The value of the constant.
+    pub value: ConstExpr,
+    /// The location in the source code.
+    pub meta: MetaInfo,
+}
+
+/// A constant value, either a literal, a namespaced symbol or an aggregate.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ConstExpr(pub ConstExprEnum, pub MetaInfo);
+
+/// The different kinds of constant expressions.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ConstExprEnum {
+    /// Boolean `true`.
+    True,
+    /// Boolean `false`.
+    False,
+    /// Unsigned integer.
+    NumUnsigned(u64, UnsignedNumType),
+    /// Signed integer.
+    NumSigned(i64, SignedNumType),
+    /// An external value supplied before compilation.
+    ExternalValue {
+        /// The party providing the value.
+        party: String,
+        /// The variable name of the value.
+        identifier: String,
+    },
+    /// The maximum of several constant expressions.
+    Max(Vec<ConstExpr>),
+    /// The minimum of several constant expressions.
+    Min(Vec<ConstExpr>),
 }
 
 /// A top level struct type definition.
@@ -137,6 +183,8 @@ pub enum Type {
     Fn(Vec<Type>, Box<Type>),
     /// Array type of a fixed size, containing elements of the specified type.
     Array(Box<Type>, usize),
+    /// Array type of a fixed size, with the size specified by a constant.
+    ArrayConst(Box<Type>, String),
     /// Tuple type containing fields of the specified types.
     Tuple(Vec<Type>),
     /// A struct or an enum, depending on the top level definitions (used only before typechecking).
@@ -167,6 +215,13 @@ impl std::fmt::Display for Type {
                 ret_ty.fmt(f)
             }
             Type::Array(ty, size) => {
+                f.write_str("[")?;
+                ty.fmt(f)?;
+                f.write_str("; ")?;
+                size.fmt(f)?;
+                f.write_str("]")
+            }
+            Type::ArrayConst(ty, size) => {
                 f.write_str("[")?;
                 ty.fmt(f)?;
                 f.write_str("; ")?;
@@ -279,6 +334,8 @@ pub enum ExprEnum<T> {
     ArrayLiteral(Vec<Expr<T>>),
     /// Array "repeat expression", which specifies 1 element, to be repeated a number of times.
     ArrayRepeatLiteral(Box<Expr<T>>, usize),
+    /// Array "repeat expression", with the size specified by a constant.
+    ArrayRepeatLiteralConst(Box<Expr<T>>, String),
     /// Access of an array at the specified index, returning its element.
     ArrayAccess(Box<Expr<T>>, Box<Expr<T>>),
     /// Tuple literal containing the specified fields.
@@ -290,7 +347,7 @@ pub enum ExprEnum<T> {
     /// Struct literal with the specified fields.
     StructLiteral(String, Vec<(String, Expr<T>)>),
     /// Enum literal of the specified variant, possibly with fields.
-    EnumLiteral(String, Box<VariantExpr<T>>),
+    EnumLiteral(String, String, VariantExprEnum<T>),
     /// Matching the specified expression with a list of clauses (pattern + expression).
     Match(Box<Expr<T>>, Vec<(Pattern<T>, Expr<T>)>),
     /// Application of a unary operator.
@@ -308,11 +365,6 @@ pub enum ExprEnum<T> {
     /// Range of numbers from the specified min (inclusive) to the specified max (exclusive).
     Range((u64, UnsignedNumType), (u64, UnsignedNumType)),
 }
-
-/// A variant literal, used by [`ExprEnum::EnumLiteral`], with its location in the source code.
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct VariantExpr<T>(pub String, pub VariantExprEnum<T>, pub MetaInfo);
 
 /// The different kinds of variant literals.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

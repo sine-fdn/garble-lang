@@ -269,6 +269,7 @@ pub(crate) struct CircuitBuilder {
     gates_optimized: usize,
     gate_counter: usize,
     panic_gates: PanicResult,
+    consts: HashMap<String, usize>,
 }
 
 pub(crate) const USIZE_BITS: usize = 32;
@@ -393,7 +394,7 @@ impl PanicReason {
 }
 
 impl CircuitBuilder {
-    pub fn new(input_gates: Vec<usize>) -> Self {
+    pub fn new(input_gates: Vec<usize>, consts: HashMap<String, usize>) -> Self {
         let mut gate_counter = 2; // for const true and false
         for input_gates_of_party in input_gates.iter() {
             gate_counter += input_gates_of_party;
@@ -407,7 +408,12 @@ impl CircuitBuilder {
             gates_optimized: 0,
             gate_counter,
             panic_gates: PanicResult::ok(),
+            consts,
         }
+    }
+
+    pub fn const_sizes(&self) -> &HashMap<String, usize> {
+        &self.consts
     }
 
     // Pruning of useless gates (gates that are not part of the output nor used by other gates):
