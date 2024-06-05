@@ -1197,7 +1197,8 @@ impl Parser {
                 "false" => Expr::untyped(ExprEnum::False, meta),
                 _ => {
                     if self.next_matches(&TokenEnum::DoubleColon).is_some() {
-                        let (variant_name, _) = self.expect_identifier()?;
+                        let (variant_name, variant_meta) = self.expect_identifier()?;
+                        let meta = join_meta(meta, variant_meta);
                         let variant = if self.next_matches(&TokenEnum::LeftParen).is_some() {
                             let mut fields = vec![];
                             if !self.peek(&TokenEnum::RightParen) {
