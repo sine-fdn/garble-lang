@@ -102,7 +102,7 @@ pub enum TypeErrorEnum {
         actual: usize,
     },
     /// The two types are incompatible, (e.g. incompatible number types in a `+` operation).
-    TypeMismatch((Type, MetaInfo), (Type, MetaInfo)),
+    TypeMismatch(Type, Type),
     /// The specified range has different min and max types.
     RangeTypeMismatch(UnsignedNumType, UnsignedNumType),
     /// The specified range has invalid min or max values.
@@ -196,8 +196,8 @@ impl std::fmt::Display for TypeErrorEnum {
             TypeErrorEnum::WrongNumberOfArgs { expected, actual } => {
                 f.write_fmt(format_args!("The function expects {expected} parameter(s), but was called with {actual} argument(s)"))
             }
-            TypeErrorEnum::TypeMismatch((x, _), (y, _)) => f.write_fmt(format_args!(
-                "The operands have incompatible types; {x} vs {y}"
+            TypeErrorEnum::TypeMismatch(x, y) => f.write_fmt(format_args!(
+                "The arguments have incompatible types; {x} vs {y}"
             )),
             TypeErrorEnum::RangeTypeMismatch(from, to) => f.write_fmt(format_args!(
                 "Start and end of range do not have the same type; {from} vs {to}"
@@ -775,17 +775,14 @@ impl UntypedExpr {
                         .next()
                         .unwrap()
                         .type_check(top_level_defs, env, fns, defs)?;
-                let first_meta = first_field.meta;
                 let first_ty = first_field.ty.clone();
                 let mut typed_fields = vec![first_field];
                 for field in fields {
                     match field.type_check(top_level_defs, env, fns, defs) {
                         Ok(field) => {
                             if field.ty != first_ty {
-                                let e = TypeErrorEnum::TypeMismatch(
-                                    (first_ty.clone(), first_meta),
-                                    (field.ty.clone(), field.meta),
-                                );
+                                let e =
+                                    TypeErrorEnum::TypeMismatch(first_ty.clone(), field.ty.clone());
                                 errors.push(Some(TypeError(e, field.meta)));
                             }
                             typed_fields.push(field);
@@ -1013,6 +1010,90 @@ impl UntypedExpr {
                         // cause error instead)
                         errors.push(None);
                         return Err(errors);
+                    }
+                    (None, _) if identifier == "join" => {
+                        if args.len() != 3 {
+                            let e = TypeErrorEnum::WrongNumberOfArgs {
+                                expected: 3,
+                                actual: args.len(),
+                            };
+                            return Err(vec![Some(TypeError(e, meta))]);
+                        }
+                        let mut arg_exprs = vec![];
+                        match args[0].type_check(top_level_defs, env, fns, defs) {
+                            Ok(size) if size.ty == Type::Unsigned(UnsignedNumType::Usize) => {
+                                arg_exprs.push(size);
+                            }
+                            Ok(size) => {
+                                let e = TypeErrorEnum::UnexpectedType {
+                                    expected: Type::Unsigned(UnsignedNumType::Usize),
+                                    actual: size.ty,
+                                };
+                                errors.push(Some(TypeError(e, size.meta)));
+                            }
+                            Err(e) => errors.extend(e),
+                        }
+                        let ty_a = match args[1].type_check(top_level_defs, env, fns, defs) {
+                            Ok(a) => match a.ty {
+                                Type::Array(_, _) | Type::ArrayConst(_, _) => {
+                                    arg_exprs.push(a.clone());
+                                    a.ty
+                                }
+                                ty => {
+                                    errors.push(Some(TypeError(
+                                        TypeErrorEnum::ExpectedArrayType(ty.clone()),
+                                        a.meta,
+                                    )));
+                                    ty
+                                }
+                            },
+                            Err(e) => {
+                                errors.extend(e);
+                                // does not matter, will return the errors instead:
+                                Type::Bool
+                            }
+                        };
+                        let ty_b = match args[2].type_check(top_level_defs, env, fns, defs) {
+                            Ok(b) => match b.ty {
+                                Type::Array(_, _) | Type::ArrayConst(_, _) => {
+                                    arg_exprs.push(b.clone());
+                                    b.ty
+                                }
+                                ty => {
+                                    errors.push(Some(TypeError(
+                                        TypeErrorEnum::ExpectedArrayType(ty.clone()),
+                                        b.meta,
+                                    )));
+                                    ty
+                                }
+                            },
+                            Err(e) => {
+                                errors.extend(e);
+                                // does not matter, will return the errors instead:
+                                Type::Bool
+                            }
+                        };
+                        if !errors.is_empty() {
+                            return Err(errors);
+                        }
+                        match (ty_a, ty_b) {
+                            (Type::Array(elem_ty_a, size_a), Type::Array(elem_ty_b, size_b)) => {
+                                let result_size = size_a + size_b;
+                                let expr = ExprEnum::FnCall(identifier.clone(), arg_exprs);
+                                let ret_ty = Type::Array(
+                                    Box::new(Type::Tuple(vec![*elem_ty_a, *elem_ty_b])),
+                                    result_size,
+                                );
+                                (expr, ret_ty)
+                            }
+                            (Type::ArrayConst(_, _), Type::ArrayConst(_, _)) => todo!(),
+                            (ty_a, ty_b) => {
+                                return Err(vec![Some(TypeError(
+                                    TypeErrorEnum::TypeMismatch(ty_a, ty_b),
+                                    meta,
+                                ))])
+                            }
+                        }
                     }
                     (None, _) => {
                         let e = TypeErrorEnum::UnknownIdentifier(identifier.clone());
@@ -2021,7 +2102,7 @@ fn unify(e1: &mut TypedExpr, e2: &mut TypedExpr, m: MetaInfo) -> Result<Type, Ty
     let ty = match (&e1.inner, &e2.inner) {
         _ if e1.ty == e2.ty => Ok(e1.ty.clone()),
         _ => {
-            let e = TypeErrorEnum::TypeMismatch((e1.ty.clone(), e1.meta), (e2.ty.clone(), e2.meta));
+            let e = TypeErrorEnum::TypeMismatch(e1.ty.clone(), e2.ty.clone());
             Err(vec![Some(TypeError(e, m))])
         }
     };
