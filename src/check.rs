@@ -115,6 +115,8 @@ pub enum TypeErrorEnum {
     TypeDoesNotSupportPatternMatching(Type),
     /// The specified identifier is not a constant.
     ArraySizeNotConst(String),
+    /// The specified expression is not a literal usize number.
+    UsizeNotLiteral,
 }
 
 impl std::fmt::Display for TypeErrorEnum {
@@ -227,6 +229,9 @@ impl std::fmt::Display for TypeErrorEnum {
             }
             TypeErrorEnum::ArraySizeNotConst(identifier) => {
                 f.write_fmt(format_args!("Array sizes must be constants, but '{identifier}' is a variable"))
+            }
+            TypeErrorEnum::UsizeNotLiteral => {
+                f.write_str("Expected a usize number literal")
             }
         }
     }
@@ -1019,65 +1024,87 @@ impl UntypedExpr {
                             };
                             return Err(vec![Some(TypeError(e, meta))]);
                         }
-                        let mut arg_exprs = vec![];
-                        match args[0].type_check(top_level_defs, env, fns, defs) {
-                            Ok(size) if size.ty == Type::Unsigned(UnsignedNumType::Usize) => {
-                                arg_exprs.push(size);
-                            }
-                            Ok(size) => {
-                                let e = TypeErrorEnum::UnexpectedType {
-                                    expected: Type::Unsigned(UnsignedNumType::Usize),
-                                    actual: size.ty,
-                                };
-                                errors.push(Some(TypeError(e, size.meta)));
-                            }
-                            Err(e) => errors.extend(e),
+                        let mut size = 0;
+                        let mut arg_exprs: Vec<Expr<Type>> = vec![];
+                        if let ExprEnum::NumUnsigned(n, UnsignedNumType::Usize) = args[0].inner {
+                            size = n as usize;
+                            arg_exprs.push(Expr {
+                                inner: ExprEnum::NumUnsigned(n, UnsignedNumType::Usize),
+                                meta: args[0].meta,
+                                ty: Type::Unsigned(UnsignedNumType::Usize),
+                            });
+                        } else {
+                            let e = TypeErrorEnum::UsizeNotLiteral;
+                            errors.push(Some(TypeError(e, args[0].meta)));
                         }
-                        let ty_a = match args[1].type_check(top_level_defs, env, fns, defs) {
-                            Ok(a) => match a.ty {
-                                Type::Array(_, _) | Type::ArrayConst(_, _) => {
-                                    arg_exprs.push(a.clone());
-                                    a.ty
+                        let (ty_a, meta_a) =
+                            match args[1].type_check(top_level_defs, env, fns, defs) {
+                                Ok(a) => match a.ty {
+                                    Type::Array(_, _) | Type::ArrayConst(_, _) => {
+                                        arg_exprs.push(a.clone());
+                                        (a.ty, a.meta)
+                                    }
+                                    ty => {
+                                        errors.push(Some(TypeError(
+                                            TypeErrorEnum::ExpectedArrayType(ty.clone()),
+                                            a.meta,
+                                        )));
+                                        (ty, a.meta)
+                                    }
+                                },
+                                Err(e) => {
+                                    errors.extend(e);
+                                    // does not matter, will return the errors instead:
+                                    (Type::Bool, meta)
                                 }
-                                ty => {
-                                    errors.push(Some(TypeError(
-                                        TypeErrorEnum::ExpectedArrayType(ty.clone()),
-                                        a.meta,
-                                    )));
-                                    ty
+                            };
+                        let (ty_b, meta_b) =
+                            match args[2].type_check(top_level_defs, env, fns, defs) {
+                                Ok(b) => match b.ty {
+                                    Type::Array(_, _) | Type::ArrayConst(_, _) => {
+                                        arg_exprs.push(b.clone());
+                                        (b.ty, b.meta)
+                                    }
+                                    ty => {
+                                        errors.push(Some(TypeError(
+                                            TypeErrorEnum::ExpectedArrayType(ty.clone()),
+                                            b.meta,
+                                        )));
+                                        (ty, b.meta)
+                                    }
+                                },
+                                Err(e) => {
+                                    errors.extend(e);
+                                    // does not matter, will return the errors instead:
+                                    (Type::Bool, meta)
                                 }
-                            },
-                            Err(e) => {
-                                errors.extend(e);
-                                // does not matter, will return the errors instead:
-                                Type::Bool
-                            }
-                        };
-                        let ty_b = match args[2].type_check(top_level_defs, env, fns, defs) {
-                            Ok(b) => match b.ty {
-                                Type::Array(_, _) | Type::ArrayConst(_, _) => {
-                                    arg_exprs.push(b.clone());
-                                    b.ty
-                                }
-                                ty => {
-                                    errors.push(Some(TypeError(
-                                        TypeErrorEnum::ExpectedArrayType(ty.clone()),
-                                        b.meta,
-                                    )));
-                                    ty
-                                }
-                            },
-                            Err(e) => {
-                                errors.extend(e);
-                                // does not matter, will return the errors instead:
-                                Type::Bool
-                            }
-                        };
+                            };
                         if !errors.is_empty() {
                             return Err(errors);
                         }
                         match (ty_a, ty_b) {
                             (Type::Array(elem_ty_a, size_a), Type::Array(elem_ty_b, size_b)) => {
+                                let Type::Tuple(tuple_a) = elem_ty_a.as_ref() else {
+                                    return Err(vec![Some(TypeError(
+                                        TypeErrorEnum::ExpectedTupleType(*elem_ty_a.clone()),
+                                        meta_a,
+                                    ))]);
+                                };
+                                let Type::Tuple(tuple_b) = elem_ty_b.as_ref() else {
+                                    return Err(vec![Some(TypeError(
+                                        TypeErrorEnum::ExpectedTupleType(*elem_ty_b.clone()),
+                                        meta_b,
+                                    ))]);
+                                };
+                                if tuple_a.len() < size
+                                    || tuple_b.len() < size
+                                    || tuple_a[..size] != tuple_b[..size]
+                                {
+                                    return Err(vec![Some(TypeError(
+                                        TypeErrorEnum::TypeMismatch(*elem_ty_a, *elem_ty_b),
+                                        meta,
+                                    ))]);
+                                }
                                 let result_size = size_a + size_b;
                                 let expr = ExprEnum::FnCall(identifier.clone(), arg_exprs);
                                 let ret_ty = Type::Array(
@@ -1264,6 +1291,9 @@ impl UntypedExpr {
                             errors.extend(e2);
                         }
                     }
+                }
+                if !errors.is_empty() {
+                    return Err(errors);
                 }
 
                 let ret_ty = {
