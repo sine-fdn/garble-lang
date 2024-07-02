@@ -2057,14 +2057,9 @@ fn compile_join_fn() -> Result<(), Error> {
     let prg = "
 pub fn main(rows1: [([u8; 3], u16); 4], rows2: [([u8; 3], u16, u16); 3]) -> u16 {
     let mut result = 0u16;
-    let joined = join(1usize, rows1, rows2);
-    for row in joined {
-        match row {
-            Join::Some((_, field1), (_, field2, field3)) => {
-                result = result + field1 + field2 + field3;
-            },
-            Join::None => {},
-        }
+    for row in join(1usize, rows1, rows2) {
+        let ((_, field1), (_, field2, field3)) = row;
+        result = result + field1 + field2 + field3;
     }
     result
 }

@@ -717,20 +717,104 @@ impl UntypedStmt {
                     ))]),
                 }
             }
-            ast::StmtEnum::ForEachLoop(var, binding, body) => {
-                let binding = binding.type_check(top_level_defs, env, fns, defs)?;
-                let elem_ty = expect_array_type(&binding.ty, meta)?;
-                let mut body_typed = Vec::with_capacity(body.len());
-                env.push();
-                env.let_in_current_scope(var.clone(), (Some(elem_ty), Mutability::Immutable));
-                for stmt in body {
-                    body_typed.push(stmt.type_check(top_level_defs, env, fns, defs)?);
+            ast::StmtEnum::ForEachLoop(var, binding, body) => match &binding.inner {
+                ExprEnum::FnCall(identifier, args) if identifier == "join" => {
+                    let mut errors = vec![];
+                    if args.len() != 3 {
+                        let e = TypeErrorEnum::WrongNumberOfArgs {
+                            expected: 3,
+                            actual: args.len(),
+                        };
+                        return Err(vec![Some(TypeError(e, meta))]);
+                    }
+                    let mut size = 0;
+                    let mut arg_exprs: Vec<Expr<Type>> = vec![];
+                    if let ExprEnum::NumUnsigned(n, UnsignedNumType::Usize) = args[0].inner {
+                        size = n as usize;
+                        arg_exprs.push(Expr {
+                            inner: ExprEnum::NumUnsigned(n, UnsignedNumType::Usize),
+                            meta: args[0].meta,
+                            ty: Type::Unsigned(UnsignedNumType::Usize),
+                        });
+                    } else {
+                        let e = TypeErrorEnum::UsizeNotLiteral;
+                        errors.push(Some(TypeError(e, args[0].meta)));
+                    }
+                    let a = args[1].type_check(top_level_defs, env, fns, defs)?;
+                    let (ty_a, meta_a) = match &a.ty {
+                        Type::Array(_, _) | Type::ArrayConst(_, _) => {
+                            arg_exprs.push(a.clone());
+                            (a.ty.clone(), a.meta)
+                        }
+                        ty => {
+                            errors.push(Some(TypeError(
+                                TypeErrorEnum::ExpectedArrayType(ty.clone()),
+                                a.meta,
+                            )));
+                            (ty.clone(), a.meta)
+                        }
+                    };
+                    let b = args[2].type_check(top_level_defs, env, fns, defs)?;
+                    let (ty_b, meta_b) = match &b.ty {
+                        Type::Array(_, _) | Type::ArrayConst(_, _) => {
+                            arg_exprs.push(b.clone());
+                            (b.ty.clone(), b.meta)
+                        }
+                        ty => {
+                            errors.push(Some(TypeError(
+                                TypeErrorEnum::ExpectedArrayType(ty.clone()),
+                                b.meta,
+                            )));
+                            (ty.clone(), b.meta)
+                        }
+                    };
+                    if !errors.is_empty() {
+                        return Err(errors);
+                    }
+                    let elem_ty_a = expect_array_type(&ty_a, meta_a)?;
+                    let elem_ty_b = expect_array_type(&ty_b, meta_b)?;
+                    let tuple_a = expect_tuple_type(&elem_ty_a, meta_a)?;
+                    let tuple_b = expect_tuple_type(&elem_ty_b, meta_b)?;
+                    if tuple_a.len() < size
+                        || tuple_b.len() < size
+                        || tuple_a[..size] != tuple_b[..size]
+                    {
+                        return Err(vec![Some(TypeError(
+                            TypeErrorEnum::TypeMismatch(elem_ty_a, elem_ty_b),
+                            meta,
+                        ))]);
+                    }
+                    let elem_ty = Type::Tuple(vec![elem_ty_a, elem_ty_b]);
+                    let mut body_typed = Vec::with_capacity(body.len());
+                    env.push();
+                    env.let_in_current_scope(var.clone(), (Some(elem_ty), Mutability::Immutable));
+                    for stmt in body {
+                        body_typed.push(stmt.type_check(top_level_defs, env, fns, defs)?);
+                    }
+                    env.pop();
+                    Ok(Stmt::new(
+                        StmtEnum::JoinLoop(var.clone(), size, (a, b), body_typed),
+                        meta,
+                    ))
                 }
-                env.pop();
-                Ok(Stmt::new(
-                    StmtEnum::ForEachLoop(var.clone(), binding, body_typed),
-                    meta,
-                ))
+                _ => {
+                    let binding = binding.type_check(top_level_defs, env, fns, defs)?;
+                    let elem_ty = expect_array_type(&binding.ty, meta)?;
+                    let mut body_typed = Vec::with_capacity(body.len());
+                    env.push();
+                    env.let_in_current_scope(var.clone(), (Some(elem_ty), Mutability::Immutable));
+                    for stmt in body {
+                        body_typed.push(stmt.type_check(top_level_defs, env, fns, defs)?);
+                    }
+                    env.pop();
+                    Ok(Stmt::new(
+                        StmtEnum::ForEachLoop(var.clone(), binding, body_typed),
+                        meta,
+                    ))
+                }
+            },
+            ast::StmtEnum::JoinLoop(_, _, _, _) => {
+                unreachable!("Untyped expressions should never be join loops")
             }
         }
     }
@@ -1015,112 +1099,6 @@ impl UntypedExpr {
                         // cause error instead)
                         errors.push(None);
                         return Err(errors);
-                    }
-                    (None, _) if identifier == "join" => {
-                        if args.len() != 3 {
-                            let e = TypeErrorEnum::WrongNumberOfArgs {
-                                expected: 3,
-                                actual: args.len(),
-                            };
-                            return Err(vec![Some(TypeError(e, meta))]);
-                        }
-                        let mut size = 0;
-                        let mut arg_exprs: Vec<Expr<Type>> = vec![];
-                        if let ExprEnum::NumUnsigned(n, UnsignedNumType::Usize) = args[0].inner {
-                            size = n as usize;
-                            arg_exprs.push(Expr {
-                                inner: ExprEnum::NumUnsigned(n, UnsignedNumType::Usize),
-                                meta: args[0].meta,
-                                ty: Type::Unsigned(UnsignedNumType::Usize),
-                            });
-                        } else {
-                            let e = TypeErrorEnum::UsizeNotLiteral;
-                            errors.push(Some(TypeError(e, args[0].meta)));
-                        }
-                        let (ty_a, meta_a) =
-                            match args[1].type_check(top_level_defs, env, fns, defs) {
-                                Ok(a) => match a.ty {
-                                    Type::Array(_, _) | Type::ArrayConst(_, _) => {
-                                        arg_exprs.push(a.clone());
-                                        (a.ty, a.meta)
-                                    }
-                                    ty => {
-                                        errors.push(Some(TypeError(
-                                            TypeErrorEnum::ExpectedArrayType(ty.clone()),
-                                            a.meta,
-                                        )));
-                                        (ty, a.meta)
-                                    }
-                                },
-                                Err(e) => {
-                                    errors.extend(e);
-                                    // does not matter, will return the errors instead:
-                                    (Type::Bool, meta)
-                                }
-                            };
-                        let (ty_b, meta_b) =
-                            match args[2].type_check(top_level_defs, env, fns, defs) {
-                                Ok(b) => match b.ty {
-                                    Type::Array(_, _) | Type::ArrayConst(_, _) => {
-                                        arg_exprs.push(b.clone());
-                                        (b.ty, b.meta)
-                                    }
-                                    ty => {
-                                        errors.push(Some(TypeError(
-                                            TypeErrorEnum::ExpectedArrayType(ty.clone()),
-                                            b.meta,
-                                        )));
-                                        (ty, b.meta)
-                                    }
-                                },
-                                Err(e) => {
-                                    errors.extend(e);
-                                    // does not matter, will return the errors instead:
-                                    (Type::Bool, meta)
-                                }
-                            };
-                        if !errors.is_empty() {
-                            return Err(errors);
-                        }
-                        match (ty_a, ty_b) {
-                            (Type::Array(elem_ty_a, size_a), Type::Array(elem_ty_b, size_b)) => {
-                                let Type::Tuple(tuple_a) = elem_ty_a.as_ref() else {
-                                    return Err(vec![Some(TypeError(
-                                        TypeErrorEnum::ExpectedTupleType(*elem_ty_a.clone()),
-                                        meta_a,
-                                    ))]);
-                                };
-                                let Type::Tuple(tuple_b) = elem_ty_b.as_ref() else {
-                                    return Err(vec![Some(TypeError(
-                                        TypeErrorEnum::ExpectedTupleType(*elem_ty_b.clone()),
-                                        meta_b,
-                                    ))]);
-                                };
-                                if tuple_a.len() < size
-                                    || tuple_b.len() < size
-                                    || tuple_a[..size] != tuple_b[..size]
-                                {
-                                    return Err(vec![Some(TypeError(
-                                        TypeErrorEnum::TypeMismatch(*elem_ty_a, *elem_ty_b),
-                                        meta,
-                                    ))]);
-                                }
-                                let result_size = size_a + size_b;
-                                let expr = ExprEnum::FnCall(identifier.clone(), arg_exprs);
-                                let ret_ty = Type::Array(
-                                    Box::new(Type::Tuple(vec![*elem_ty_a, *elem_ty_b])),
-                                    result_size,
-                                );
-                                (expr, ret_ty)
-                            }
-                            (Type::ArrayConst(_, _), Type::ArrayConst(_, _)) => todo!(),
-                            (ty_a, ty_b) => {
-                                return Err(vec![Some(TypeError(
-                                    TypeErrorEnum::TypeMismatch(ty_a, ty_b),
-                                    meta,
-                                ))])
-                            }
-                        }
                     }
                     (None, _) => {
                         let e = TypeErrorEnum::UnknownIdentifier(identifier.clone());

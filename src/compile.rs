@@ -437,6 +437,9 @@ impl TypedStmt {
                 env.pop();
                 vec![]
             }
+            StmtEnum::JoinLoop(_, _, _, _) => {
+                todo!("compile join loop")
+            }
         }
     }
 }
