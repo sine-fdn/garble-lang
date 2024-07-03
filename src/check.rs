@@ -720,32 +720,16 @@ impl UntypedStmt {
             ast::StmtEnum::ForEachLoop(var, binding, body) => match &binding.inner {
                 ExprEnum::FnCall(identifier, args) if identifier == "join" => {
                     let mut errors = vec![];
-                    if args.len() != 3 {
+                    if args.len() != 2 {
                         let e = TypeErrorEnum::WrongNumberOfArgs {
-                            expected: 3,
+                            expected: 2,
                             actual: args.len(),
                         };
                         return Err(vec![Some(TypeError(e, meta))]);
                     }
-                    let mut size = 0;
-                    let mut arg_exprs: Vec<Expr<Type>> = vec![];
-                    if let ExprEnum::NumUnsigned(n, UnsignedNumType::Usize) = args[0].inner {
-                        size = n as usize;
-                        arg_exprs.push(Expr {
-                            inner: ExprEnum::NumUnsigned(n, UnsignedNumType::Usize),
-                            meta: args[0].meta,
-                            ty: Type::Unsigned(UnsignedNumType::Usize),
-                        });
-                    } else {
-                        let e = TypeErrorEnum::UsizeNotLiteral;
-                        errors.push(Some(TypeError(e, args[0].meta)));
-                    }
-                    let a = args[1].type_check(top_level_defs, env, fns, defs)?;
+                    let a = args[0].type_check(top_level_defs, env, fns, defs)?;
                     let (ty_a, meta_a) = match &a.ty {
-                        Type::Array(_, _) | Type::ArrayConst(_, _) => {
-                            arg_exprs.push(a.clone());
-                            (a.ty.clone(), a.meta)
-                        }
+                        Type::Array(_, _) | Type::ArrayConst(_, _) => (a.ty.clone(), a.meta),
                         ty => {
                             errors.push(Some(TypeError(
                                 TypeErrorEnum::ExpectedArrayType(ty.clone()),
@@ -754,12 +738,9 @@ impl UntypedStmt {
                             (ty.clone(), a.meta)
                         }
                     };
-                    let b = args[2].type_check(top_level_defs, env, fns, defs)?;
+                    let b = args[1].type_check(top_level_defs, env, fns, defs)?;
                     let (ty_b, meta_b) = match &b.ty {
-                        Type::Array(_, _) | Type::ArrayConst(_, _) => {
-                            arg_exprs.push(b.clone());
-                            (b.ty.clone(), b.meta)
-                        }
+                        Type::Array(_, _) | Type::ArrayConst(_, _) => (b.ty.clone(), b.meta),
                         ty => {
                             errors.push(Some(TypeError(
                                 TypeErrorEnum::ExpectedArrayType(ty.clone()),
@@ -775,10 +756,7 @@ impl UntypedStmt {
                     let elem_ty_b = expect_array_type(&ty_b, meta_b)?;
                     let tuple_a = expect_tuple_type(&elem_ty_a, meta_a)?;
                     let tuple_b = expect_tuple_type(&elem_ty_b, meta_b)?;
-                    if tuple_a.len() < size
-                        || tuple_b.len() < size
-                        || tuple_a[..size] != tuple_b[..size]
-                    {
+                    if tuple_a.is_empty() || tuple_b.is_empty() || tuple_a[0] != tuple_b[0] {
                         return Err(vec![Some(TypeError(
                             TypeErrorEnum::TypeMismatch(elem_ty_a, elem_ty_b),
                             meta,
@@ -793,7 +771,7 @@ impl UntypedStmt {
                     }
                     env.pop();
                     Ok(Stmt::new(
-                        StmtEnum::JoinLoop(var.clone(), size, (a, b), body_typed),
+                        StmtEnum::JoinLoop(var.clone(), (a, b), body_typed),
                         meta,
                     ))
                 }
@@ -813,7 +791,7 @@ impl UntypedStmt {
                     ))
                 }
             },
-            ast::StmtEnum::JoinLoop(_, _, _, _) => {
+            ast::StmtEnum::JoinLoop(_, _, _) => {
                 unreachable!("Untyped expressions should never be join loops")
             }
         }

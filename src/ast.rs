@@ -279,7 +279,7 @@ pub enum StmtEnum<T> {
     /// Binds an identifier to each value of an array expr, evaluating the body.
     ForEachLoop(String, Expr<T>, Vec<Stmt<T>>),
     /// Binds an identifier to each joined row of two tables, evaluating the body.
-    JoinLoop(String, usize, (Expr<T>, Expr<T>), Vec<Stmt<T>>),
+    JoinLoop(String, (Expr<T>, Expr<T>), Vec<Stmt<T>>),
     /// An expression (all expressions are statements, but not all statements expressions).
     Expr(Expr<T>),
 }

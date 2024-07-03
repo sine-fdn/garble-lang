@@ -150,3 +150,22 @@ pub fn main(arr1: [u8; 8], arr2: [u8; 8], choice: bool) -> [u8; 8] {
     );
     Ok(())
 }
+
+#[test]
+fn optimize_mapped_arrays() -> Result<(), String> {
+    let prg = "
+pub fn main(arr1: [(u16, u16, u32); 8]) -> [((u16, u16), u32); 8] {
+    let mut arr2 = [((0u16, 0u16), 0u32); 8];
+    let mut i = 0usize;
+    for elem in arr1 {
+        let (a, b, c) = elem;
+        arr2[i] = ((a, b), c);
+        i = i + 1usize;
+    }
+    arr2
+}";
+    let compiled = compile(prg).map_err(|e| e.prettify(prg))?;
+    assert_eq!(compiled.circuit.and_gates(), 0);
+    assert_eq!(compiled.circuit.gates.len(), 2);
+    Ok(())
+}
