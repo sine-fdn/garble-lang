@@ -437,7 +437,69 @@ impl TypedStmt {
                 env.pop();
                 vec![]
             }
-            StmtEnum::JoinLoop(_, _, _) => {
+            StmtEnum::JoinLoop(var, join_ty, (a, b), body) => {
+                let (elem_bits_a, num_elems_a) = match &a.ty {
+                    Type::Array(elem_ty, size) => (
+                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                        *size,
+                    ),
+                    Type::ArrayConst(elem_ty, size) => (
+                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                        *circuit.const_sizes().get(size).unwrap(),
+                    ),
+                    _ => panic!("Found a non-array value in an array access expr"),
+                };
+                let (elem_bits_b, num_elems_b) = match &b.ty {
+                    Type::Array(elem_ty, size) => (
+                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                        *size,
+                    ),
+                    Type::ArrayConst(elem_ty, size) => (
+                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                        *circuit.const_sizes().get(size).unwrap(),
+                    ),
+                    _ => panic!("Found a non-array value in an array access expr"),
+                };
+                let max_elem_bits = max(elem_bits_a, elem_bits_b);
+                let num_elems = num_elems_a + num_elems_b;
+                let join_ty_size = join_ty.size_in_bits_for_defs(prg, circuit.const_sizes());
+                let a = a.compile(prg, env, circuit);
+                let b = b.compile(prg, env, circuit);
+                let mut bitonic = vec![];
+                for i in 0..num_elems_a {
+                    let mut v = a[i * elem_bits_a..(i + 1) * elem_bits_a].to_vec();
+                    for _ in 0..(max_elem_bits - elem_bits_a) {
+                        v.push(0);
+                    }
+                    bitonic.push(v);
+                }
+                for i in (0..num_elems_b).rev() {
+                    let mut v = b[i * elem_bits_b..(i + 1) * elem_bits_b].to_vec();
+                    for _ in 0..(max_elem_bits - elem_bits_b) {
+                        v.push(0);
+                    }
+                    bitonic.push(v);
+                }
+                let mut offset = num_elems / 2;
+                while offset > 0 {
+                    let mut result = vec![];
+                    for _ in 0..num_elems {
+                        result.push(vec![]);
+                    }
+                    let rounds = num_elems / 2 / offset;
+                    for r in 0..rounds {
+                        for i in 0..offset {
+                            let i = i + r * offset * 2;
+                            let x = &bitonic[i];
+                            let y = &bitonic[i + offset];
+                            let (min, max) = circuit.push_sorter(join_ty_size, x, y);
+                            result[i] = min;
+                            result[i + offset] = max;
+                        }
+                    }
+                    offset /= 2;
+                    bitonic = result;
+                }
                 todo!("compile join loop")
             }
         }

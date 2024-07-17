@@ -762,6 +762,7 @@ impl UntypedStmt {
                             meta,
                         ))]);
                     }
+                    let join_ty = tuple_a[0].clone();
                     let elem_ty = Type::Tuple(vec![elem_ty_a, elem_ty_b]);
                     let mut body_typed = Vec::with_capacity(body.len());
                     env.push();
@@ -771,7 +772,7 @@ impl UntypedStmt {
                     }
                     env.pop();
                     Ok(Stmt::new(
-                        StmtEnum::JoinLoop(var.clone(), (a, b), body_typed),
+                        StmtEnum::JoinLoop(var.clone(), join_ty, (a, b), body_typed),
                         meta,
                     ))
                 }
@@ -791,7 +792,7 @@ impl UntypedStmt {
                     ))
                 }
             },
-            ast::StmtEnum::JoinLoop(_, _, _) => {
+            ast::StmtEnum::JoinLoop(_, _, _, _) => {
                 unreachable!("Untyped expressions should never be join loops")
             }
         }

@@ -2055,7 +2055,7 @@ pub fn main(array: [u16; MY_CONST]) -> u16 {
 #[test]
 fn compile_join_fn() -> Result<(), Error> {
     let prg = "
-pub fn main(rows1: [([u8; 3], u16); 4], rows2: [([u8; 3], u16, u16); 3]) -> u16 {
+pub fn main(rows1: [([u8; 3], u16); 4], rows2: [([u8; 3], u16, u16); 4]) -> u16 {
     let mut result = 0u16;
     for row in join(rows1, rows2) {
         let ((_, field1), (_, field2, field3)) = row;
@@ -2089,6 +2089,11 @@ pub fn main(rows1: [([u8; 3], u16); 4], rows2: [([u8; 3], u16, u16); 3]) -> u16 
     let id_qux = Literal::Array(vec![
         Literal::NumUnsigned(113, UnsignedNumType::U8),
         Literal::NumUnsigned(117, UnsignedNumType::U8),
+        Literal::NumUnsigned(120, UnsignedNumType::U8),
+    ]);
+    let id_xxx = Literal::Array(vec![
+        Literal::NumUnsigned(120, UnsignedNumType::U8),
+        Literal::NumUnsigned(120, UnsignedNumType::U8),
         Literal::NumUnsigned(120, UnsignedNumType::U8),
     ]);
     eval.set_literal(Literal::Array(vec![
@@ -2125,6 +2130,11 @@ pub fn main(rows1: [([u8; 3], u16); 4], rows2: [([u8; 3], u16, u16); 3]) -> u16 
             id_qux.clone(),
             Literal::NumUnsigned(8, UnsignedNumType::U16),
             Literal::NumUnsigned(9, UnsignedNumType::U16),
+        ]),
+        Literal::Tuple(vec![
+            id_xxx.clone(),
+            Literal::NumUnsigned(10, UnsignedNumType::U16),
+            Literal::NumUnsigned(11, UnsignedNumType::U16),
         ]),
     ]))
     .unwrap();

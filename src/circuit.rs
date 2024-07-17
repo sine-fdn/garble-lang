@@ -993,6 +993,39 @@ impl CircuitBuilder {
         }
         (acc_lt, acc_gt)
     }
+
+    pub fn push_condswap(
+        &mut self,
+        s: GateIndex,
+        x: GateIndex,
+        y: GateIndex,
+    ) -> (GateIndex, GateIndex) {
+        if x == y {
+            return (x, y);
+        }
+        let x_xor_y = self.push_xor(x, y);
+        let swap = self.push_and(x_xor_y, s);
+        let x_swapped = self.push_xor(x, swap);
+        let y_swapped = self.push_xor(y, swap);
+        (x_swapped, y_swapped)
+    }
+
+    pub fn push_sorter(
+        &mut self,
+        bits: usize,
+        x: &[GateIndex],
+        y: &[GateIndex],
+    ) -> (Vec<GateIndex>, Vec<GateIndex>) {
+        let (_, gt) = self.push_comparator_circuit(bits, x, false, y, false);
+        let mut min = vec![];
+        let mut max = vec![];
+        for (x, y) in x.iter().zip(y.iter()) {
+            let (a, b) = self.push_condswap(gt, *x, *y);
+            min.push(a);
+            max.push(b);
+        }
+        (min, max)
+    }
 }
 
 fn unsigned_as_usize_bits(n: u64) -> [usize; USIZE_BITS] {
