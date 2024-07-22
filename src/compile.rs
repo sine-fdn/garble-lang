@@ -500,7 +500,39 @@ impl TypedStmt {
                     offset /= 2;
                     bitonic = result;
                 }
-                todo!("compile join loop")
+                for slice in bitonic.windows(2) {
+                    let mut binding = vec![];
+                    let a = &slice[0][..elem_bits_a];
+                    let b = &slice[1][..elem_bits_b];
+                    binding.extend(a);
+                    binding.extend(b);
+                    let join_a = &a[..join_ty_size];
+                    let join_b = &b[..join_ty_size];
+                    let mut join_eq = 1;
+                    for i in 0..join_ty_size {
+                        let eq = circuit.push_eq(join_a[i], join_b[i]);
+                        join_eq = circuit.push_and(join_eq, eq);
+                    }
+
+                    let panic_before_branches = circuit.peek_panic().clone();
+
+                    let mut env_if_join = env.clone();
+                    env_if_join.push();
+                    env_if_join.let_in_current_scope(var.clone(), binding.to_vec());
+
+                    for stmt in body {
+                        stmt.compile(prg, &mut env_if_join, circuit);
+                    }
+                    env_if_join.pop();
+
+                    let panic_if_join = circuit.replace_panic_with(panic_before_branches.clone());
+
+                    *env = circuit.mux_envs(join_eq, env_if_join, env.clone());
+                    let muxed_panic =
+                        circuit.mux_panic(join_eq, &panic_if_join, &panic_before_branches);
+                    circuit.replace_panic_with(muxed_panic);
+                }
+                vec![]
             }
         }
     }
