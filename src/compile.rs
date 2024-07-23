@@ -468,16 +468,14 @@ impl TypedStmt {
                 let mut bitonic = vec![];
                 for i in 0..num_elems_a {
                     let mut v = a[i * elem_bits_a..(i + 1) * elem_bits_a].to_vec();
-                    for _ in 0..(max_elem_bits - elem_bits_a) {
-                        v.push(0);
-                    }
+                    v.resize(max_elem_bits, 0);
+                    v.insert(join_ty_size, 0);
                     bitonic.push(v);
                 }
                 for i in (0..num_elems_b).rev() {
                     let mut v = b[i * elem_bits_b..(i + 1) * elem_bits_b].to_vec();
-                    for _ in 0..(max_elem_bits - elem_bits_b) {
-                        v.push(0);
-                    }
+                    v.resize(max_elem_bits, 0);
+                    v.insert(join_ty_size, 1);
                     bitonic.push(v);
                 }
                 let mut offset = num_elems / 2;
@@ -502,10 +500,14 @@ impl TypedStmt {
                 }
                 for slice in bitonic.windows(2) {
                     let mut binding = vec![];
-                    let a = &slice[0][..elem_bits_a];
-                    let b = &slice[1][..elem_bits_b];
-                    binding.extend(a);
-                    binding.extend(b);
+                    let (mut a, mut b) =
+                        circuit.push_sorter(join_ty_size + 1, &slice[0], &slice[1]);
+                    a.remove(join_ty_size);
+                    a.truncate(elem_bits_a);
+                    b.remove(join_ty_size);
+                    b.truncate(elem_bits_b);
+                    binding.extend(&a);
+                    binding.extend(&b);
                     let join_a = &a[..join_ty_size];
                     let join_b = &b[..join_ty_size];
                     let mut join_eq = 1;
