@@ -101,6 +101,8 @@ pub enum CircuitError {
     InvalidGate(usize),
     /// The specified output gate does not exist in the circuit.
     InvalidOutput(usize),
+    /// The circuit does not specify any input gates.
+    EmptyInputs,
     /// The circuit does not specify any output gates.
     EmptyOutputs,
     /// The provided circuit has too many gates to be processed.
@@ -141,6 +143,9 @@ impl Circuit {
     pub fn validate(&self) -> Result<(), CircuitError> {
         let mut num_and_gates = 0;
         let wires = self.wires();
+        if self.input_gates.iter().all(|i| *i == 0) {
+            return Err(CircuitError::EmptyInputs);
+        }
         for (i, g) in wires.iter().enumerate() {
             match g {
                 Wire::Input(_) => {}
