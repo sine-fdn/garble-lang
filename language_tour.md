@@ -366,6 +366,39 @@ The patterns are not exhaustive. Missing cases:
        | }
 ```
 
+### For-Each-Join Loops
+
+Garble has special support for joining together two sorted arrays of tuples, by comparing their first field for equality, which can be useful to combine two data sources coming from different parties similar to a JOIN in SQL. Syntactically for-each-join loops are a special case of for-each loops, using a `join` function instead of an array:
+
+```rust
+let rows1 = [(0u8, 10u16), (1u8, 11u16), (2u8, 12u16)];
+let rows2 = [(0u8, 5u32, 5u32), (2u8, 6u32, 6u32)];
+// The arrays rows1 and rows2 will be joined based on their first field, which is of type u8.
+// The tuple (1u8, 11u16) from rows1 is discarded because it cannot be joined with rows2.
+for joined in join(rows1, rows2) {
+    let ((id1, x), (id2, y, z)) = joined;
+    // ...
+}
+```
+
+Garble automatically joins the arrays in a for-each-join loop using a [bitonic sorting network](https://en.wikipedia.org/wiki/Bitonic_sorter), more concretely implementing the paper [Private Set Intersection:
+Are Garbled Circuits Better than Custom Protocols?](https://www.ndss-symposium.org/wp-content/uploads/2017/09/06_4.pdf), which has a circuit complexity of `(m + n) * log(m + n)` instead of `m * n` which would result from joining the arrays using nested loops. **The arrays that are joined in the loop must be sorted**, otherwise elements might be discarded or invalid data returned.
+
+For-each-join loops always join two arrays based on the first field. If you would like to compare more than one field for equality, the easiest way is to transform the sorted array so that the relevant fields are grouped together in a tuple and thus form the first field. Such a transformation will be completely optimized away by the Garble compiler, such as in the following example, which groups together the first two fields, compiled to a circuit with 0 gates:
+
+```rust
+pub fn main(arr1: [(u16, u16, u32); 8]) -> [((u16, u16), u32); 8] {
+    let mut arr2 = [((0u16, 0u16), 0u32); 8];
+    let mut i = 0usize;
+    for elem in arr1 {
+        let (a, b, c) = elem;
+        arr2[i] = ((a, b), c);
+        i = i + 1usize;
+    }
+    arr2
+}
+```
+
 ### Constants
 
 Garble supports boolean and integer constants, which need to be declared at the top level and must be provided before compilation. This can be helpful for modelling "pseudo-dynamic" collections, i.e. collections whose size is not known during type-checking but will be known before compilation and execution:
