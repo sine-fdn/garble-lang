@@ -461,11 +461,15 @@ impl TypedStmt {
                     _ => panic!("Found a non-array value in an array access expr"),
                 };
                 let max_elem_bits = max(elem_bits_a, elem_bits_b);
-                let num_elems = num_elems_a + num_elems_b;
+                let num_elems = (num_elems_a + num_elems_b).next_power_of_two();
                 let join_ty_size = join_ty.size_in_bits_for_defs(prg, circuit.const_sizes());
                 let a = a.compile(prg, env, circuit);
                 let b = b.compile(prg, env, circuit);
                 let mut bitonic = vec![];
+                let num_empty_elems = num_elems - num_elems_a - num_elems_b;
+                for _ in 0..num_empty_elems {
+                    bitonic.push(vec![0; max_elem_bits + 1]);
+                }
                 for i in 0..num_elems_a {
                     let mut v = a[i * elem_bits_a..(i + 1) * elem_bits_a].to_vec();
                     v.resize(max_elem_bits, 0);
@@ -498,7 +502,7 @@ impl TypedStmt {
                     offset /= 2;
                     bitonic = result;
                 }
-                for slice in bitonic.windows(2) {
+                for slice in bitonic.windows(2).skip(num_empty_elems) {
                     let mut binding = vec![];
                     let (mut a, mut b) =
                         circuit.push_sorter(join_ty_size + 1, &slice[0], &slice[1]);
