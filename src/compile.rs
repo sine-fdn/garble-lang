@@ -437,6 +437,109 @@ impl TypedStmt {
                 env.pop();
                 vec![]
             }
+            StmtEnum::JoinLoop(var, join_ty, (a, b), body) => {
+                let (elem_bits_a, num_elems_a) = match &a.ty {
+                    Type::Array(elem_ty, size) => (
+                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                        *size,
+                    ),
+                    Type::ArrayConst(elem_ty, size) => (
+                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                        *circuit.const_sizes().get(size).unwrap(),
+                    ),
+                    _ => panic!("Found a non-array value in an array access expr"),
+                };
+                let (elem_bits_b, num_elems_b) = match &b.ty {
+                    Type::Array(elem_ty, size) => (
+                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                        *size,
+                    ),
+                    Type::ArrayConst(elem_ty, size) => (
+                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                        *circuit.const_sizes().get(size).unwrap(),
+                    ),
+                    _ => panic!("Found a non-array value in an array access expr"),
+                };
+                let max_elem_bits = max(elem_bits_a, elem_bits_b);
+                let num_elems = (num_elems_a + num_elems_b).next_power_of_two();
+                let join_ty_size = join_ty.size_in_bits_for_defs(prg, circuit.const_sizes());
+                let a = a.compile(prg, env, circuit);
+                let b = b.compile(prg, env, circuit);
+                let mut bitonic = vec![];
+                let num_empty_elems = num_elems - num_elems_a - num_elems_b;
+                for _ in 0..num_empty_elems {
+                    bitonic.push(vec![0; max_elem_bits + 1]);
+                }
+                for i in 0..num_elems_a {
+                    let mut v = a[i * elem_bits_a..(i + 1) * elem_bits_a].to_vec();
+                    v.resize(max_elem_bits, 0);
+                    v.insert(join_ty_size, 0);
+                    bitonic.push(v);
+                }
+                for i in (0..num_elems_b).rev() {
+                    let mut v = b[i * elem_bits_b..(i + 1) * elem_bits_b].to_vec();
+                    v.resize(max_elem_bits, 0);
+                    v.insert(join_ty_size, 1);
+                    bitonic.push(v);
+                }
+                let mut offset = num_elems / 2;
+                while offset > 0 {
+                    let mut result = vec![];
+                    for _ in 0..num_elems {
+                        result.push(vec![]);
+                    }
+                    let rounds = num_elems / 2 / offset;
+                    for r in 0..rounds {
+                        for i in 0..offset {
+                            let i = i + r * offset * 2;
+                            let x = &bitonic[i];
+                            let y = &bitonic[i + offset];
+                            let (min, max) = circuit.push_sorter(join_ty_size, x, y);
+                            result[i] = min;
+                            result[i + offset] = max;
+                        }
+                    }
+                    offset /= 2;
+                    bitonic = result;
+                }
+                for slice in bitonic.windows(2).skip(num_empty_elems) {
+                    let mut binding = vec![];
+                    let (mut a, mut b) =
+                        circuit.push_sorter(join_ty_size + 1, &slice[0], &slice[1]);
+                    a.remove(join_ty_size);
+                    a.truncate(elem_bits_a);
+                    b.remove(join_ty_size);
+                    b.truncate(elem_bits_b);
+                    binding.extend(&a);
+                    binding.extend(&b);
+                    let join_a = &a[..join_ty_size];
+                    let join_b = &b[..join_ty_size];
+                    let mut join_eq = 1;
+                    for i in 0..join_ty_size {
+                        let eq = circuit.push_eq(join_a[i], join_b[i]);
+                        join_eq = circuit.push_and(join_eq, eq);
+                    }
+
+                    let panic_before_branches = circuit.peek_panic().clone();
+
+                    let mut env_if_join = env.clone();
+                    env_if_join.push();
+                    env_if_join.let_in_current_scope(var.clone(), binding.to_vec());
+
+                    for stmt in body {
+                        stmt.compile(prg, &mut env_if_join, circuit);
+                    }
+                    env_if_join.pop();
+
+                    let panic_if_join = circuit.replace_panic_with(panic_before_branches.clone());
+
+                    *env = circuit.mux_envs(join_eq, env_if_join, env.clone());
+                    let muxed_panic =
+                        circuit.mux_panic(join_eq, &panic_if_join, &panic_before_branches);
+                    circuit.replace_panic_with(muxed_panic);
+                }
+                vec![]
+            }
         }
     }
 }

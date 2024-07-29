@@ -102,7 +102,7 @@ pub enum TypeErrorEnum {
         actual: usize,
     },
     /// The two types are incompatible, (e.g. incompatible number types in a `+` operation).
-    TypeMismatch((Type, MetaInfo), (Type, MetaInfo)),
+    TypeMismatch(Type, Type),
     /// The specified range has different min and max types.
     RangeTypeMismatch(UnsignedNumType, UnsignedNumType),
     /// The specified range has invalid min or max values.
@@ -115,6 +115,8 @@ pub enum TypeErrorEnum {
     TypeDoesNotSupportPatternMatching(Type),
     /// The specified identifier is not a constant.
     ArraySizeNotConst(String),
+    /// The specified expression is not a literal usize number.
+    UsizeNotLiteral,
 }
 
 impl std::fmt::Display for TypeErrorEnum {
@@ -196,8 +198,8 @@ impl std::fmt::Display for TypeErrorEnum {
             TypeErrorEnum::WrongNumberOfArgs { expected, actual } => {
                 f.write_fmt(format_args!("The function expects {expected} parameter(s), but was called with {actual} argument(s)"))
             }
-            TypeErrorEnum::TypeMismatch((x, _), (y, _)) => f.write_fmt(format_args!(
-                "The operands have incompatible types; {x} vs {y}"
+            TypeErrorEnum::TypeMismatch(x, y) => f.write_fmt(format_args!(
+                "The arguments have incompatible types; {x} vs {y}"
             )),
             TypeErrorEnum::RangeTypeMismatch(from, to) => f.write_fmt(format_args!(
                 "Start and end of range do not have the same type; {from} vs {to}"
@@ -227,6 +229,9 @@ impl std::fmt::Display for TypeErrorEnum {
             }
             TypeErrorEnum::ArraySizeNotConst(identifier) => {
                 f.write_fmt(format_args!("Array sizes must be constants, but '{identifier}' is a variable"))
+            }
+            TypeErrorEnum::UsizeNotLiteral => {
+                f.write_str("Expected a usize number literal")
             }
         }
     }
@@ -712,20 +717,83 @@ impl UntypedStmt {
                     ))]),
                 }
             }
-            ast::StmtEnum::ForEachLoop(var, binding, body) => {
-                let binding = binding.type_check(top_level_defs, env, fns, defs)?;
-                let elem_ty = expect_array_type(&binding.ty, meta)?;
-                let mut body_typed = Vec::with_capacity(body.len());
-                env.push();
-                env.let_in_current_scope(var.clone(), (Some(elem_ty), Mutability::Immutable));
-                for stmt in body {
-                    body_typed.push(stmt.type_check(top_level_defs, env, fns, defs)?);
+            ast::StmtEnum::ForEachLoop(var, binding, body) => match &binding.inner {
+                ExprEnum::FnCall(identifier, args) if identifier == "join" => {
+                    let mut errors = vec![];
+                    if args.len() != 2 {
+                        let e = TypeErrorEnum::WrongNumberOfArgs {
+                            expected: 2,
+                            actual: args.len(),
+                        };
+                        return Err(vec![Some(TypeError(e, meta))]);
+                    }
+                    let a = args[0].type_check(top_level_defs, env, fns, defs)?;
+                    let (ty_a, meta_a) = match &a.ty {
+                        Type::Array(_, _) | Type::ArrayConst(_, _) => (a.ty.clone(), a.meta),
+                        ty => {
+                            errors.push(Some(TypeError(
+                                TypeErrorEnum::ExpectedArrayType(ty.clone()),
+                                a.meta,
+                            )));
+                            (ty.clone(), a.meta)
+                        }
+                    };
+                    let b = args[1].type_check(top_level_defs, env, fns, defs)?;
+                    let (ty_b, meta_b) = match &b.ty {
+                        Type::Array(_, _) | Type::ArrayConst(_, _) => (b.ty.clone(), b.meta),
+                        ty => {
+                            errors.push(Some(TypeError(
+                                TypeErrorEnum::ExpectedArrayType(ty.clone()),
+                                b.meta,
+                            )));
+                            (ty.clone(), b.meta)
+                        }
+                    };
+                    if !errors.is_empty() {
+                        return Err(errors);
+                    }
+                    let elem_ty_a = expect_array_type(&ty_a, meta_a)?;
+                    let elem_ty_b = expect_array_type(&ty_b, meta_b)?;
+                    let tuple_a = expect_tuple_type(&elem_ty_a, meta_a)?;
+                    let tuple_b = expect_tuple_type(&elem_ty_b, meta_b)?;
+                    if tuple_a.is_empty() || tuple_b.is_empty() || tuple_a[0] != tuple_b[0] {
+                        return Err(vec![Some(TypeError(
+                            TypeErrorEnum::TypeMismatch(elem_ty_a, elem_ty_b),
+                            meta,
+                        ))]);
+                    }
+                    let join_ty = tuple_a[0].clone();
+                    let elem_ty = Type::Tuple(vec![elem_ty_a, elem_ty_b]);
+                    let mut body_typed = Vec::with_capacity(body.len());
+                    env.push();
+                    env.let_in_current_scope(var.clone(), (Some(elem_ty), Mutability::Immutable));
+                    for stmt in body {
+                        body_typed.push(stmt.type_check(top_level_defs, env, fns, defs)?);
+                    }
+                    env.pop();
+                    Ok(Stmt::new(
+                        StmtEnum::JoinLoop(var.clone(), join_ty, (a, b), body_typed),
+                        meta,
+                    ))
                 }
-                env.pop();
-                Ok(Stmt::new(
-                    StmtEnum::ForEachLoop(var.clone(), binding, body_typed),
-                    meta,
-                ))
+                _ => {
+                    let binding = binding.type_check(top_level_defs, env, fns, defs)?;
+                    let elem_ty = expect_array_type(&binding.ty, meta)?;
+                    let mut body_typed = Vec::with_capacity(body.len());
+                    env.push();
+                    env.let_in_current_scope(var.clone(), (Some(elem_ty), Mutability::Immutable));
+                    for stmt in body {
+                        body_typed.push(stmt.type_check(top_level_defs, env, fns, defs)?);
+                    }
+                    env.pop();
+                    Ok(Stmt::new(
+                        StmtEnum::ForEachLoop(var.clone(), binding, body_typed),
+                        meta,
+                    ))
+                }
+            },
+            ast::StmtEnum::JoinLoop(_, _, _, _) => {
+                unreachable!("Untyped expressions should never be join loops")
             }
         }
     }
@@ -775,17 +843,14 @@ impl UntypedExpr {
                         .next()
                         .unwrap()
                         .type_check(top_level_defs, env, fns, defs)?;
-                let first_meta = first_field.meta;
                 let first_ty = first_field.ty.clone();
                 let mut typed_fields = vec![first_field];
                 for field in fields {
                     match field.type_check(top_level_defs, env, fns, defs) {
                         Ok(field) => {
                             if field.ty != first_ty {
-                                let e = TypeErrorEnum::TypeMismatch(
-                                    (first_ty.clone(), first_meta),
-                                    (field.ty.clone(), field.meta),
-                                );
+                                let e =
+                                    TypeErrorEnum::TypeMismatch(first_ty.clone(), field.ty.clone());
                                 errors.push(Some(TypeError(e, field.meta)));
                             }
                             typed_fields.push(field);
@@ -1183,6 +1248,9 @@ impl UntypedExpr {
                             errors.extend(e2);
                         }
                     }
+                }
+                if !errors.is_empty() {
+                    return Err(errors);
                 }
 
                 let ret_ty = {
@@ -2021,7 +2089,7 @@ fn unify(e1: &mut TypedExpr, e2: &mut TypedExpr, m: MetaInfo) -> Result<Type, Ty
     let ty = match (&e1.inner, &e2.inner) {
         _ if e1.ty == e2.ty => Ok(e1.ty.clone()),
         _ => {
-            let e = TypeErrorEnum::TypeMismatch((e1.ty.clone(), e1.meta), (e2.ty.clone(), e2.meta));
+            let e = TypeErrorEnum::TypeMismatch(e1.ty.clone(), e2.ty.clone());
             Err(vec![Some(TypeError(e, m))])
         }
     };

@@ -101,6 +101,8 @@ pub enum CircuitError {
     InvalidGate(usize),
     /// The specified output gate does not exist in the circuit.
     InvalidOutput(usize),
+    /// The circuit does not specify any input gates.
+    EmptyInputs,
     /// The circuit does not specify any output gates.
     EmptyOutputs,
     /// The provided circuit has too many gates to be processed.
@@ -141,6 +143,9 @@ impl Circuit {
     pub fn validate(&self) -> Result<(), CircuitError> {
         let mut num_and_gates = 0;
         let wires = self.wires();
+        if self.input_gates.iter().all(|i| *i == 0) {
+            return Err(CircuitError::EmptyInputs);
+        }
         for (i, g) in wires.iter().enumerate() {
             match g {
                 Wire::Input(_) => {}
@@ -992,6 +997,39 @@ impl CircuitBuilder {
             acc_lt = self.push_and(lt, not_acc_gt)
         }
         (acc_lt, acc_gt)
+    }
+
+    pub fn push_condswap(
+        &mut self,
+        s: GateIndex,
+        x: GateIndex,
+        y: GateIndex,
+    ) -> (GateIndex, GateIndex) {
+        if x == y {
+            return (x, y);
+        }
+        let x_xor_y = self.push_xor(x, y);
+        let swap = self.push_and(x_xor_y, s);
+        let x_swapped = self.push_xor(x, swap);
+        let y_swapped = self.push_xor(y, swap);
+        (x_swapped, y_swapped)
+    }
+
+    pub fn push_sorter(
+        &mut self,
+        bits: usize,
+        x: &[GateIndex],
+        y: &[GateIndex],
+    ) -> (Vec<GateIndex>, Vec<GateIndex>) {
+        let (_, gt) = self.push_comparator_circuit(bits, x, false, y, false);
+        let mut min = vec![];
+        let mut max = vec![];
+        for (x, y) in x.iter().zip(y.iter()) {
+            let (a, b) = self.push_condswap(gt, *x, *y);
+            min.push(a);
+            max.push(b);
+        }
+        (min, max)
     }
 }
 

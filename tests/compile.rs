@@ -2051,3 +2051,149 @@ pub fn main(array: [u16; MY_CONST]) -> u16 {
     assert_eq!(u16::try_from(output).map_err(|e| pretty_print(e, prg))?, 15);
     Ok(())
 }
+
+#[test]
+fn compile_join_loop() -> Result<(), Error> {
+    let prg = "
+pub fn main(rows1: [([u8; 3], u16); 4], rows2: [([u8; 3], u16, u16); 3]) -> u16 {
+    let mut result = 0u16;
+    for row in join(rows1, rows2) {
+        let ((_, field1), (_, field2, field3)) = row;
+        result = result + field1 + field2 + field3;
+    }
+    result
+}
+";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    let id_aaa = Literal::Array(vec![
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+    ]);
+    let id_bar = Literal::Array(vec![
+        Literal::NumUnsigned(98, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(114, UnsignedNumType::U8),
+    ]);
+    let id_baz = Literal::Array(vec![
+        Literal::NumUnsigned(98, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(122, UnsignedNumType::U8),
+    ]);
+    let id_foo = Literal::Array(vec![
+        Literal::NumUnsigned(102, UnsignedNumType::U8),
+        Literal::NumUnsigned(111, UnsignedNumType::U8),
+        Literal::NumUnsigned(111, UnsignedNumType::U8),
+    ]);
+    let id_qux = Literal::Array(vec![
+        Literal::NumUnsigned(113, UnsignedNumType::U8),
+        Literal::NumUnsigned(117, UnsignedNumType::U8),
+        Literal::NumUnsigned(120, UnsignedNumType::U8),
+    ]);
+    eval.set_literal(Literal::Array(vec![
+        Literal::Tuple(vec![
+            id_aaa.clone(),
+            Literal::NumUnsigned(0, UnsignedNumType::U16),
+        ]),
+        Literal::Tuple(vec![
+            id_bar.clone(),
+            Literal::NumUnsigned(1, UnsignedNumType::U16),
+        ]),
+        Literal::Tuple(vec![
+            id_baz.clone(),
+            Literal::NumUnsigned(2, UnsignedNumType::U16),
+        ]),
+        Literal::Tuple(vec![
+            id_qux.clone(),
+            Literal::NumUnsigned(3, UnsignedNumType::U16),
+        ]),
+    ]))
+    .unwrap();
+    eval.set_literal(Literal::Array(vec![
+        Literal::Tuple(vec![
+            id_baz.clone(),
+            Literal::NumUnsigned(4, UnsignedNumType::U16),
+            Literal::NumUnsigned(5, UnsignedNumType::U16),
+        ]),
+        Literal::Tuple(vec![
+            id_foo.clone(),
+            Literal::NumUnsigned(6, UnsignedNumType::U16),
+            Literal::NumUnsigned(7, UnsignedNumType::U16),
+        ]),
+        Literal::Tuple(vec![
+            id_qux.clone(),
+            Literal::NumUnsigned(8, UnsignedNumType::U16),
+            Literal::NumUnsigned(9, UnsignedNumType::U16),
+        ]),
+    ]))
+    .unwrap();
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        2 + 3 + 4 + 5 + 8 + 9
+    );
+    Ok(())
+}
+
+#[test]
+fn compile_multiple_join_loops() -> Result<(), Error> {
+    for joined in 0..4 {
+        for only_a in 0..4 {
+            for only_b in 1..4 {
+                println!("Testing join loops for {joined} / {only_a} / {only_b} elements");
+                let a = joined + only_a;
+                let b = joined + only_b;
+                let prg = format!(
+                    "
+pub fn main(rows1: [(u8, u16); {a}], rows2: [(u8, u16, u16); {b}]) -> u16 {{
+    let mut result = 0u16;
+    for row in join(rows1, rows2) {{
+        let ((_, field1), (_, field2, field3)) = row;
+        result = result + field1 + field2 + field3;
+    }}
+    result
+}}
+"
+                );
+                let compiled = compile(&prg).map_err(|e| pretty_print(e, &prg))?;
+                compiled.circuit.validate().unwrap();
+                let mut eval = compiled.evaluator();
+                let mut rows_a = vec![];
+                let mut rows_b = vec![];
+                for i in 0..joined {
+                    rows_a.push(Literal::Tuple(vec![
+                        Literal::NumUnsigned(i, UnsignedNumType::U8),
+                        Literal::NumUnsigned(2, UnsignedNumType::U16),
+                    ]));
+                    rows_b.push(Literal::Tuple(vec![
+                        Literal::NumUnsigned(i, UnsignedNumType::U8),
+                        Literal::NumUnsigned(1, UnsignedNumType::U16),
+                        Literal::NumUnsigned(1, UnsignedNumType::U16),
+                    ]));
+                }
+                for i in joined..joined + only_a {
+                    rows_a.push(Literal::Tuple(vec![
+                        Literal::NumUnsigned(i, UnsignedNumType::U8),
+                        Literal::NumUnsigned(2, UnsignedNumType::U16),
+                    ]));
+                }
+                for i in joined + only_a..joined + only_a + only_b {
+                    rows_b.push(Literal::Tuple(vec![
+                        Literal::NumUnsigned(i, UnsignedNumType::U8),
+                        Literal::NumUnsigned(1, UnsignedNumType::U16),
+                        Literal::NumUnsigned(1, UnsignedNumType::U16),
+                    ]));
+                }
+                eval.set_literal(Literal::Array(rows_a)).unwrap();
+                eval.set_literal(Literal::Array(rows_b)).unwrap();
+                let output = eval.run().map_err(|e| pretty_print(e, &prg))?;
+                assert_eq!(
+                    u16::try_from(output).map_err(|e| pretty_print(e, &prg))?,
+                    joined as u16 * 4
+                );
+            }
+        }
+    }
+    Ok(())
+}
