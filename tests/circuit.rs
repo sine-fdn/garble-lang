@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-
-use garble_lang::{compile, compile_with_constants, literal::Literal, token::UnsignedNumType};
+use garble_lang::compile;
 
 #[test]
 fn optimize_or() -> Result<(), String> {
@@ -172,10 +170,16 @@ pub fn main(arr1: [(u16, u16, u32); 8]) -> [((u16, u16), u32); 8] {
     Ok(())
 }
 
+// Run the following test using `cargo test plot --features=plot --release -- --nocapture`
+
 #[test]
+#[cfg(feature = "plot")]
 fn plot_for_each_join_loop_complexity() -> Result<(), String> {
-    // change this to 1000 and run this test using `cargo test --release` for a full plot
-    let max_rows = 40;
+    use garble_lang::{compile_with_constants, literal::Literal, token::UnsignedNumType};
+    use plotters::prelude::*;
+    use std::collections::HashMap;
+
+    let max_rows = 1000;
 
     let prg_nested_loop = "
 const ROWS_0: usize = PARTY_0::ROWS_0;
@@ -246,7 +250,7 @@ pub fn main(rows0: [([u8; 8], u32); ROWS_0], rows1: [([u8; 8], u32); ROWS_1]) ->
             }
         }
     }
-    use plotters::prelude::*;
+
     let root = SVGBackend::new("plot_for_each_join_loop.svg", (1024, 768)).into_drawing_area();
     root.fill(&WHITE).unwrap();
     let mut chart = ChartBuilder::on(&root)

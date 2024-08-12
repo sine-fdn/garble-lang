@@ -26,6 +26,7 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 
 [features]
 bin = ["clap"]
+plot = []
 
 [dev-dependencies]
 quickcheck = "1"
