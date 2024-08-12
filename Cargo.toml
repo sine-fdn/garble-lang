@@ -21,7 +21,7 @@ path = "src/main.rs"
 required-features = ["bin"]
 
 [dependencies]
-clap = { version = "4.5.13", features = ["derive"], optional = true }
+clap = { version = "4.5.10", features = ["derive"], optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 
 [features]
@@ -30,3 +30,4 @@ bin = ["clap"]
 [dev-dependencies]
 quickcheck = "1"
 quickcheck_macros = "1"
+plotters = "0.3.6"
