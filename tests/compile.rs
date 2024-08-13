@@ -2197,3 +2197,55 @@ pub fn main(rows1: [(u8, u16); {a}], rows2: [(u8, u16, u16); {b}]) -> u16 {{
     }
     Ok(())
 }
+
+#[test]
+fn compile_add_assign() -> Result<(), Error> {
+    let prg = "
+pub fn main(a: u32) -> u32 {
+    let mut x = 3u32;
+    x += a;
+    x += 2u32;
+    x
+}";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u32(10);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(r.to_string(), "15u32");
+    Ok(())
+}
+
+#[test]
+fn compile_operator_assignment_examples() -> Result<(), Error> {
+    let prg = "
+pub fn main(_a: i32, _b: i32) -> () {
+    let mut x = 0i32;
+    x += 5i32;
+    x -= 3i32;
+    x *= 3i32;
+    x /= 2i32;
+    x %= 1i32;
+
+    let mut x = 0u32;
+    x ^= 4u32;
+    x &= 3u32;
+    x |= 2u32;
+    x <<= 1u8;
+    x >>= 1u8;
+
+    let mut b = true;
+    b ^= true;
+    b &= true;
+    b |= true;
+}
+";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_i32(0);
+    eval.set_i32(0);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(r.to_string(), "()");
+    Ok(())
+}

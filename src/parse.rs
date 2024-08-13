@@ -440,11 +440,55 @@ impl Parser {
                     }
                     Stmt::new(StmtEnum::VarAssign(identifier, value), meta)
                 } else {
-                    let expr = Expr::untyped(ExprEnum::Identifier(identifier), meta);
-                    if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
-                        self.expect(&TokenEnum::Semicolon)?;
+                    if let Some(Token(next, _)) = self.tokens.peek() {
+                        let op = match next {
+                            TokenEnum::AddAssign => Some(Op::Add),
+                            TokenEnum::SubAssign => Some(Op::Sub),
+                            TokenEnum::MulAssign => Some(Op::Mul),
+                            TokenEnum::DivAssign => Some(Op::Div),
+                            TokenEnum::RemAssign => Some(Op::Mod),
+                            TokenEnum::BitXorAssign => Some(Op::BitXor),
+                            TokenEnum::BitAndAssign => Some(Op::BitAnd),
+                            TokenEnum::BitOrAssign => Some(Op::BitOr),
+                            TokenEnum::ShrAssign => Some(Op::ShiftRight),
+                            TokenEnum::ShlAssign => Some(Op::ShiftLeft),
+                            _ => None,
+                        };
+                        println!("next: {next:?}");
+                        if let Some(op) = op {
+                            self.advance();
+                            let value = self.parse_expr()?;
+                            let identifier_meta = meta;
+                            let meta = join_meta(meta, value.meta);
+                            if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
+                                self.expect(&TokenEnum::Semicolon)?;
+                            }
+                            let binary_op = Expr::untyped(
+                                ExprEnum::Op(
+                                    op,
+                                    Box::new(Expr::untyped(
+                                        ExprEnum::Identifier(identifier.clone()),
+                                        identifier_meta,
+                                    )),
+                                    Box::new(value),
+                                ),
+                                meta,
+                            );
+                            Stmt::new(StmtEnum::VarAssign(identifier, binary_op), meta)
+                        } else {
+                            let expr = Expr::untyped(ExprEnum::Identifier(identifier), meta);
+                            if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
+                                self.expect(&TokenEnum::Semicolon)?;
+                            }
+                            Stmt::new(StmtEnum::Expr(expr), meta)
+                        }
+                    } else {
+                        let expr = Expr::untyped(ExprEnum::Identifier(identifier), meta);
+                        if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
+                            self.expect(&TokenEnum::Semicolon)?;
+                        }
+                        Stmt::new(StmtEnum::Expr(expr), meta)
                     }
-                    Stmt::new(StmtEnum::Expr(expr), meta)
                 }
             } else if let ExprEnum::ArrayAccess(array, index) = expr.inner {
                 if let (ExprEnum::Identifier(identifier), Some(_)) =

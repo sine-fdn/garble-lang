@@ -78,10 +78,6 @@ impl<'a> Scanner<'a> {
                 ']' => self.push_token(TokenEnum::RightBracket),
                 ',' => self.push_token(TokenEnum::Comma),
                 ';' => self.push_token(TokenEnum::Semicolon),
-                '%' => self.push_token(TokenEnum::Percent),
-                '^' => self.push_token(TokenEnum::Caret),
-                '*' => self.push_token(TokenEnum::Star),
-                '+' => self.push_token(TokenEnum::Plus),
                 '.' => {
                     if self.next_matches('.') {
                         if self.next_matches('=') {
@@ -93,9 +89,18 @@ impl<'a> Scanner<'a> {
                         self.push_token(TokenEnum::Dot);
                     }
                 }
+                '^' => {
+                    if self.next_matches('=') {
+                        self.push_token(TokenEnum::BitXorAssign);
+                    } else {
+                        self.push_token(TokenEnum::Caret)
+                    }
+                }
                 '&' => {
                     if self.next_matches('&') {
                         self.push_token(TokenEnum::DoubleAmpersand);
+                    } else if self.next_matches('=') {
+                        self.push_token(TokenEnum::BitAndAssign);
                     } else {
                         self.push_token(TokenEnum::Ampersand);
                     }
@@ -103,6 +108,8 @@ impl<'a> Scanner<'a> {
                 '|' => {
                     if self.next_matches('|') {
                         self.push_token(TokenEnum::DoubleBar);
+                    } else if self.next_matches('=') {
+                        self.push_token(TokenEnum::BitOrAssign);
                     } else {
                         self.push_token(TokenEnum::Bar);
                     }
@@ -132,7 +139,11 @@ impl<'a> Scanner<'a> {
                 }
                 '>' => {
                     if self.next_matches('>') {
-                        self.push_token(TokenEnum::DoubleGreaterThan);
+                        if self.next_matches('=') {
+                            self.push_token(TokenEnum::ShrAssign);
+                        } else {
+                            self.push_token(TokenEnum::DoubleGreaterThan);
+                        }
                     } else if self.next_matches('=') {
                         self.push_token(TokenEnum::GreaterThanEquals);
                     } else {
@@ -141,15 +152,42 @@ impl<'a> Scanner<'a> {
                 }
                 '<' => {
                     if self.next_matches('<') {
-                        self.push_token(TokenEnum::DoubleLessThan);
+                        if self.next_matches('=') {
+                            self.push_token(TokenEnum::ShlAssign);
+                        } else {
+                            self.push_token(TokenEnum::DoubleLessThan);
+                        }
                     } else if self.next_matches('=') {
                         self.push_token(TokenEnum::LessThanEquals);
                     } else {
                         self.push_token(TokenEnum::LessThan);
                     }
                 }
+                '%' => {
+                    if self.next_matches('=') {
+                        self.push_token(TokenEnum::RemAssign);
+                    } else {
+                        self.push_token(TokenEnum::Percent)
+                    }
+                }
+                '*' => {
+                    if self.next_matches('=') {
+                        self.push_token(TokenEnum::MulAssign);
+                    } else {
+                        self.push_token(TokenEnum::Star);
+                    }
+                }
+                '+' => {
+                    if self.next_matches('=') {
+                        self.push_token(TokenEnum::AddAssign);
+                    } else {
+                        self.push_token(TokenEnum::Plus);
+                    }
+                }
                 '/' => {
-                    if self.next_matches('/') {
+                    if self.next_matches('=') {
+                        self.push_token(TokenEnum::DivAssign);
+                    } else if self.next_matches('/') {
                         while !(self.peek('\n') || self.is_empty()) {
                             self.advance();
                         }
@@ -175,7 +213,9 @@ impl<'a> Scanner<'a> {
                     }
                 }
                 '-' => {
-                    if self.next_matches('>') {
+                    if self.next_matches('=') {
+                        self.push_token(TokenEnum::SubAssign);
+                    } else if self.next_matches('>') {
                         self.push_token(TokenEnum::Arrow);
                     } else {
                         let mut digits = vec!['-'];
