@@ -455,7 +455,7 @@ pub fn main(mode: bool, x: i16, y: u8) -> i16 {
 }
 ";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
-    let test_values = (-20..20).chain(vec![i16::MAX, i16::MIN].into_iter());
+    let test_values = (-20..20).chain(vec![i16::MAX, i16::MIN]);
     for x in test_values {
         for mode in [true, false] {
             for y in 0..20 {
@@ -1036,14 +1036,8 @@ pub fn main(x: bool) -> {t} {{
             0 => assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, -3),
             1 => assert_eq!(i16::try_from(output).map_err(|e| pretty_print(e, prg))?, -2),
             2 => assert_eq!(i8::try_from(output).map_err(|e| pretty_print(e, prg))?, -1),
-            3 => assert_eq!(
-                bool::try_from(output).map_err(|e| pretty_print(e, prg))?,
-                true
-            ),
-            4 => assert_eq!(
-                bool::try_from(output).map_err(|e| pretty_print(e, prg))?,
-                false
-            ),
+            3 => assert!(bool::try_from(output).map_err(|e| pretty_print(e, prg))?),
+            4 => assert!(!(bool::try_from(output).map_err(|e| pretty_print(e, prg))?)),
             _ => unreachable!(),
         }
     }

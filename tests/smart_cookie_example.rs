@@ -55,7 +55,7 @@ fn smart_cookie_simple_interaction() -> Result<(), Error> {
         "Luxury",
         ["Politics"; 20]
             .into_iter()
-            .chain(["Luxury"; 40].into_iter())
+            .chain(["Luxury"; 40])
             .collect::<Vec<_>>(),
     );
 

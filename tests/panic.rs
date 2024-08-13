@@ -225,7 +225,7 @@ pub fn main(b: bool) -> bool {
     let output = eval.run()?;
     let output = bool::try_from(output);
     assert!(output.is_ok());
-    assert_eq!(output.unwrap(), false);
+    assert!(!output.unwrap());
 
     let prg = "
 pub fn main(b: bool) -> bool {
@@ -289,7 +289,7 @@ pub fn main(b: bool) -> bool {
     let output = eval.run()?;
     let output = bool::try_from(output);
     assert!(output.is_ok());
-    assert_eq!(output.unwrap(), true);
+    assert!(output.unwrap());
 
     let mut eval = prg.evaluator();
     eval.set_bool(false);
