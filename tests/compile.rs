@@ -2243,3 +2243,78 @@ pub fn main(_a: i32, _b: i32) -> () {
     assert_eq!(r.to_string(), "()");
     Ok(())
 }
+
+#[test]
+fn compile_join_loop_destructuring() -> Result<(), Error> {
+    let prg = "
+pub fn main(rows1: [(u8, u16); 3], rows2: [(u8, u16); 3]) -> u16 {
+    let mut result = 0u16;
+    for ((_, a), (_, b)) in join(rows1, rows2) {
+        result += a + b;
+    }
+    result
+}
+";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_literal(Literal::Array(vec![
+        Literal::Tuple(vec![
+            Literal::NumUnsigned(1, UnsignedNumType::U8),
+            Literal::NumUnsigned(2, UnsignedNumType::U16),
+        ]),
+        Literal::Tuple(vec![
+            Literal::NumUnsigned(2, UnsignedNumType::U8),
+            Literal::NumUnsigned(4, UnsignedNumType::U16),
+        ]),
+        Literal::Tuple(vec![
+            Literal::NumUnsigned(3, UnsignedNumType::U8),
+            Literal::NumUnsigned(6, UnsignedNumType::U16),
+        ]),
+    ]))
+    .unwrap();
+    eval.set_literal(Literal::Array(vec![
+        Literal::Tuple(vec![
+            Literal::NumUnsigned(1, UnsignedNumType::U8),
+            Literal::NumUnsigned(2, UnsignedNumType::U16),
+        ]),
+        Literal::Tuple(vec![
+            Literal::NumUnsigned(2, UnsignedNumType::U8),
+            Literal::NumUnsigned(4, UnsignedNumType::U16),
+        ]),
+        Literal::Tuple(vec![
+            Literal::NumUnsigned(4, UnsignedNumType::U8),
+            Literal::NumUnsigned(8, UnsignedNumType::U16),
+        ]),
+    ]))
+    .unwrap();
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        2 + 2 + 4 + 4
+    );
+    Ok(())
+}
+
+#[test]
+fn compile_for_loop_destructuring() -> Result<(), Error> {
+    let prg = "
+pub fn main(_x: i32) -> i32 {
+    let mut sum = 0i32;
+    for (a, b) in [(2i32, 4i32), (6i32, 8i32)] {
+        sum += a + b;
+    }
+    sum
+}
+";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    for x in 0..110 {
+        let mut eval = compiled.evaluator();
+        eval.set_i32(x);
+        let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+        assert_eq!(
+            i32::try_from(output).map_err(|e| pretty_print(e, prg))?,
+            2 + 4 + 6 + 8,
+        );
+    }
+    Ok(())
+}

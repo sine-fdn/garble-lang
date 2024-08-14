@@ -717,7 +717,7 @@ impl UntypedStmt {
                     ))]),
                 }
             }
-            ast::StmtEnum::ForEachLoop(var, binding, body) => match &binding.inner {
+            ast::StmtEnum::ForEachLoop(pattern, binding, body) => match &binding.inner {
                 ExprEnum::FnCall(identifier, args) if identifier == "join" => {
                     let mut errors = vec![];
                     if args.len() != 2 {
@@ -766,13 +766,13 @@ impl UntypedStmt {
                     let elem_ty = Type::Tuple(vec![elem_ty_a, elem_ty_b]);
                     let mut body_typed = Vec::with_capacity(body.len());
                     env.push();
-                    env.let_in_current_scope(var.clone(), (Some(elem_ty), Mutability::Immutable));
+                    let pattern = pattern.type_check(env, fns, defs, Some(elem_ty))?;
                     for stmt in body {
                         body_typed.push(stmt.type_check(top_level_defs, env, fns, defs)?);
                     }
                     env.pop();
                     Ok(Stmt::new(
-                        StmtEnum::JoinLoop(var.clone(), join_ty, (a, b), body_typed),
+                        StmtEnum::JoinLoop(pattern.clone(), join_ty, (a, b), body_typed),
                         meta,
                     ))
                 }
@@ -781,13 +781,13 @@ impl UntypedStmt {
                     let elem_ty = expect_array_type(&binding.ty, meta)?;
                     let mut body_typed = Vec::with_capacity(body.len());
                     env.push();
-                    env.let_in_current_scope(var.clone(), (Some(elem_ty), Mutability::Immutable));
+                    let pattern = pattern.type_check(env, fns, defs, Some(elem_ty))?;
                     for stmt in body {
                         body_typed.push(stmt.type_check(top_level_defs, env, fns, defs)?);
                     }
                     env.pop();
                     Ok(Stmt::new(
-                        StmtEnum::ForEachLoop(var.clone(), binding, body_typed),
+                        StmtEnum::ForEachLoop(pattern, binding, body_typed),
                         meta,
                     ))
                 }
