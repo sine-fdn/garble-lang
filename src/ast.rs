@@ -485,7 +485,7 @@ impl<T> std::fmt::Display for Pattern<T> {
             PatternEnum::UnsignedInclusiveRange(min, max, suffix) => {
                 if min == max {
                     f.write_fmt(format_args!("{min}{suffix}"))
-                } else if *min == 0 && *max == suffix.max() {
+                } else if *min == 0 && Some(*max) == suffix.max() {
                     f.write_str("_")
                 } else {
                     f.write_fmt(format_args!("{min}{suffix}..={max}{suffix}"))
@@ -494,7 +494,7 @@ impl<T> std::fmt::Display for Pattern<T> {
             PatternEnum::SignedInclusiveRange(min, max, suffix) => {
                 if min == max {
                     f.write_fmt(format_args!("{min}{suffix}"))
-                } else if *min == suffix.min() && *max == suffix.max() {
+                } else if Some(*min) == suffix.min() && Some(*max) == suffix.max() {
                     f.write_str("_")
                 } else {
                     f.write_fmt(format_args!("{min}{suffix}..={max}{suffix}"))

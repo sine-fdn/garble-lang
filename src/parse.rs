@@ -453,7 +453,6 @@ impl Parser {
                         TokenEnum::ShlAssign => Some(Op::ShiftLeft),
                         _ => None,
                     };
-                    println!("next: {next:?}");
                     if let Some(op) = op {
                         self.advance();
                         let value = self.parse_expr()?;
@@ -1172,14 +1171,14 @@ impl Parser {
         };
         while self.peek(&TokenEnum::LeftBracket) || self.peek(&TokenEnum::Dot) {
             if self.next_matches(&TokenEnum::LeftBracket).is_some() {
-                if let Some(Token(TokenEnum::ConstantIndexOrSize(i), meta)) = self.tokens.peek() {
+                if let Some(Token(TokenEnum::UnsignedNum(i, UnsignedNumType::Unspecified), meta)) =
+                    self.tokens.peek()
+                {
                     let i = *i;
                     let meta = *meta;
                     self.advance();
-                    let index = Expr::untyped(
-                        ExprEnum::NumUnsigned(i as u64, UnsignedNumType::Usize),
-                        meta,
-                    );
+                    let index =
+                        Expr::untyped(ExprEnum::NumUnsigned(i, UnsignedNumType::Usize), meta);
                     let end = self.expect(&TokenEnum::RightBracket)?;
                     let meta = join_meta(expr.meta, end);
                     expr =
@@ -1195,7 +1194,11 @@ impl Parser {
                 let peeked = self.tokens.peek();
                 if let Some(Token(TokenEnum::Identifier(_), _)) = peeked {
                     expr = self.parse_method_call_or_struct_access(expr)?;
-                } else if let Some(Token(TokenEnum::ConstantIndexOrSize(i), meta_index)) = peeked {
+                } else if let Some(Token(
+                    TokenEnum::UnsignedNum(i, UnsignedNumType::Unspecified),
+                    meta_index,
+                )) = peeked
+                {
                     let i = *i;
                     let meta_index = *meta_index;
                     self.advance();
@@ -1374,7 +1377,13 @@ impl Parser {
                 if self.peek(&TokenEnum::Semicolon) {
                     self.expect(&TokenEnum::Semicolon)?;
                     match self.tokens.peek().cloned() {
-                        Some(Token(TokenEnum::ConstantIndexOrSize(n), _)) => {
+                        Some(Token(
+                            TokenEnum::UnsignedNum(
+                                n,
+                                UnsignedNumType::Unspecified | UnsignedNumType::Usize,
+                            ),
+                            _,
+                        )) => {
                             self.advance();
                             let meta_end = self.expect(&TokenEnum::RightBracket)?;
                             let meta = join_meta(meta, meta_end);
@@ -1446,7 +1455,13 @@ impl Parser {
             let (ty, _) = self.parse_type()?;
             self.expect(&TokenEnum::Semicolon)?;
             match self.tokens.peek().cloned() {
-                Some(Token(TokenEnum::ConstantIndexOrSize(n), _)) => {
+                Some(Token(
+                    TokenEnum::UnsignedNum(
+                        n,
+                        UnsignedNumType::Unspecified | UnsignedNumType::Usize,
+                    ),
+                    _,
+                )) => {
                     self.advance();
                     let size = n as usize;
                     let meta_end = self.expect(&TokenEnum::RightBracket)?;

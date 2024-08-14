@@ -21,12 +21,12 @@
 //! assert_eq!(u32::try_from(output).map_err(|e| e.prettify(&code)).unwrap(), 2 + 10 + 100);
 //!
 //! // Or we can run the compiled circuit in an MPC engine, simulated using `prg.circuit.eval()`:
-//! let x = prg.parse_arg(0, "2u32").unwrap().as_bits();
-//! let y = prg.parse_arg(1, "10u32").unwrap().as_bits();
-//! let z = prg.parse_arg(2, "100u32").unwrap().as_bits();
+//! let x = prg.parse_arg(0, "2").unwrap().as_bits();
+//! let y = prg.parse_arg(1, "10").unwrap().as_bits();
+//! let z = prg.parse_arg(2, "100").unwrap().as_bits();
 //! let output = prg.circuit.eval(&[x, y, z]); // use your own MPC engine here instead
 //! let result = prg.parse_output(&output).unwrap();
-//! assert_eq!("112u32", result.to_string());
+//! assert_eq!("112", result.to_string());
 //!
 //! // Input arguments can also be constructed directly as literals:
 //! let x = prg.literal_arg(0, Literal::NumUnsigned(2, U32)).unwrap().as_bits();

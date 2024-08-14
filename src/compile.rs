@@ -1270,6 +1270,8 @@ impl Type {
             Type::Unsigned(UnsignedNumType::U16) | Type::Signed(SignedNumType::I16) => 16,
             Type::Unsigned(UnsignedNumType::U32) | Type::Signed(SignedNumType::I32) => 32,
             Type::Unsigned(UnsignedNumType::U64) | Type::Signed(SignedNumType::I64) => 64,
+            Type::Unsigned(UnsignedNumType::Unspecified)
+            | Type::Signed(SignedNumType::Unspecified) => 32,
             Type::Array(elem, size) => elem.size_in_bits_for_defs(prg, const_sizes) * size,
             Type::ArrayConst(elem, size) => {
                 elem.size_in_bits_for_defs(prg, const_sizes) * const_sizes.get(size).unwrap()

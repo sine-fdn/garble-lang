@@ -244,6 +244,7 @@ impl<'a> Scanner<'a> {
                                     "i64" if (i64::MIN..=i64::MAX).contains(&n) => {
                                         SignedNumType::I64
                                     }
+                                    "" => SignedNumType::Unspecified,
                                     _ => {
                                         self.push_error(ScanErrorEnum::InvalidUnsignedNum);
                                         SignedNumType::I64
@@ -268,42 +269,39 @@ impl<'a> Scanner<'a> {
                             while let Some(char) = self.next_matches_alphanumeric() {
                                 literal_suffix.push(char);
                             }
-                            if literal_suffix.is_empty() && n <= u32::MAX as u64 {
-                                self.push_token(TokenEnum::ConstantIndexOrSize(n as u32));
-                            } else {
-                                let token = match literal_suffix.as_str() {
-                                    "i8" if n <= i8::MAX as u64 => {
-                                        TokenEnum::SignedNum(n as i64, SignedNumType::I8)
-                                    }
-                                    "i16" if n <= i16::MAX as u64 => {
-                                        TokenEnum::SignedNum(n as i64, SignedNumType::I16)
-                                    }
-                                    "i32" if n <= i32::MAX as u64 => {
-                                        TokenEnum::SignedNum(n as i64, SignedNumType::I32)
-                                    }
-                                    "i64" if n <= i64::MAX as u64 => {
-                                        TokenEnum::SignedNum(n as i64, SignedNumType::I64)
-                                    }
-                                    "usize" if n <= usize::MAX as u64 => {
-                                        TokenEnum::UnsignedNum(n, UnsignedNumType::Usize)
-                                    }
-                                    "u8" if n <= u8::MAX as u64 => {
-                                        TokenEnum::UnsignedNum(n, UnsignedNumType::U8)
-                                    }
-                                    "u16" if n <= u16::MAX as u64 => {
-                                        TokenEnum::UnsignedNum(n, UnsignedNumType::U16)
-                                    }
-                                    "u32" if n <= u32::MAX as u64 => {
-                                        TokenEnum::UnsignedNum(n, UnsignedNumType::U32)
-                                    }
-                                    "u64" => TokenEnum::UnsignedNum(n, UnsignedNumType::U64),
-                                    _ => {
-                                        self.push_error(ScanErrorEnum::InvalidUnsignedNum);
-                                        TokenEnum::UnsignedNum(n, UnsignedNumType::U64)
-                                    }
-                                };
-                                self.push_token(token);
-                            }
+                            let token = match literal_suffix.as_str() {
+                                "i8" if n <= i8::MAX as u64 => {
+                                    TokenEnum::SignedNum(n as i64, SignedNumType::I8)
+                                }
+                                "i16" if n <= i16::MAX as u64 => {
+                                    TokenEnum::SignedNum(n as i64, SignedNumType::I16)
+                                }
+                                "i32" if n <= i32::MAX as u64 => {
+                                    TokenEnum::SignedNum(n as i64, SignedNumType::I32)
+                                }
+                                "i64" if n <= i64::MAX as u64 => {
+                                    TokenEnum::SignedNum(n as i64, SignedNumType::I64)
+                                }
+                                "usize" if n <= usize::MAX as u64 => {
+                                    TokenEnum::UnsignedNum(n, UnsignedNumType::Usize)
+                                }
+                                "u8" if n <= u8::MAX as u64 => {
+                                    TokenEnum::UnsignedNum(n, UnsignedNumType::U8)
+                                }
+                                "u16" if n <= u16::MAX as u64 => {
+                                    TokenEnum::UnsignedNum(n, UnsignedNumType::U16)
+                                }
+                                "u32" if n <= u32::MAX as u64 => {
+                                    TokenEnum::UnsignedNum(n, UnsignedNumType::U32)
+                                }
+                                "u64" => TokenEnum::UnsignedNum(n, UnsignedNumType::U64),
+                                "" => TokenEnum::UnsignedNum(n, UnsignedNumType::Unspecified),
+                                _ => {
+                                    self.push_error(ScanErrorEnum::InvalidUnsignedNum);
+                                    TokenEnum::UnsignedNum(n, UnsignedNumType::U64)
+                                }
+                            };
+                            self.push_token(token);
                         } else {
                             self.push_error(ScanErrorEnum::InvalidUnsignedNum);
                         }

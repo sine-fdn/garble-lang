@@ -546,15 +546,23 @@ impl UntypedFnDef {
             }
         }
 
-        let body = type_check_block(&self.body, self.meta, top_level_defs, &mut env, fns, defs);
+        let body = type_check_block(&self.body, top_level_defs, &mut env, fns, defs);
         fns.currently_being_checked.remove(&self.identifier);
         env.pop();
 
         match body {
-            Ok((body, mut ret_expr)) => match self.ty.as_concrete_type(top_level_defs) {
+            Ok((mut body, _)) => match self.ty.as_concrete_type(top_level_defs) {
                 Ok(ret_ty) => {
-                    if let Err(e) = check_type(&mut ret_expr, &ret_ty) {
-                        errors.extend(e);
+                    if let Some(StmtEnum::Expr(ret_expr)) = body.last_mut().map(|s| &mut s.inner) {
+                        if let Err(e) = check_type(ret_expr, &ret_ty) {
+                            errors.extend(e);
+                        }
+                    } else if ret_ty != Type::Tuple(vec![]) {
+                        let e = TypeErrorEnum::UnexpectedType {
+                            expected: ret_ty.clone(),
+                            actual: Type::Tuple(vec![]),
+                        };
+                        errors.push(Some(TypeError(e, self.meta)));
                     }
                     if errors.is_empty() {
                         Ok(TypedFnDef {
@@ -584,21 +592,20 @@ impl UntypedFnDef {
 
 fn type_check_block(
     block: &[UntypedStmt],
-    meta: MetaInfo,
     top_level_defs: &TopLevelTypes,
     env: &mut Env<(Option<Type>, Mutability)>,
     fns: &mut TypedFns,
     defs: &Defs,
-) -> Result<(Vec<TypedStmt>, TypedExpr), TypeErrors> {
+) -> Result<(Vec<TypedStmt>, Type), TypeErrors> {
     let mut typed_block = Vec::with_capacity(block.len());
-    let mut ret_expr = Expr::typed(ExprEnum::TupleLiteral(vec![]), Type::Tuple(vec![]), meta);
+    let mut ret_ty = Type::Tuple(vec![]);
     let mut errors = vec![];
     for (i, stmt) in block.iter().enumerate() {
         match stmt.type_check(top_level_defs, env, fns, defs) {
             Ok(stmt) => {
                 if i == block.len() - 1 {
                     if let StmtEnum::Expr(expr) = &stmt.inner {
-                        ret_expr = expr.clone();
+                        ret_ty = expr.ty.clone();
                     }
                 }
                 typed_block.push(stmt);
@@ -609,7 +616,7 @@ fn type_check_block(
         }
     }
     if errors.is_empty() {
-        Ok((typed_block, ret_expr))
+        Ok((typed_block, ret_ty))
     } else {
         Err(errors)
     }
@@ -642,7 +649,19 @@ impl UntypedStmt {
             }
             ast::StmtEnum::LetMut(identifier, binding) => {
                 match binding.type_check(top_level_defs, env, fns, defs) {
-                    Ok(binding) => {
+                    Ok(mut binding) => {
+                        if binding.ty == Type::Unsigned(UnsignedNumType::Unspecified)
+                            || binding.ty == Type::Signed(SignedNumType::Unspecified)
+                        {
+                            check_or_constrain_signed(&mut binding, SignedNumType::I32)?;
+                        }
+                        if let Type::Array(ty, _) | Type::ArrayConst(ty, _) = &mut binding.ty {
+                            if let Type::Unsigned(UnsignedNumType::Unspecified)
+                            | Type::Signed(SignedNumType::Unspecified) = ty.as_ref()
+                            {
+                                *ty = Box::new(Type::Signed(SignedNumType::I32));
+                            }
+                        }
                         env.let_in_current_scope(
                             identifier.clone(),
                             (Some(binding.ty.clone()), Mutability::Mutable),
@@ -693,7 +712,7 @@ impl UntypedStmt {
                         let elem_ty = expect_array_type(&array_ty, meta)?;
 
                         let mut index = index.type_check(top_level_defs, env, fns, defs)?;
-                        check_type(&mut index, &Type::Unsigned(UnsignedNumType::Usize))?;
+                        check_or_constrain_unsigned(&mut index, UnsignedNumType::Usize)?;
 
                         let mut value = value.type_check(top_level_defs, env, fns, defs)?;
                         check_type(&mut value, &elem_ty)?;
@@ -837,29 +856,40 @@ impl UntypedExpr {
             ExprEnum::ArrayLiteral(fields) => {
                 let mut errors = vec![];
                 let array_size = fields.len();
-                let mut fields = fields.iter();
-                let first_field =
-                    fields
-                        .next()
-                        .unwrap()
-                        .type_check(top_level_defs, env, fns, defs)?;
-                let first_ty = first_field.ty.clone();
-                let mut typed_fields = vec![first_field];
+
+                let mut typed_fields = vec![];
                 for field in fields {
                     match field.type_check(top_level_defs, env, fns, defs) {
                         Ok(field) => {
-                            if field.ty != first_ty {
-                                let e =
-                                    TypeErrorEnum::TypeMismatch(first_ty.clone(), field.ty.clone());
-                                errors.push(Some(TypeError(e, field.meta)));
-                            }
                             typed_fields.push(field);
                         }
                         Err(e) => errors.extend(e),
                     }
                 }
+                if !errors.is_empty() {
+                    return Err(errors);
+                }
+
+                let mut elem_ty = typed_fields.first().unwrap().ty.clone();
+                if elem_ty == Type::Unsigned(UnsignedNumType::Unspecified) {
+                    if let Some(expr) = typed_fields.iter().find(|expr| expr.ty != elem_ty) {
+                        elem_ty = expr.ty.clone();
+                    }
+                }
+                if elem_ty == Type::Signed(SignedNumType::Unspecified) {
+                    if let Some(expr) = typed_fields.iter().find(|expr| {
+                        expr.ty != elem_ty
+                            && expr.ty != Type::Unsigned(UnsignedNumType::Unspecified)
+                    }) {
+                        elem_ty = expr.ty.clone();
+                    }
+                }
+
+                for field in typed_fields.iter_mut() {
+                    check_type(field, &elem_ty)?;
+                }
                 if errors.is_empty() {
-                    let ty = Type::Array(Box::new(first_ty), array_size);
+                    let ty = Type::Array(Box::new(elem_ty), array_size);
                     (ExprEnum::ArrayLiteral(typed_fields), ty)
                 } else {
                     return Err(errors);
@@ -905,7 +935,7 @@ impl UntypedExpr {
                 let arr = arr.type_check(top_level_defs, env, fns, defs)?;
                 let mut index = index.type_check(top_level_defs, env, fns, defs)?;
                 let elem_ty = expect_array_type(&arr.ty, arr.meta)?;
-                check_type(&mut index, &Type::Unsigned(UnsignedNumType::Usize))?;
+                check_or_constrain_unsigned(&mut index, UnsignedNumType::Usize)?;
                 (
                     ExprEnum::ArrayAccess(Box::new(arr), Box::new(index)),
                     elem_ty,
@@ -1008,15 +1038,13 @@ impl UntypedExpr {
                     let x = x.type_check(top_level_defs, env, fns, defs)?;
                     let mut y = y.type_check(top_level_defs, env, fns, defs)?;
                     expect_num_type(&x.ty, x.meta)?;
-                    check_type(&mut y, &Type::Unsigned(UnsignedNumType::U8))?;
+                    check_or_constrain_unsigned(&mut y, UnsignedNumType::U8)?;
                     (ExprEnum::Op(*op, Box::new(x.clone()), Box::new(y)), x.ty)
                 }
             },
             ExprEnum::Block(stmts) => {
                 env.push();
-                let (body, ret_expr) =
-                    type_check_block(stmts, meta, top_level_defs, env, fns, defs)?;
-                let ty = ret_expr.ty;
+                let (body, ty) = type_check_block(stmts, top_level_defs, env, fns, defs)?;
                 env.pop();
                 (ExprEnum::Block(body), ty)
             }
@@ -1254,18 +1282,42 @@ impl UntypedExpr {
                 }
 
                 let ret_ty = {
-                    let (_, ret_expr) = typed_clauses.first().unwrap();
-
-                    for (_, expr) in typed_clauses.iter() {
-                        if ret_expr.ty != expr.ty {
-                            let e = TypeErrorEnum::UnexpectedType {
-                                expected: ret_expr.ty.clone(),
-                                actual: expr.ty.clone(),
-                            };
-                            errors.push(Some(TypeError(e, expr.meta)));
+                    let mut ret_ty = typed_clauses
+                        .first()
+                        .map(|(_, expr)| expr.ty.clone())
+                        .unwrap();
+                    if ret_ty == Type::Unsigned(UnsignedNumType::Unspecified) {
+                        if let Some((_, expr)) =
+                            typed_clauses.iter().find(|(_, expr)| expr.ty != ret_ty)
+                        {
+                            ret_ty = expr.ty.clone();
                         }
                     }
-                    ret_expr.ty.clone()
+                    if ret_ty == Type::Signed(SignedNumType::Unspecified) {
+                        if let Some((_, expr)) = typed_clauses.iter().find(|(_, expr)| {
+                            expr.ty != ret_ty
+                                && expr.ty != Type::Unsigned(UnsignedNumType::Unspecified)
+                        }) {
+                            ret_ty = expr.ty.clone();
+                        }
+                    }
+
+                    for (_, expr) in typed_clauses.iter_mut() {
+                        if ret_ty != expr.ty {
+                            if let Type::Unsigned(expected) = ret_ty {
+                                check_or_constrain_unsigned(expr, expected)?;
+                            } else if let Type::Signed(expected) = ret_ty {
+                                check_or_constrain_signed(expr, expected)?;
+                            } else {
+                                let e = TypeErrorEnum::UnexpectedType {
+                                    expected: ret_ty.clone(),
+                                    actual: expr.ty.clone(),
+                                };
+                                errors.push(Some(TypeError(e, expr.meta)));
+                            }
+                        }
+                    }
+                    ret_ty.clone()
                 };
 
                 let patterns: Vec<_> = typed_clauses.iter().map(|(p, _)| p).collect();
@@ -1849,7 +1901,9 @@ fn split_ctor(patterns: &[PatternStack], q: &[TypedPattern], defs: &Defs) -> Vec
     match ty {
         Type::Bool => vec![Ctor::True, Ctor::False],
         Type::Unsigned(ty) => match head_enum {
-            PatternEnum::Identifier(_) => split_unsigned_range(*ty, patterns, 0, ty.max()),
+            PatternEnum::Identifier(_) => {
+                split_unsigned_range(*ty, patterns, 0, ty.max().unwrap_or(u32::MAX as u64))
+            }
             PatternEnum::NumUnsigned(n, _) => {
                 vec![Ctor::UnsignedInclusiveRange(*ty, *n, *n)]
             }
@@ -1860,7 +1914,11 @@ fn split_ctor(patterns: &[PatternStack], q: &[TypedPattern], defs: &Defs) -> Vec
         },
         Type::Signed(ty) => match head_enum {
             PatternEnum::Identifier(_) => {
-                vec![Ctor::SignedInclusiveRange(*ty, ty.min(), ty.max())]
+                vec![Ctor::SignedInclusiveRange(
+                    *ty,
+                    ty.min().unwrap_or(i32::MIN as i64),
+                    ty.max().unwrap_or(i32::MAX as i64),
+                )]
             }
             PatternEnum::NumUnsigned(n, _) => {
                 vec![Ctor::SignedInclusiveRange(*ty, *n as i64, *n as i64)]
@@ -2072,7 +2130,147 @@ fn expect_bool_or_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeErrors> 
     ))])
 }
 
+pub(crate) fn check_or_constrain_unsigned(
+    expr: &mut TypedExpr,
+    expected: UnsignedNumType,
+) -> Result<(), TypeErrors> {
+    if expr.ty != Type::Unsigned(expected)
+        && expr.ty != Type::Unsigned(UnsignedNumType::Unspecified)
+    {
+        let e = TypeErrorEnum::UnexpectedType {
+            expected: Type::Unsigned(expected),
+            actual: expr.ty.clone(),
+        };
+        return Err(vec![Some(TypeError(e, expr.meta))]);
+    }
+    if let Some(max) = UnsignedNumType::max(&expected) {
+        if let ExprEnum::NumUnsigned(n, _) = expr.inner {
+            if n > max {
+                let e = TypeErrorEnum::UnexpectedType {
+                    expected: Type::Unsigned(expected),
+                    actual: expr.ty.clone(),
+                };
+                return Err(vec![Some(TypeError(e, expr.meta))]);
+            }
+        }
+    }
+    expr.ty = Type::Unsigned(expected);
+    Ok(())
+}
+
+pub(crate) fn check_or_constrain_signed(
+    expr: &mut TypedExpr,
+    expected: SignedNumType,
+) -> Result<(), TypeErrors> {
+    if expr.ty != Type::Signed(expected)
+        && expr.ty != Type::Signed(SignedNumType::Unspecified)
+        && expr.ty != Type::Unsigned(UnsignedNumType::Unspecified)
+    {
+        let e = TypeErrorEnum::UnexpectedType {
+            expected: Type::Signed(expected),
+            actual: expr.ty.clone(),
+        };
+        return Err(vec![Some(TypeError(e, expr.meta))]);
+    }
+    if let Some(min) = SignedNumType::min(&expected) {
+        if let ExprEnum::NumSigned(n, _) = expr.inner {
+            if n < min {
+                let e = TypeErrorEnum::UnexpectedType {
+                    expected: Type::Signed(expected),
+                    actual: expr.ty.clone(),
+                };
+                return Err(vec![Some(TypeError(e, expr.meta))]);
+            }
+        }
+    }
+    if let Some(max) = SignedNumType::max(&expected) {
+        if let ExprEnum::NumUnsigned(n, _) = expr.inner {
+            if n > max as u64 {
+                let e = TypeErrorEnum::UnexpectedType {
+                    expected: Type::Signed(expected),
+                    actual: expr.ty.clone(),
+                };
+                return Err(vec![Some(TypeError(e, expr.meta))]);
+            }
+        } else if let ExprEnum::NumSigned(n, _) = expr.inner {
+            if n > max {
+                let e = TypeErrorEnum::UnexpectedType {
+                    expected: Type::Signed(expected),
+                    actual: expr.ty.clone(),
+                };
+                return Err(vec![Some(TypeError(e, expr.meta))]);
+            }
+        }
+    }
+    expr.ty = Type::Signed(expected);
+    Ok(())
+}
+
+pub(crate) fn constrain_type(expr: &mut TypedExpr, expected: &Type) -> Result<(), TypeErrors> {
+    match (&mut expr.inner, expected) {
+        (ExprEnum::ArrayLiteral(elems), Type::Array(elem_ty, _) | Type::ArrayConst(elem_ty, _)) => {
+            for elem in elems {
+                constrain_type(elem, elem_ty)?;
+            }
+        }
+        (
+            ExprEnum::ArrayRepeatLiteral(elem, _) | ExprEnum::ArrayRepeatLiteralConst(elem, _),
+            Type::Array(elem_ty, _) | Type::ArrayConst(elem_ty, _),
+        ) => constrain_type(elem, elem_ty)?,
+        (ExprEnum::TupleLiteral(elems), Type::Tuple(elem_tys)) if elems.len() == elem_tys.len() => {
+            for (elem, elem_ty) in elems.iter_mut().zip(elem_tys) {
+                constrain_type(elem, elem_ty)?;
+            }
+        }
+        (ExprEnum::Match(_, clauses), ty) => {
+            for (_, body) in clauses {
+                constrain_type(body, ty)?;
+            }
+        }
+        (ExprEnum::UnaryOp(op, expr), ty) => match op {
+            UnaryOp::Not | UnaryOp::Neg => constrain_type(expr, ty)?,
+        },
+        (ExprEnum::Op(op, a, b), ty) => match op {
+            Op::Add
+            | Op::Sub
+            | Op::Mul
+            | Op::Div
+            | Op::Mod
+            | Op::BitAnd
+            | Op::BitXor
+            | Op::BitOr => {
+                constrain_type(a, ty)?;
+                constrain_type(b, ty)?;
+            }
+            Op::ShiftLeft | Op::ShiftRight => constrain_type(a, ty)?,
+            Op::GreaterThan
+            | Op::LessThan
+            | Op::Eq
+            | Op::NotEq
+            | Op::ShortCircuitAnd
+            | Op::ShortCircuitOr => {}
+        },
+        (ExprEnum::Block(stmts), ty) => {
+            if let Some(last) = stmts.last_mut() {
+                if let StmtEnum::Expr(expr) = &mut last.inner {
+                    constrain_type(expr, ty)?;
+                }
+            }
+        }
+        (ExprEnum::If(_, then_expr, else_expr), ty) => {
+            constrain_type(then_expr, ty)?;
+            constrain_type(else_expr, ty)?;
+        }
+        (_, Type::Unsigned(ty)) => check_or_constrain_unsigned(expr, *ty)?,
+        (_, Type::Signed(ty)) => check_or_constrain_signed(expr, *ty)?,
+        _ => {}
+    }
+    expr.ty = expected.clone();
+    Ok(())
+}
+
 pub(crate) fn check_type(expr: &mut TypedExpr, expected: &Type) -> Result<(), TypeErrors> {
+    constrain_type(expr, expected)?;
     if &expr.ty == expected {
         Ok(())
     } else {
@@ -2086,16 +2284,38 @@ pub(crate) fn check_type(expr: &mut TypedExpr, expected: &Type) -> Result<(), Ty
 }
 
 fn unify(e1: &mut TypedExpr, e2: &mut TypedExpr, m: MetaInfo) -> Result<Type, TypeErrors> {
-    let ty = match (&e1.inner, &e2.inner) {
-        _ if e1.ty == e2.ty => Ok(e1.ty.clone()),
+    let ty = match (&e1.ty, &e2.ty) {
+        (ty1, ty2) if ty1 == ty2 => ty1.clone(),
+        (Type::Unsigned(UnsignedNumType::Unspecified), Type::Unsigned(ty2)) => {
+            check_or_constrain_unsigned(e1, *ty2)?;
+            Type::Unsigned(*ty2)
+        }
+        (Type::Unsigned(ty1), Type::Unsigned(UnsignedNumType::Unspecified)) => {
+            check_or_constrain_unsigned(e2, *ty1)?;
+            Type::Unsigned(*ty1)
+        }
+        (Type::Unsigned(UnsignedNumType::Unspecified), Type::Signed(ty2)) => {
+            check_or_constrain_signed(e1, *ty2)?;
+            Type::Signed(*ty2)
+        }
+        (Type::Signed(ty1), Type::Unsigned(UnsignedNumType::Unspecified)) => {
+            check_or_constrain_signed(e2, *ty1)?;
+            Type::Signed(*ty1)
+        }
+        (Type::Signed(SignedNumType::Unspecified), Type::Signed(ty2)) => {
+            check_or_constrain_signed(e1, *ty2)?;
+            Type::Signed(*ty2)
+        }
+        (Type::Signed(ty1), Type::Signed(SignedNumType::Unspecified)) => {
+            check_or_constrain_signed(e2, *ty1)?;
+            Type::Signed(*ty1)
+        }
         _ => {
             let e = TypeErrorEnum::TypeMismatch(e1.ty.clone(), e2.ty.clone());
-            Err(vec![Some(TypeError(e, m))])
+            return Err(vec![Some(TypeError(e, m))]);
         }
     };
-    if let Ok(ty) = &ty {
-        e1.ty = ty.clone();
-        e2.ty = ty.clone();
-    }
-    ty
+    e1.ty = ty.clone();
+    e2.ty = ty.clone();
+    Ok(ty)
 }
