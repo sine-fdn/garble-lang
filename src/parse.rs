@@ -411,8 +411,8 @@ impl Parser {
                 }
             }
         } else if let Some(meta) = self.next_matches(&TokenEnum::KeywordFor) {
-            // for <var> in <binding> { <body> }
-            let (var, _) = self.expect_identifier()?;
+            // for <pattern> in <binding> { <body> }
+            let pattern = self.parse_pattern()?;
             self.expect(&TokenEnum::KeywordIn)?;
             self.struct_literals_allowed = false;
             let binding = self.parse_expr()?;
@@ -422,7 +422,7 @@ impl Parser {
             let meta_end = self.expect(&TokenEnum::RightBrace)?;
             let meta = join_meta(meta, meta_end);
             return Ok(Stmt::new(
-                StmtEnum::ForEachLoop(var, binding, loop_body),
+                StmtEnum::ForEachLoop(pattern, binding, loop_body),
                 meta,
             ));
         } else {

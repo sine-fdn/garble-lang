@@ -414,7 +414,7 @@ impl TypedStmt {
                 env.assign_mut(identifier.clone(), array);
                 vec![]
             }
-            StmtEnum::ForEachLoop(var, array, body) => {
+            StmtEnum::ForEachLoop(pattern, array, body) => {
                 let elem_in_bits = match &array.ty {
                     Type::Array(elem_ty, _) | Type::ArrayConst(elem_ty, _) => {
                         elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes())
@@ -427,7 +427,7 @@ impl TypedStmt {
                 let mut i = 0;
                 while i < array.len() {
                     let binding = &array[i..i + elem_in_bits];
-                    env.let_in_current_scope(var.clone(), binding.to_vec());
+                    pattern.compile(binding, prg, env, circuit);
 
                     for stmt in body {
                         stmt.compile(prg, env, circuit);
@@ -437,7 +437,7 @@ impl TypedStmt {
                 env.pop();
                 vec![]
             }
-            StmtEnum::JoinLoop(var, join_ty, (a, b), body) => {
+            StmtEnum::JoinLoop(pattern, join_ty, (a, b), body) => {
                 let (elem_bits_a, num_elems_a) = match &a.ty {
                     Type::Array(elem_ty, size) => (
                         elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
@@ -524,7 +524,7 @@ impl TypedStmt {
 
                     let mut env_if_join = env.clone();
                     env_if_join.push();
-                    env_if_join.let_in_current_scope(var.clone(), binding.to_vec());
+                    pattern.compile(&binding, prg, &mut env_if_join, circuit);
 
                     for stmt in body {
                         stmt.compile(prg, &mut env_if_join, circuit);
