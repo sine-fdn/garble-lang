@@ -455,7 +455,7 @@ pub fn main(mode: bool, x: i16, y: u8) -> i16 {
 }
 ";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
-    let test_values = (-20..20).chain(vec![i16::MAX, i16::MIN].into_iter());
+    let test_values = (-20..20).chain(vec![i16::MAX, i16::MIN]);
     for x in test_values {
         for mode in [true, false] {
             for y in 0..20 {
@@ -1036,14 +1036,8 @@ pub fn main(x: bool) -> {t} {{
             0 => assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, -3),
             1 => assert_eq!(i16::try_from(output).map_err(|e| pretty_print(e, prg))?, -2),
             2 => assert_eq!(i8::try_from(output).map_err(|e| pretty_print(e, prg))?, -1),
-            3 => assert_eq!(
-                bool::try_from(output).map_err(|e| pretty_print(e, prg))?,
-                true
-            ),
-            4 => assert_eq!(
-                bool::try_from(output).map_err(|e| pretty_print(e, prg))?,
-                false
-            ),
+            3 => assert!(bool::try_from(output).map_err(|e| pretty_print(e, prg))?),
+            4 => assert!(!(bool::try_from(output).map_err(|e| pretty_print(e, prg))?)),
             _ => unreachable!(),
         }
     }
@@ -2195,5 +2189,57 @@ pub fn main(rows1: [(u8, u16); {a}], rows2: [(u8, u16, u16); {b}]) -> u16 {{
             }
         }
     }
+    Ok(())
+}
+
+#[test]
+fn compile_add_assign() -> Result<(), Error> {
+    let prg = "
+pub fn main(a: u32) -> u32 {
+    let mut x = 3u32;
+    x += a;
+    x += 2u32;
+    x
+}";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u32(10);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(r.to_string(), "15u32");
+    Ok(())
+}
+
+#[test]
+fn compile_operator_assignment_examples() -> Result<(), Error> {
+    let prg = "
+pub fn main(_a: i32, _b: i32) -> () {
+    let mut x = 0i32;
+    x += 5i32;
+    x -= 3i32;
+    x *= 3i32;
+    x /= 2i32;
+    x %= 1i32;
+
+    let mut x = 0u32;
+    x ^= 4u32;
+    x &= 3u32;
+    x |= 2u32;
+    x <<= 1u8;
+    x >>= 1u8;
+
+    let mut b = true;
+    b ^= true;
+    b &= true;
+    b |= true;
+}
+";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_i32(0);
+    eval.set_i32(0);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(r.to_string(), "()");
     Ok(())
 }

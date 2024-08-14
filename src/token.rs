@@ -114,6 +114,26 @@ pub enum TokenEnum {
     DoubleGreaterThan,
     /// `<<`.
     DoubleLessThan,
+    /// `+=`.
+    AddAssign,
+    /// `-=`.
+    SubAssign,
+    /// `*=`.
+    MulAssign,
+    /// `/=`.
+    DivAssign,
+    /// `%=`.
+    RemAssign,
+    /// `^=`.
+    BitXorAssign,
+    /// `&=`.
+    BitAndAssign,
+    /// `|=`.
+    BitOrAssign,
+    /// `>>=`.
+    ShrAssign,
+    /// `<<=`.
+    ShlAssign,
 }
 
 impl std::fmt::Display for TokenEnum {
@@ -171,6 +191,16 @@ impl std::fmt::Display for TokenEnum {
             TokenEnum::LessThanEquals => f.write_str("<="),
             TokenEnum::DoubleGreaterThan => f.write_str(">>"),
             TokenEnum::DoubleLessThan => f.write_str("<<"),
+            TokenEnum::AddAssign => f.write_str("+="),
+            TokenEnum::SubAssign => f.write_str("-="),
+            TokenEnum::MulAssign => f.write_str("*="),
+            TokenEnum::DivAssign => f.write_str("/="),
+            TokenEnum::RemAssign => f.write_str("%="),
+            TokenEnum::BitXorAssign => f.write_str("^="),
+            TokenEnum::BitAndAssign => f.write_str("&="),
+            TokenEnum::BitOrAssign => f.write_str("|="),
+            TokenEnum::ShrAssign => f.write_str(">>="),
+            TokenEnum::ShlAssign => f.write_str("<<="),
         }
     }
 }
