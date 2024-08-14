@@ -169,3 +169,134 @@ pub fn main(arr1: [(u16, u16, u32); 8]) -> [((u16, u16), u32); 8] {
     assert_eq!(compiled.circuit.gates.len(), 2);
     Ok(())
 }
+
+// Run the following test using `cargo test plot --features=plot --release -- --nocapture`
+
+#[test]
+#[cfg(feature = "plot")]
+fn plot_for_each_join_loop_complexity() -> Result<(), String> {
+    use garble_lang::{compile_with_constants, literal::Literal, token::UnsignedNumType};
+    use plotters::prelude::*;
+    use std::collections::HashMap;
+
+    let max_rows = 1000;
+
+    let prg_nested_loop = "
+const ROWS_0: usize = PARTY_0::ROWS_0;
+const ROWS_1: usize = PARTY_1::ROWS_1;
+pub fn main(rows0: [([u8; 8], u32); ROWS_0], rows1: [([u8; 8], u32); ROWS_1]) -> u32 {
+    let mut result = 0u32;
+    for row0 in rows0 {
+        for row1 in rows1 {
+            let (id0, a) = row0;
+            let (id1, b) = row1;
+            if id0 == id1 {
+                result = result + a + b;
+            }
+        }
+    }
+    result
+}
+";
+    let prg_join = "
+const ROWS_0: usize = PARTY_0::ROWS_0;
+const ROWS_1: usize = PARTY_1::ROWS_1;
+pub fn main(rows0: [([u8; 8], u32); ROWS_0], rows1: [([u8; 8], u32); ROWS_1]) -> u32 {
+    let mut result = 0u32;
+    for joined in join(rows0, rows1) {
+        let ((_, a), (_, b)) = joined;
+        result = result + a + b;
+    }
+    result
+}
+";
+    let mut all_gates_joined = vec![];
+    let mut and_gates_joined = vec![];
+    let mut all_gates_nested = vec![];
+    let mut and_gates_nested = vec![];
+    let mut max_gates = 0.0;
+    for n in (0..=max_rows).step_by(20) {
+        let consts = HashMap::from_iter(vec![
+            (
+                "PARTY_0".to_string(),
+                HashMap::from_iter(vec![(
+                    "ROWS_0".to_string(),
+                    Literal::NumUnsigned(n, UnsignedNumType::Usize),
+                )]),
+            ),
+            (
+                "PARTY_1".to_string(),
+                HashMap::from_iter(vec![(
+                    "ROWS_1".to_string(),
+                    Literal::NumUnsigned(n, UnsignedNumType::Usize),
+                )]),
+            ),
+        ]);
+        let compiled =
+            compile_with_constants(prg_join, consts.clone()).map_err(|e| format!("{e:?}"))?;
+        println!("{n} (joined): {}", compiled.circuit.report_gates());
+        all_gates_joined.push((n as f32, compiled.circuit.gates.len() as f32 / 1_000_000.0));
+        and_gates_joined.push((n as f32, compiled.circuit.and_gates() as f32 / 1_000_000.0));
+
+        if n <= 250 {
+            let compiled =
+                compile_with_constants(prg_nested_loop, consts).map_err(|e| format!("{e:?}"))?;
+            println!("{n} (nested): {}", compiled.circuit.report_gates());
+            all_gates_nested.push((n as f32, compiled.circuit.gates.len() as f32 / 1_000_000.0));
+            and_gates_nested.push((n as f32, compiled.circuit.and_gates() as f32 / 1_000_000.0));
+            let all_gates = compiled.circuit.gates.len() as f32 / 1_000_000.0;
+            if all_gates > max_gates {
+                max_gates = all_gates;
+            }
+        }
+    }
+
+    let root = SVGBackend::new("plot_for_each_join_loop.svg", (1024, 768)).into_drawing_area();
+    root.fill(&WHITE).unwrap();
+    let mut chart = ChartBuilder::on(&root)
+        .caption(
+            "Joined Rows vs. Circuit Size",
+            ("sans-serif", 32).into_font(),
+        )
+        .margin(50)
+        .x_label_area_size(30)
+        .y_label_area_size(30)
+        .build_cartesian_2d(0f32..(max_rows as f32), 0f32..max_gates)
+        .unwrap();
+
+    chart.configure_mesh().draw().unwrap();
+
+    chart
+        .draw_series(LineSeries::new(all_gates_nested, &GREEN))
+        .unwrap()
+        .label("Million Gates (Nested)")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &GREEN));
+
+    chart
+        .draw_series(LineSeries::new(and_gates_nested, &BLUE))
+        .unwrap()
+        .label("Million AND Gates (Nested)")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
+
+    chart
+        .draw_series(LineSeries::new(all_gates_joined, &RED))
+        .unwrap()
+        .label("Million Gates (Join)")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+
+    chart
+        .draw_series(LineSeries::new(and_gates_joined, &MAGENTA))
+        .unwrap()
+        .label("Million AND Gates (Join)")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &MAGENTA));
+
+    chart
+        .configure_series_labels()
+        .background_style(&WHITE.mix(0.8))
+        .border_style(&BLACK)
+        .draw()
+        .unwrap();
+
+    root.present().unwrap();
+    Ok(())
+}
