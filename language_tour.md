@@ -21,7 +21,7 @@ pub fn main(a: u32, b: u32, c: u32) -> u32 {
 Although Garble programs are intended to be executed using MPC, it is also possible to run functions locally on the command line, manually passing each party's input to the evaluator. If a program cannot be compiled, Garble will report type errors and display the location of the error in the source code:
 
 ```shell
-$ garble garble_examples/error_examples/simple_type_error.garble.rs main 0u32 true
+$ garble run garble_examples/error_examples/simple_type_error.garble.rs main 0 true
 
 Type error on line 2:5.
 The operands have incompatible types; u32 vs bool:
@@ -39,7 +39,7 @@ pub fn main(x: u16) -> u16 {
 }
 
 fn inc(x: u16) -> u16 {
-    add(x, 1u16)
+    add(x, 1)
 }
 
 fn add(x: u16, y: u16) -> u16 {
@@ -50,19 +50,19 @@ fn add(x: u16, y: u16) -> u16 {
 Garble will abort with an error if any of the non-`pub` defined functions are unused:
 
 ```shell
-$ garble garble_examples/error_examples/unused_fn.garble.rs main 0u16
+$ garble run garble_examples/error_examples/unused_fn.garble.rs main 0
 Type error on line 3:2.
 Function 'inc' is declared but never used:
 
        | pub fn main(x: u16) -> u16 {
-       |     x + 1u16
+       |     x + 1
    3 > | }
      > |
    4 > |
      > |
    5 > | fn inc(x: u16) -> u16 {
      > | ^^^^^^^^^^^^^^^^^^^^^^^
-   6 > |     add(x, 1u16)
+   6 > |     add(x, 1)
      > | ^^^^^^^^^^^^^
    7 > | }
      > | ^
@@ -86,7 +86,7 @@ Since Garble is purely functional under the hood, it is not possible to have _sh
 
 ```rust
 pub fn main(x: i32) -> i32 {
-    let mut y = 0i32;
+    let mut y = 0;
     y = x; // `y` will now be equal to `x`
     let z = inc(y);
     z // is equal to `x + 1`, but `y` is still equal to `x`
@@ -102,12 +102,12 @@ Garble supports two forms of conditional control flow: if/else and pattern match
 
 ```rust
 pub fn main(x: i32) -> i32 {
-    if x < 0i32 {
-        -1i32
-    } else if x == 0i32 {
-        0i32
+    if x < 0 {
+        -1
+    } else if x == 0 {
+        0
     } else {
-        1i32
+        1
     }
 }
 ```
@@ -117,7 +117,7 @@ Here is an example of pattern matching on numbers (see below for examples of pat
 ```rust
 pub fn main(x: i32) -> i32 {
     match x {
-        0i32 => 1i32,
+        0 => 1,
         x => x,
     }
 }
@@ -127,9 +127,9 @@ Garble supports for-each loops as the only looping / recursion construct in the 
 
 ```rust
 pub fn main(_x: i32) -> i32 {
-    let mut sum = 0i32;
-    for i in [2i32, 4i32, 6i32, 8i32] {
-        sum = sum + i
+    let mut sum = 0;
+    for i in [2, 4, 6, 8] {
+        sum += i
     }
     sum
 }
@@ -137,21 +137,23 @@ pub fn main(_x: i32) -> i32 {
 
 ## Primitive Types
 
-Garble supports a number of primitive types: Booleans (`bool`), unsigned integers of different bit lengths (`u8`, `u16`, `u32`, `u64`, `usize`) and signed integers of different bit lengths (`i8`, `i16`, `i32`, `i64`). Note that in contrast to Rust, the type suffix of a number must always be specified (and there is no automatic type coercion), except for tuple/array sizes or indexes (see below). Primitive types support the usual logical, bitwise and arithmetic operations:
+Garble supports a number of primitive types: Booleans (`bool`), unsigned integers of different bit lengths (`u8`, `u16`, `u32`, `u64`, `usize`) and signed integers of different bit lengths (`i8`, `i16`, `i32`, `i64`). Note that in contrast to Rust, the type suffix of a number must sometimes be specified because Garble only supports a more limited form of type inference for numbers than Rust. If no type suffix is specified and Garble cannot figure out the type, `i32` will be used by default.
+
+Primitive types support the usual logical, bitwise and arithmetic operations:
 
 ```rust
 pub fn main(_a: i32, _b: i32) -> () {
-    let add = 0i32 + 1i32;
-    let sub = 1i32 - 1i32;
-    let mul = 2i32 * 1i32;
-    let div = 2i32 / 1i32;
-    let rem = 5i32 % 2i32;
+    let add = 0 + 1;
+    let sub = 1 - 1;
+    let mul = 2 * 1;
+    let div = 2 / 1;
+    let rem = 5 % 2;
 
-    let bit_xor = 4u32 ^ 6u32;
-    let bit_and = 4u32 & 6u32;
-    let bit_or = 4u32 | 6u32;
-    let bit_shiftl = 4u32 << 1u8;
-    let bit_shiftr = 4u32 >> 1u8;
+    let bit_xor = 4u32 ^ 6;
+    let bit_and = 4u32 & 6;
+    let bit_or = 4u32 | 6;
+    let bit_shiftl = 4u32 << 1;
+    let bit_shiftr = 4u32 >> 1;
 
     let and = true & false;
     let or = true | false;
@@ -159,14 +161,14 @@ pub fn main(_a: i32, _b: i32) -> () {
     let eq = true == false;
     let neq = true != false;
 
-    let gt = 5i32 > 4i32;
-    let lt = 4i32 < 5i32;
-    let gte = 5i32 >= 4i32;
-    let lte = 4i32 <= 5i32;
+    let gt = 5 > 4;
+    let lt = 4 < 5;
+    let gte = 5 >= 4;
+    let lte = 4 <= 5;
 
     let unary_not = !true;
-    let unary_minus = -5i32;
-    let unary_bitflip = !5i32;
+    let unary_minus = -5;
+    let unary_bitflip = !5u32;
 }
 ```
 
@@ -184,7 +186,7 @@ pub fn main(a: i32, b: u32) -> i64 {
 Garble panics if an error occurs, for example if an integer overflows during an addition:
 
 ```shell
-$ garble garble_examples/calculator.garble.rs main '(200u8, 200u8)' Op::Add
+$ garble run garble_examples/calculator.garble.rs --function=main '(200, 200)' Op::Add
 Panic due to Overflow on line 17:43.
 
        | pub fn main(values: (u8, u8), op: Op) -> OpResult {
@@ -206,7 +208,7 @@ Let's look at each of the collection types supported by Garble in turn:
 
 ### Arrays and Ranges
 
-Arrays can be initialized either by explicitly listing all elements (which must have the same type) or by using a 'repeat expression', which repeats a single element a number of times. Note that the size of an array is specified without any type suffix (`4`, not `4usize`):
+Arrays can be initialized either by explicitly listing all elements (which must have the same type) or by using a 'repeat expression', which repeats a single element a number of times.
 
 ```rust
 pub fn main(a: u32, b: u32) -> [u32; 4] {
@@ -216,15 +218,15 @@ pub fn main(a: u32, b: u32) -> [u32; 4] {
 }
 ```
 
-Arrays are indexed using `array[index]` (with a literal index being written without type suffix). A single element can be reassigned if the whole array has been declared as mutable by `let mut`. Each new let bindings, no matter whether immutable or mutable, always copies the full array: As a result, mutating a single index only changes a single variable, never any other "copies" of the array. This might sound inefficient, but does not incur any performance penalty in a purely functional circuit using only boolean gates. Consequently, there is no shared mutable state in Garble:
+Arrays are indexed using `array[index]`. A single element can be reassigned if the whole array has been declared as mutable by `let mut`. Each new let bindings, no matter whether immutable or mutable, always copies the full array: As a result, mutating a single index only changes a single variable, never any other "copies" of the array. This might sound inefficient, but does not incur any performance penalty in a purely functional circuit using only boolean gates. Consequently, there is no shared mutable state in Garble:
 
 ```rust
 pub fn main(replacement: i32) -> [i32; 4] {
-    let mut array1 = [10i32, 20i32, 30i32, 40i32];
-    let second_val = array1[1]; // will be `20i32`
+    let mut array1 = [10, 20, 30, 40];
+    let second_val = array1[1]; // will be `20`
     let mut array2 = array1;
     array2[1] = replacement;
-    let second_val1 = array1[1]; // still `20i32`
+    let second_val1 = array1[1]; // still `20`
     let second_val2 = array2[1]; // equal to the value of `replacement`
     array2
 }
@@ -233,8 +235,8 @@ pub fn main(replacement: i32) -> [i32; 4] {
 Ranges are a more convenient notation for arrays of continuous numbers. They are treated by Garble as arrays and have an array type. The minimum value of a range is inclusive, the maximum value exclusive:
 
 ```rust
-pub fn main(_a: i32) -> [usize; 5] {
-    10i32..15i32 // equivalent to `[10i32, 11i32, 12i32, 13i32, 14i32]`
+pub fn main(_a: i32) -> [i32; 5] {
+    10..15 // equivalent to `[10, 11, 12, 13, 14]`
 }
 ```
 
@@ -265,7 +267,7 @@ struct FooBar {
 }
 
 pub fn main(x: i32) -> i32 {
-    let foobar = FooBar { foo: x, bar: 2i32 };
+    let foobar = FooBar { foo: x, bar: 2 };
     foobar.bar
 }
 ```
@@ -282,7 +284,7 @@ pub fn main(x: (i32, i32)) -> i32 {
     let (foo, bar) = x;
     let foobar = FooBar { foo, bar };
     match foobar {
-        FooBar { foo: 0i32, .. } => 1i32,
+        FooBar { foo: 0, .. } => 1,
         FooBar { foo, .. } => foo,
     }
 }
@@ -307,8 +309,8 @@ enum OpResult {
 
 pub fn main(op: Op) -> OpResult {
     match op {
-        Op::Zero => OpResult::Ok(0u8),
-        Op::Div(x, 0u8) => OpResult::DivByZero,
+        Op::Zero => OpResult::Ok(0),
+        Op::Div(x, 0) => OpResult::DivByZero,
         Op::Div(x, y) => OpResult::Ok(x / y),
     }
 }
@@ -319,9 +321,9 @@ Pattern matching is also supported for structs, tuples and range literals (but n
 ```rust
 fn main(x: (bool, (u8, u8))) -> i32 {
     match x {
-        (false, _) => 0i32,
-        (_, (_, 0u8)) => 1i32,
-        (_, (x, y)) => (x as i32) + (y as i32) + 1i32,
+        (false, _) => 0,
+        (_, (_, 0)) => 1,
+        (_, (x, y)) => (x as i32) + (y as i32) + 1,
     }
 }
 ```
@@ -331,12 +333,12 @@ Garble also supports inclusive-end ranges in patterns (but only in patterns, not
 ```rust
 pub fn main(x: u8) -> u8 {
     match x {
-        0u8..10u8 => 1u8,
-        10u8 => 2u8,
-        11u8 => 2u8,
-        13u8 => 2u8,
-        12u8..100u8 => 2u8,
-        100u8..=255u8 => 3u8,
+        0..10 => 1,
+        10 => 2,
+        11 => 2,
+        13 => 2,
+        12..100 => 2,
+        100..=255 => 3,
     }
 }
 ```
@@ -344,23 +346,22 @@ pub fn main(x: u8) -> u8 {
 If patterns are not exhaustive, Garble will report the missing cases:
 
 ```shell
-$ garble garble_examples/error_examples/non_exhaustive_patterns.garble.rs main '(true, (0u8, 0u8))'
+$ garble run garble_examples/error_examples/non_exhaustive_patterns.garble.rs --function=main '(true, (0, 0))'
 Type error on line 2:5.
 The patterns are not exhaustive. Missing cases:
 
-  (true, (1..256, 1..256))
+  (true, (1u8..=255u8, 1u8..=255u8))
 
 ...in expression:
-
        | pub fn main(x: (bool, (u8, u8))) -> i32 {
    2 > |     match x {
      > |     ^^^^^^^^^
-   3 > |         (false, _) => 0u8,
-     > | ^^^^^^^^^^^^^^^^^^^^^^^^^^
-   4 > |         (_, (_, 0u8)) => 1u8,
-     > | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   5 > |         (_, (0u8, y)) => 2u8,
-     > | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   3 > |         (false, _) => 0,
+     > | ^^^^^^^^^^^^^^^^^^^^^^^^
+   4 > |         (_, (_, 0)) => 1,
+     > | ^^^^^^^^^^^^^^^^^^^^^^^^^
+   5 > |         (_, (0, y)) => 2,
+     > | ^^^^^^^^^^^^^^^^^^^^^^^^^
    6 > |     }
      > | ^^^^^
        | }
@@ -393,7 +394,7 @@ pub fn main(arr1: [(u16, u16, u32); 8]) -> [((u16, u16), u32); 8] {
     for elem in arr1 {
         let (a, b, c) = elem;
         arr2[i] = ((a, b), c);
-        i = i + 1usize;
+        i += 1;
     }
     arr2
 }
@@ -435,7 +436,7 @@ Here's an additional example: Let's assume that you want to implement an MPC fun
 
 ```rust
 pub fn main(mut arr: [u16; 500], i: usize, x: u16) -> [u16; 500] {
-    arr[i % 500usize] = x;
+    arr[i % 500] = x;
     arr
 }
 ```

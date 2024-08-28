@@ -41,7 +41,7 @@ fn compile_add() -> Result<(), Error> {
         let prg = format!(
             "
 pub fn main(x: u8) -> u8 {{
-    x + {y}u8
+    x + {y}
 }}
 "
         );
@@ -65,7 +65,7 @@ fn compile_add_with_int_coercion() -> Result<(), Error> {
         let prg = format!(
             "
 pub fn main(x: u16) -> u16 {{
-    x + {y}u16
+    x + {y}
 }}
 "
         );
@@ -87,8 +87,8 @@ pub fn main(x: u16) -> u16 {{
 fn compile_let_expr() -> Result<(), Error> {
     let prg = "
 pub fn main(x: u16) -> u16 {
-    let y = x + 1u16;
-    y + 1u16
+    let y = x + 1;
+    y + 1
 }
 ";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
@@ -110,7 +110,7 @@ pub fn main(x: u16) -> u16 {
 }
 
 fn inc(x: u16) -> u16 {
-    add(x, 1u16)
+    add(x, 1)
 }
 
 fn add(x: u16, y: u16) -> u16 {
@@ -133,9 +133,9 @@ fn compile_if() -> Result<(), Error> {
     let prg = "
 pub fn main(x: bool) -> u8 {
     if (true & false) ^ x {
-        100u8
+        100
     } else {
-        50u8
+        50
     }
 }
 ";
@@ -157,7 +157,7 @@ pub fn main(x: bool) -> u8 {
 fn compile_bit_ops_for_numbers() -> Result<(), Error> {
     let prg = "
 pub fn main(x: u16, y: u16, z: u16) -> u16 {
-    x | (y & (z ^ 2u16))
+    x | (y & (z ^ 2))
 }
 ";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
@@ -184,7 +184,7 @@ pub fn main(x: u16, y: u16, z: u16) -> u16 {
 fn compile_greater_than_and_less_than() -> Result<(), Error> {
     let prg = "
 pub fn main(x: u16, y: u16) -> bool {
-    (x > y) & (x < 10u16)
+    (x > y) & (x < 10)
 }
 ";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
@@ -208,7 +208,7 @@ pub fn main(x: u16, y: u16) -> bool {
 fn compile_equals_and_not_equals() -> Result<(), Error> {
     let prg = "
 pub fn main(x: u16, y: u16) -> bool {
-    (x == y) & (x != 0u16)
+    (x == y) & (x != 0)
 }
 ";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
@@ -344,7 +344,7 @@ pub fn main(mode: bool, x: u16, y: u8) -> u16 {
     };
 
     for x in [u16::MAX, u16::MAX >> 1, 1, 0] {
-        for shifts in 0u8..(u16::BITS as u8 - 1) {
+        for shifts in 0..(u16::BITS as u8 - 1) {
             assert_eq!(((x << shifts), (x >> shifts)), eval(x, shifts)?);
         }
     }
@@ -396,7 +396,7 @@ pub fn main(x: i8, y: i8) -> i8 {
 fn compile_bit_ops_for_signed_numbers() -> Result<(), Error> {
     let prg = "
 pub fn main(x: i16, y: i16, z: i16) -> i16 {
-    x | (y & (z ^ 2i16))
+    x | (y & (z ^ 2))
 }
 ";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
@@ -491,7 +491,7 @@ pub fn main(mode: bool, x: i16, y: u8) -> i16 {
 fn compile_add_with_signed_int_coercion() -> Result<(), Error> {
     let prg = "
 pub fn main(x: i16) -> i16 {
-    x + -10i16
+    x + -10
 }
 ";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
@@ -830,7 +830,7 @@ fn compile_array_assignment() -> Result<(), Error> {
         "
 pub fn main(x: i8, i: usize, j: usize) -> i8 {{
     let mut arr = [x; {array_size}];
-    arr[i] = x * 2i8;
+    arr[i] = x * 2;
     arr[j]
 }}
 "
@@ -859,9 +859,9 @@ fn compile_fold() -> Result<(), Error> {
     let array_size = 8;
     let prg = &format!(
         "
-pub fn main(x: i8) -> i8 {{
+pub fn main(x: i32) -> i32 {{
     let mut arr = [x; {array_size}];
-    let mut acc = 0i8;
+    let mut acc = 0;
     for elem in arr {{
         acc = acc + elem;
     }}
@@ -872,10 +872,10 @@ pub fn main(x: i8) -> i8 {{
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for x in -10..10 {
         let mut eval = compiled.evaluator();
-        eval.set_i8(x);
+        eval.set_i32(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         assert_eq!(
-            i8::try_from(output).map_err(|e| pretty_print(e, prg))?,
+            i32::try_from(output).map_err(|e| pretty_print(e, prg))?,
             array_size * x
         );
     }
@@ -889,8 +889,8 @@ fn compile_map() -> Result<(), Error> {
         "
 pub fn main(x: i8, i: usize) -> i8 {{
     let mut arr = [x; {array_size}];
-    for j in 0usize..{array_size}usize {{
-        arr[j] = arr[j] * 2i8;
+    for j in 0..{array_size} {{
+        arr[j] = arr[j] * 2;
     }}
     arr[i]
 }}
@@ -997,11 +997,11 @@ fn compile_signed_casts() -> Result<(), Error> {
 #[test]
 fn compile_range() -> Result<(), Error> {
     let prg = "
-pub fn main(_x: u8) -> i16 {
-    let arr = 1u8..101u8;
-    let mut acc = 0i16;
+pub fn main(_x: u8) -> i32 {
+    let arr = 1..101;
+    let mut acc = 0;
     for i in arr {{
-        acc = acc + i as i16;
+        acc = acc + i as i32;
     }}
     acc
 }
@@ -1011,7 +1011,7 @@ pub fn main(_x: u8) -> i16 {
     eval.set_u8(0);
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(
-        i16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        i32::try_from(output).map_err(|e| pretty_print(e, prg))?,
         50 * 101
     );
     Ok(())
@@ -1023,7 +1023,7 @@ fn compile_tuple() -> Result<(), Error> {
         let prg = &format!(
             "
 pub fn main(x: bool) -> {t} {{
-    let t = (-3i32, -2i16, -1i8, true, false);
+    let t = (-3, -2i16, -1i8, true, false);
     t.{i}
 }}
 "
@@ -1059,11 +1059,11 @@ pub fn main(b: bool) -> i32 {
         Foobar::Foo
     };
     match choice {
-        Foobar::Bar(false, false) => 1i32,
-        Foobar::Bar(false, true) => 2i32,
-        Foobar::Bar(_, false) => 3i32,
-        Foobar::Bar(true, true) => 4i32,
-        Foobar::Foo => 5i32,
+        Foobar::Bar(false, false) => 1,
+        Foobar::Bar(false, true) => 2,
+        Foobar::Bar(_, false) => 3,
+        Foobar::Bar(true, true) => 4,
+        Foobar::Foo => 5,
     }
 }
 ";
@@ -1092,12 +1092,12 @@ enum Foobar {
 
 pub fn main(b: bool) -> u8 {
     let choice = if b {
-        Foobar::Bar(6u8)
+        Foobar::Bar(6)
     } else {
         Foobar::Foo
     };
     match choice {
-        Foobar::Foo => 5u8,
+        Foobar::Foo => 5,
         Foobar::Bar(x) => x
     }
 }
@@ -1124,14 +1124,14 @@ enum Ops {
 }
 
 pub fn main(choice: u8, x: u8, y: u8) -> u8 {
-    let op = if choice == 0u8 {
+    let op = if choice == 0 {
         Ops::Mul(x, y)
     } else {
         Ops::Div(x, y)
     };
 
     match op {
-        Ops::Div(x, 0u8) => 42u8,
+        Ops::Div(x, 0) => 42,
         Ops::Div(x, y) => x / y,
         Ops::Mul(x, y) => x * y,
     }
@@ -1167,12 +1167,12 @@ fn compile_exhaustive_range_pattern() -> Result<(), Error> {
     let prg = "
 pub fn main(x: u8) -> u8 {
     match x {
-        0u8..10u8 => 1u8,
-        10u8 => 2u8,
-        11u8 => 2u8,
-        13u8 => 2u8,
-        12u8..100u8 => 2u8,
-        100u8..=255u8 => 3u8,
+        0..10 => 1,
+        10 => 2,
+        11 => 2,
+        13 => 2,
+        12..100 => 2,
+        100..=255 => 3,
     }
 }
 ";
@@ -1200,10 +1200,10 @@ pub fn main(x: u8) -> u8 {
 fn compile_exhaustive_tuple_pattern() -> Result<(), Error> {
     let prg = "
 pub fn main(x: u8) -> u8 {
-    let x = (false, x, -5i32);
+    let x = (false, x, -5);
     match x {
-        (true, x, y) => 1u8,
-        (false, 0u8, y) => 2u8,
+        (true, x, y) => 1,
+        (false, 0, y) => 2,
         (false, x, y) => x,
     }
 }
@@ -1226,12 +1226,12 @@ pub fn main(x: u8) -> u8 {
 fn compile_exhaustive_nested_pattern() -> Result<(), Error> {
     let prg = "
 pub fn main(x: u8) -> u8 {
-    let x = (x, (x * 2u8, 1u8));
+    let x = (x, (x * 2, 1u8));
     match x {
-        (0u8, _) => 1u8,
-        (1u8..=255u8, (x_twice, 1u8)) => x_twice,
-        (1u8..=255u8, (_, 1u8..=255u8)) => 2u8,
-        (1u8..=255u8, (_, 0u8)) => 3u8,
+        (0, _) => 1,
+        (1..=255, (x_twice, 1)) => x_twice,
+        (1..=255, (_, 1..=255)) => 2,
+        (1..=255, (_, 0)) => 3,
     }
 }
 ";
@@ -1253,17 +1253,17 @@ pub fn main(x: u8) -> u8 {
 fn compile_main_with_tuple_io() -> Result<(), Error> {
     let prg = "
 pub fn main(values: (u8, u8)) -> (u8, u8) {
-    (values.0 + 1u8, values.1 + 1u8)
+    (values.0 + 1, values.1 + 1)
 }
 ";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
     let mut eval = compiled.evaluator();
-    let input = compiled.parse_arg(0, "(2u8, 3u8)")?;
+    let input = compiled.parse_arg(0, "(2, 3)")?;
     eval.set_literal(input.as_literal())?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-    assert_eq!(format!("{r}"), "(3u8, 4u8)");
+    assert_eq!(format!("{r}"), "(3, 4)");
     Ok(())
 }
 
@@ -1282,8 +1282,8 @@ enum OpResult {
 
 pub fn main(op: Op) -> OpResult {
     match op {
-        Op::Zero => OpResult::Ok(0u8),
-        Op::Div(x, 0u8) => OpResult::DivByZero,
+        Op::Zero => OpResult::Ok(0),
+        Op::Div(x, 0) => OpResult::DivByZero,
         Op::Div(x, y) => OpResult::Ok(x / y),
     }
 }
@@ -1291,11 +1291,11 @@ pub fn main(op: Op) -> OpResult {
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
     let mut eval = compiled.evaluator();
-    let input = compiled.parse_arg(0, "Op::Div(10u8, 2u8)")?;
+    let input = compiled.parse_arg(0, "Op::Div(10, 2)")?;
     eval.set_literal(input.as_literal())?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-    assert_eq!(r.to_string(), "OpResult::Ok(5u8)");
+    assert_eq!(r.to_string(), "OpResult::Ok(5)");
     Ok(())
 }
 
@@ -1303,7 +1303,7 @@ pub fn main(op: Op) -> OpResult {
 fn compile_array_literal_access() -> Result<(), Error> {
     let prg = "
 pub fn main(i: usize) -> i32 {
-    [-2i32, -1i32, 0i32, 1i32, 2i32][i]
+    [-2, -1, 0, 1, 2][i]
 }";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for i in 0..5 {
@@ -1327,7 +1327,7 @@ pub fn main(nums: [u8; 5]) -> [u8; 5] {
         sum = sum + n as u16;
     }
     let mut nums = [0u8; 5];
-    for i in 0usize..5usize {
+    for i in 0..5 {
         nums[i] = sum as u8;
     }
     nums
@@ -1336,11 +1336,11 @@ pub fn main(nums: [u8; 5]) -> [u8; 5] {
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
     let mut eval = compiled.evaluator();
-    let input = compiled.parse_arg(0, "[1u8, 2u8, 3u8, 4u8, 5u8]")?;
+    let input = compiled.parse_arg(0, "[1, 2, 3, 4, 5]")?;
     eval.set_literal(input.as_literal())?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-    assert_eq!(r.to_string(), "[15u8, 15u8, 15u8, 15u8, 15u8]");
+    assert_eq!(r.to_string(), "[15, 15, 15, 15, 15]");
     Ok(())
 }
 
@@ -1348,12 +1348,12 @@ pub fn main(nums: [u8; 5]) -> [u8; 5] {
 fn compile_if_elseif_else() -> Result<(), Error> {
     let prg = "
 pub fn main(x: i8) -> i8 {
-    if x < 0i8 {
-        -1i8
-    } else if x == 0i8 {
-        0i8
+    if x < 0 {
+        -1
+    } else if x == 0 {
+        0
     } else {
-        1i8
+        1
     }
 }
     ";
@@ -1381,17 +1381,17 @@ pub fn main(x: i8) -> i8 {
 fn compile_if_elseif_else_assignment() -> Result<(), Error> {
     let prg = "
     pub fn main(income: u32) -> bool {
-      let mut points = 0u16;
+      let mut points = 0;
 
-      if income >= 10000u32 {
-        points = points + 200u16
-      } else if income >= 2000u32 {
-        points = points + 50u16
+      if income >= 10000 {
+        points = points + 200
+      } else if income >= 2000 {
+        points = points + 50
       } else {
-        points = points + 0u16
+        points = points + 0
       }
 
-      if points > 150u16 {
+      if points > 150 {
         true
       } else {
         false
@@ -1417,9 +1417,9 @@ fn compile_if_elseif_else_assignment() -> Result<(), Error> {
 fn compile_lexically_scoped_block() -> Result<(), Error> {
     let prg = "
 pub fn main(x: i32) -> i32 {
-    let y = x + 1i32;
+    let y = x + 1;
     let z = {
-        let y = x + 10i32;
+        let y = x + 10;
         y
     };
     y
@@ -1445,7 +1445,7 @@ struct FooBar {
 }
 
 pub fn main(x: i32) -> i32 {
-    let foobar = FooBar { foo: x, bar: 2i32 };
+    let foobar = FooBar { foo: x, bar: 2 };
     foobar.bar
 }
 ";
@@ -1470,22 +1470,22 @@ struct FooBarBaz {
 
 pub fn main(x: FooBarBaz) -> FooBarBaz {
     match x {
-        FooBarBaz { foo: 1i32, bar: 0u8, baz: false } => FooBarBaz { baz: true, foo: 1i32, bar: 1u8 },
-        FooBarBaz { foo: 1i32, baz, bar: 0u8 } => FooBarBaz { foo: 1i32, bar: 1u8, baz },
+        FooBarBaz { foo: 1, bar: 0, baz: false } => FooBarBaz { baz: true, foo: 1, bar: 1 },
+        FooBarBaz { foo: 1, baz, bar: 0 } => FooBarBaz { foo: 1, bar: 1, baz },
         FooBarBaz { bar, baz: false, foo } => FooBarBaz { foo, bar, baz: true },
-        FooBarBaz { foo, bar, baz } => FooBarBaz { foo, bar: 1u8, baz },
-        FooBarBaz { foo, .. } => FooBarBaz { foo, bar: 1u8, baz: true },
+        FooBarBaz { foo, bar, baz } => FooBarBaz { foo, bar: 1, baz },
+        FooBarBaz { foo, .. } => FooBarBaz { foo, bar: 1, baz: true },
     }
 }
 ";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
 
     let mut eval = compiled.evaluator();
-    let input = compiled.parse_arg(0, "FooBarBaz { foo: 1i32, bar: 0u8, baz: true }")?;
+    let input = compiled.parse_arg(0, "FooBarBaz { foo: 1, bar: 0, baz: true }")?;
     eval.set_literal(input.as_literal())?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-    assert_eq!(r.to_string(), "FooBarBaz {bar: 1u8, baz: true, foo: 1i32}");
+    assert_eq!(r.to_string(), "FooBarBaz {bar: 1, baz: true, foo: 1}");
     Ok(())
 }
 
@@ -1500,7 +1500,7 @@ fn unused_fn(x: ...) -> ... {
  */
 pub fn main(x: u16) -> u16 {
     // comment including '/*'
-    x + /* ... */ 1u16
+    x + /* ... */ 1
 }
 ";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
@@ -1522,8 +1522,8 @@ struct FooBar {
 pub fn main(x: (i32, i32)) -> i32 {
     let (a, b) = x;
 
-    let bar = (0i32, 0i32);
-    let foobar = FooBar { foo: 0i32, bar };
+    let bar = (0, 0);
+    let foobar = FooBar { foo: 0, bar };
     let FooBar { bar, .. } = foobar;
     let (y, z) = bar;
     a + y
@@ -1531,7 +1531,7 @@ pub fn main(x: (i32, i32)) -> i32 {
 ";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     let mut eval = compiled.evaluator();
-    eval.set_literal(compiled.parse_arg(0, "(1i32, 2i32)")?.as_literal())?;
+    eval.set_literal(compiled.parse_arg(0, "(1, 2)")?.as_literal())?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, 1);
     Ok(())
@@ -1549,14 +1549,14 @@ pub fn main(x: (i32, i32)) -> i32 {
     let (foo, bar) = x;
     let foobar = FooBar { foo, bar };
     match foobar {
-        FooBar { foo: 0i32, .. } => 1i32,
+        FooBar { foo: 0, .. } => 1,
         FooBar { foo, .. } => foo,
     }
 }
 ";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     let mut eval = compiled.evaluator();
-    eval.set_literal(compiled.parse_arg(0, "(2i32, 3i32)")?.as_literal())?;
+    eval.set_literal(compiled.parse_arg(0, "(2, 3)")?.as_literal())?;
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, 2);
     Ok(())
@@ -1573,16 +1573,16 @@ struct FooBar {
 
 pub fn main(x: i32) -> i32 {
     let foobar = FooBar {
-        foo: 1i32,
-        bar: (2i32, 3i32),
-        baz: (4i32, 5i32, 6i32),
+        foo: 1,
+        bar: (2, 3),
+        baz: (4, 5, 6),
     };
     match x {
-        0i32 => {
+        0 => {
             let FooBar { foo, .. } = foobar;
             foo
         },
-        1i32 => {
+        1 => {
             let FooBar { bar, .. } = foobar;
             let (x, y) = bar;
             y
@@ -1617,7 +1617,7 @@ pub fn main(x: i32) -> i32 {
 fn compile_mutable_bindings() -> Result<(), Error> {
     let prg = "
 pub fn main(x: i32) -> i32 {
-    let mut y = 0i32;
+    let mut y = 0;
     y = x;
     y
 }
@@ -1636,7 +1636,7 @@ pub fn main(x: i32) -> i32 {
 fn compile_mutable_bindings_inside_if() -> Result<(), Error> {
     let prg = "
 pub fn main(x: i32, b: bool) -> i32 {
-    let mut y = 0i32;
+    let mut y = 0;
     if b {
         y = x;
     }
@@ -1664,17 +1664,17 @@ pub fn main(x: i32, b: bool) -> i32 {
 fn compile_mutable_bindings_inside_match() -> Result<(), Error> {
     let prg = "
 pub fn main(x: i32) -> i32 {
-    let mut y = 0i32;
+    let mut y = 0;
     match x {
-        0i32 => {},
-        1i32..10i32 => {
-            y = 1i32;
+        0 => {},
+        1..10 => {
+            y = 1;
         },
-        10i32..100i32 => {
-            y = 2i32;
+        10..100 => {
+            y = 2;
         },
         _ => {
-            y = 3i32;
+            y = 3;
         }
     }
     y
@@ -1704,7 +1704,7 @@ fn compile_for_loop() -> Result<(), Error> {
     let prg = "
 pub fn main(x: i32) -> i32 {
     let mut y = x;
-    for i in 0u8..10u8 {
+    for i in 0..10 {
         y = y + i as i32;
     }
     y
@@ -1727,8 +1727,8 @@ pub fn main(x: i32) -> i32 {
 fn compile_for_loop_over_array() -> Result<(), Error> {
     let prg = "
 pub fn main(_x: i32) -> i32 {
-    let mut sum = 0i32;
-    for i in [2i32, 4i32, 6i32, 8i32] {
+    let mut sum = 0;
+    for i in [2, 4, 6, 8] {
         sum = sum + i
     }
     sum
@@ -1751,9 +1751,9 @@ pub fn main(_x: i32) -> i32 {
 fn compile_array_assign_inside_for_loop() -> Result<(), Error> {
     let prg = "
 pub fn main(_x: i32) -> [i32; 5] {
-    let mut array = [0i32; 5];
-    for i in 0u8..5u8 {
-        array[i as usize] = i as i32 * 2i32;
+    let mut array = [0; 5];
+    for i in 0..5 {
+        array[i as usize] = i as i32 * 2;
     }
     array
 }
@@ -1763,7 +1763,7 @@ pub fn main(_x: i32) -> [i32; 5] {
     eval.set_i32(0);
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-    assert_eq!(r.to_string(), "[0i32, 2i32, 4i32, 6i32, 8i32]");
+    assert_eq!(r.to_string(), "[0, 2, 4, 6, 8]");
     Ok(())
 }
 
@@ -1771,11 +1771,11 @@ pub fn main(_x: i32) -> [i32; 5] {
 fn compile_arrays_copied_by_value() -> Result<(), Error> {
     let prg = "
 pub fn main(replacement: i32) -> [i32; 4] {
-    let mut array1 = [10i32, 20i32, 30i32, 40i32];
-    let second_val = array1[1]; // will be `20i32`
+    let mut array1 = [10, 20, 30, 40];
+    let second_val = array1[1]; // will be `20`
     let mut array2 = array1;
     array2[1] = replacement;
-    let second_val1 = array1[1]; // will still be `20i32`
+    let second_val1 = array1[1]; // will still be `20`
     let second_val2 = array2[1]; // will be equal to the value of `replacement`
     array2
 }
@@ -1786,7 +1786,7 @@ pub fn main(replacement: i32) -> [i32; 4] {
         eval.set_i32(x);
         let output = eval.run().map_err(|e| pretty_print(e, prg))?;
         let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-        assert_eq!(r.to_string(), format!("[10i32, {x}i32, 30i32, 40i32]"));
+        assert_eq!(r.to_string(), format!("[10, {x}, 30, 40]"));
     }
     Ok(())
 }
@@ -1795,17 +1795,17 @@ pub fn main(replacement: i32) -> [i32; 4] {
 fn compile_operator_examples() -> Result<(), Error> {
     let prg = "
 pub fn main(_a: i32, _b: i32) -> () {
-    let add = 0i32 + 1i32;
-    let sub = 1i32 - 1i32;
-    let mul = 2i32 * 1i32;
-    let div = 2i32 / 1i32;
-    let rem = 5i32 % 2i32;
+    let add = 0 + 1;
+    let sub = 1 - 1;
+    let mul = 2 * 1;
+    let div = 2 / 1;
+    let rem = 5 % 2;
 
-    let bit_xor = 4u32 ^ 6u32;
-    let bit_and = 4u32 & 6u32;
-    let bit_or = 4u32 | 6u32;
-    let bit_shiftl = 4u32 << 1u8;
-    let bit_shiftr = 4u32 >> 1u8;
+    let bit_xor = 4 ^ 6;
+    let bit_and = 4 & 6;
+    let bit_or = 4 | 6;
+    let bit_shiftl = 4 << 1;
+    let bit_shiftr = 4 >> 1;
 
     let and = true & false;
     let or = true | false;
@@ -1813,14 +1813,14 @@ pub fn main(_a: i32, _b: i32) -> () {
     let eq = true == false;
     let neq = true != false;
 
-    let gt = 5i32 > 4i32;
-    let lt = 4i32 < 5i32;
-    let gte = 5i32 >= 4i32;
-    let lte = 4i32 <= 5i32;
+    let gt = 5 > 4;
+    let lt = 4 < 5;
+    let gte = 5 >= 4;
+    let lte = 4 <= 5;
 
     let unary_not = !true;
-    let unary_minus = -5i32;
-    let unary_bitflip = !5i32;
+    let unary_minus = -5;
+    let unary_bitflip = !5;
 }
 ";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
@@ -1884,7 +1884,7 @@ fn compile_const_usize() -> Result<(), Error> {
     let prg = "
 const MY_CONST: usize = PARTY_0::MY_CONST;
 pub fn main(x: u16) -> u16 {
-    let array = [2u16; MY_CONST];
+    let array = [2; MY_CONST];
     x + array[1]
 }
 ";
@@ -1911,7 +1911,7 @@ fn compile_const_aggregated_max() -> Result<(), Error> {
     let prg = "
 const MY_CONST: usize = max(PARTY_0::MY_CONST, PARTY_1::MY_CONST);
 pub fn main(x: u16) -> u16 {
-    let array = [2u16; MY_CONST];
+    let array = [2; MY_CONST];
     x + array[1]
 }
 ";
@@ -1947,7 +1947,7 @@ fn compile_const_aggregated_min() -> Result<(), Error> {
     let prg = "
 const MY_CONST: usize = min(PARTY_0::MY_CONST, PARTY_1::MY_CONST);
 pub fn main(x: u16) -> u16 {
-    let array = [2u16; MY_CONST];
+    let array = [2; MY_CONST];
     x + array[1]
 }
 ";
@@ -2004,7 +2004,7 @@ pub fn main(array: [u16; MY_CONST]) -> u16 {
     ]);
     let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
     let mut eval = compiled.evaluator();
-    eval.parse_literal("[7u16, 8u16]").unwrap();
+    eval.parse_literal("[7, 8]").unwrap();
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(u16::try_from(output).map_err(|e| pretty_print(e, prg))?, 8);
     Ok(())
@@ -2040,7 +2040,7 @@ pub fn main(array: [u16; MY_CONST]) -> u16 {
     ]);
     let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
     let mut eval = compiled.evaluator();
-    eval.parse_literal("[7u16, 8u16]").unwrap();
+    eval.parse_literal("[7, 8]").unwrap();
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(u16::try_from(output).map_err(|e| pretty_print(e, prg))?, 15);
     Ok(())
@@ -2198,7 +2198,7 @@ fn compile_add_assign() -> Result<(), Error> {
 pub fn main(a: u32) -> u32 {
     let mut x = 3u32;
     x += a;
-    x += 2u32;
+    x += 2;
     x
 }";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
@@ -2206,7 +2206,7 @@ pub fn main(a: u32) -> u32 {
     eval.set_u32(10);
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
-    assert_eq!(r.to_string(), "15u32");
+    assert_eq!(r.to_string(), "15");
     Ok(())
 }
 
@@ -2215,18 +2215,18 @@ fn compile_operator_assignment_examples() -> Result<(), Error> {
     let prg = "
 pub fn main(_a: i32, _b: i32) -> () {
     let mut x = 0i32;
-    x += 5i32;
-    x -= 3i32;
-    x *= 3i32;
-    x /= 2i32;
-    x %= 1i32;
+    x += 5;
+    x -= 3;
+    x *= 3;
+    x /= 2;
+    x %= 1;
 
     let mut x = 0u32;
-    x ^= 4u32;
-    x &= 3u32;
-    x |= 2u32;
-    x <<= 1u8;
-    x >>= 1u8;
+    x ^= 4;
+    x &= 3;
+    x |= 2;
+    x <<= 1;
+    x >>= 1;
 
     let mut b = true;
     b ^= true;
@@ -2300,7 +2300,7 @@ fn compile_for_loop_destructuring() -> Result<(), Error> {
     let prg = "
 pub fn main(_x: i32) -> i32 {
     let mut sum = 0i32;
-    for (a, b) in [(2i32, 4i32), (6i32, 8i32)] {
+    for (a, b) in [(2, 4), (6, 8)] {
         sum += a + b;
     }
     sum

@@ -12,8 +12,6 @@ pub struct Token(pub TokenEnum, pub MetaInfo);
 pub enum TokenEnum {
     /// Identifier of alphanumeric chars.
     Identifier(String),
-    /// Constant unsigned number used to index arrays / tuples.
-    ConstantIndexOrSize(u32),
     /// Unsigned number.
     UnsignedNum(u64, UnsignedNumType),
     /// Signed number.
@@ -140,7 +138,6 @@ impl std::fmt::Display for TokenEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             TokenEnum::Identifier(s) => f.write_str(s),
-            TokenEnum::ConstantIndexOrSize(num) => f.write_fmt(format_args!("{num}")),
             TokenEnum::UnsignedNum(num, suffix) => f.write_fmt(format_args!("{num}{suffix}")),
             TokenEnum::SignedNum(num, suffix) => f.write_fmt(format_args!("{num}{suffix}")),
             TokenEnum::KeywordConst => f.write_str("const"),
@@ -219,17 +216,20 @@ pub enum UnsignedNumType {
     U32,
     /// 64-bit unsigned integer type.
     U64,
+    /// No type suffix has been specified, could be any from i8 to i64.
+    Unspecified,
 }
 
 impl UnsignedNumType {
     /// Returns the max value representable by this type.
-    pub fn max(&self) -> u64 {
+    pub fn max(&self) -> Option<u64> {
         match self {
-            UnsignedNumType::Usize => u32::MAX as u64,
-            UnsignedNumType::U8 => u8::MAX as u64,
-            UnsignedNumType::U16 => u16::MAX as u64,
-            UnsignedNumType::U32 => u32::MAX as u64,
-            UnsignedNumType::U64 => u64::MAX,
+            UnsignedNumType::Usize => Some(u32::MAX as u64),
+            UnsignedNumType::U8 => Some(u8::MAX as u64),
+            UnsignedNumType::U16 => Some(u16::MAX as u64),
+            UnsignedNumType::U32 => Some(u32::MAX as u64),
+            UnsignedNumType::U64 => Some(u64::MAX),
+            UnsignedNumType::Unspecified => None,
         }
     }
 }
@@ -242,6 +242,7 @@ impl std::fmt::Display for UnsignedNumType {
             UnsignedNumType::U16 => "u16",
             UnsignedNumType::U32 => "u32",
             UnsignedNumType::U64 => "u64",
+            UnsignedNumType::Unspecified => "unspecified unsigned int",
         })
     }
 }
@@ -258,26 +259,30 @@ pub enum SignedNumType {
     I32,
     /// 64-bit signed integer type.
     I64,
+    /// No type suffix has been specified, could be any from i8 to i64.
+    Unspecified,
 }
 
 impl SignedNumType {
     /// Returns the minimum value representable by this type.
-    pub fn min(&self) -> i64 {
+    pub fn min(&self) -> Option<i64> {
         match self {
-            SignedNumType::I8 => i8::MIN as i64,
-            SignedNumType::I16 => i16::MIN as i64,
-            SignedNumType::I32 => i32::MIN as i64,
-            SignedNumType::I64 => i64::MIN,
+            SignedNumType::I8 => Some(i8::MIN as i64),
+            SignedNumType::I16 => Some(i16::MIN as i64),
+            SignedNumType::I32 => Some(i32::MIN as i64),
+            SignedNumType::I64 => Some(i64::MIN),
+            SignedNumType::Unspecified => None,
         }
     }
 
     /// Returns the maximum value representable by this type.
-    pub fn max(&self) -> i64 {
+    pub fn max(&self) -> Option<i64> {
         match self {
-            SignedNumType::I8 => i8::MAX as i64,
-            SignedNumType::I16 => i16::MAX as i64,
-            SignedNumType::I32 => i32::MAX as i64,
-            SignedNumType::I64 => i64::MAX,
+            SignedNumType::I8 => Some(i8::MAX as i64),
+            SignedNumType::I16 => Some(i16::MAX as i64),
+            SignedNumType::I32 => Some(i32::MAX as i64),
+            SignedNumType::I64 => Some(i64::MAX),
+            SignedNumType::Unspecified => None,
         }
     }
 }
@@ -289,6 +294,7 @@ impl std::fmt::Display for SignedNumType {
             SignedNumType::I16 => "i16",
             SignedNumType::I32 => "i32",
             SignedNumType::I64 => "i64",
+            SignedNumType::Unspecified => "unspecified signed int",
         })
     }
 }
