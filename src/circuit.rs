@@ -13,8 +13,7 @@ use serde::{Deserialize, Serialize};
 // 3. Pruning of useless gates (gates that are not part of the output nor used by other gates)
 
 const PRINT_OPTIMIZATION_RATIO: bool = false;
-const MAX_GATES: usize = (u32::MAX >> 4) as usize;
-const MAX_AND_GATES: usize = (u32::MAX >> 8) as usize;
+const MAX_GATES: usize = u32::MAX as usize;
 
 /// Data type to uniquely identify gates.
 pub type GateIndex = usize;
@@ -141,7 +140,6 @@ impl Circuit {
 
     /// Checks that the circuit only uses valid wires, includes no cycles, has outputs, etc.
     pub fn validate(&self) -> Result<(), CircuitError> {
-        let mut num_and_gates = 0;
         let wires = self.wires();
         if self.input_gates.iter().all(|i| *i == 0) {
             return Err(CircuitError::EmptyInputs);
@@ -149,16 +147,10 @@ impl Circuit {
         for (i, g) in wires.iter().enumerate() {
             match g {
                 Wire::Input(_) => {}
-                &Wire::Xor(x, y) => {
+                &Wire::Xor(x, y) | &Wire::And(x, y) => {
                     if x >= i || y >= i {
                         return Err(CircuitError::InvalidGate(i));
                     }
-                }
-                &Wire::And(x, y) => {
-                    if x >= i || y >= i {
-                        return Err(CircuitError::InvalidGate(i));
-                    }
-                    num_and_gates += 1;
                 }
                 &Wire::Not(x) => {
                     if x >= i {
@@ -175,10 +167,7 @@ impl Circuit {
                 return Err(CircuitError::InvalidOutput(o));
             }
         }
-        if num_and_gates > MAX_AND_GATES {
-            return Err(CircuitError::MaxCircuitSizeExceeded);
-        }
-        if wires.len() > MAX_GATES {
+        if wires.len() + self.input_gates.iter().sum::<usize>() > MAX_GATES {
             return Err(CircuitError::MaxCircuitSizeExceeded);
         }
         Ok(())
