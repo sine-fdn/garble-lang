@@ -1,0 +1,10 @@
+[book]
+authors = ["Frederic Kettelhoit"]
+language = "en"
+multilingual = false
+src = "src"
+title = "The Garble Programming Language"
+[output.html]
+no-section-label = true
+[output.html.playground]
+runnable = false
