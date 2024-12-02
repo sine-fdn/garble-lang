@@ -22,4 +22,4 @@ pub fn main(a: u64, b: u64) -> Richest {
 }
 ```
 
-To learn more about Garble, check out the [website](https://sine-fdn.github.io/garble-lang)
+To learn more about Garble, check out the [website](https://sine-fdn.github.io/garble-lang).
