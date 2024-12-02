@@ -264,6 +264,7 @@ pub(crate) struct CircuitBuilder {
     gate_counter: usize,
     panic_gates: PanicResult,
     consts: HashMap<String, usize>,
+    panic_enabled: bool,
 }
 
 pub(crate) const USIZE_BITS: usize = 32;
@@ -388,7 +389,11 @@ impl PanicReason {
 }
 
 impl CircuitBuilder {
-    pub fn new(input_gates: Vec<usize>, consts: HashMap<String, usize>) -> Self {
+    pub fn new(
+        input_gates: Vec<usize>,
+        consts: HashMap<String, usize>,
+        panic_enabled: bool,
+    ) -> Self {
         let mut gate_counter = 2; // for const true and false
         for input_gates_of_party in input_gates.iter() {
             gate_counter += input_gates_of_party;
@@ -403,6 +408,7 @@ impl CircuitBuilder {
             gate_counter,
             panic_gates: PanicResult::ok(),
             consts,
+            panic_enabled,
         }
     }
 
@@ -578,6 +584,9 @@ impl CircuitBuilder {
     }
 
     pub fn push_panic_if(&mut self, cond: GateIndex, reason: PanicReason, meta: MetaInfo) {
+        if !self.panic_enabled {
+            return;
+        }
         let already_panicked = self.panic_gates.has_panicked;
         self.panic_gates.has_panicked = self.push_or(self.panic_gates.has_panicked, cond);
         let current = PanicResult {

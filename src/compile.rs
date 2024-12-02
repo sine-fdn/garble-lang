@@ -86,6 +86,18 @@ impl TypedProgram {
             .map(|(c, f, _)| (c, f))
     }
 
+    /// Compiles the (type-checked) program, _silently ignoring panics_.
+    ///
+    /// Assumes that the input program has been correctly type-checked and **panics** if
+    /// incompatible types are found that should have been caught by the type-checker.
+    pub fn compile_ignore_panic(
+        &self,
+        fn_name: &str,
+    ) -> Result<(Circuit, &TypedFnDef), Vec<CompilerError>> {
+        self.compile_with_constants_ignore_panic(fn_name, HashMap::new())
+            .map(|(c, f, _)| (c, f))
+    }
+
     /// Compiles the (type-checked) program with provided constants, producing a circuit of gates.
     ///
     /// Assumes that the input program has been correctly type-checked and **panics** if
@@ -94,6 +106,27 @@ impl TypedProgram {
         &self,
         fn_name: &str,
         consts: HashMap<String, HashMap<String, Literal>>,
+    ) -> Result<CompiledProgram, Vec<CompilerError>> {
+        self.comp_with_constants(fn_name, consts, true)
+    }
+
+    /// Compiles the (type-checked) program with provided constants, _silently ignoring panics_.
+    ///
+    /// Assumes that the input program has been correctly type-checked and **panics** if
+    /// incompatible types are found that should have been caught by the type-checker.
+    pub fn compile_with_constants_ignore_panic(
+        &self,
+        fn_name: &str,
+        consts: HashMap<String, HashMap<String, Literal>>,
+    ) -> Result<CompiledProgram, Vec<CompilerError>> {
+        self.comp_with_constants(fn_name, consts, false)
+    }
+
+    fn comp_with_constants(
+        &self,
+        fn_name: &str,
+        consts: HashMap<String, HashMap<String, Literal>>,
+        panic_enabled: bool,
     ) -> Result<CompiledProgram, Vec<CompilerError>> {
         let mut env = Env::new();
         let mut const_sizes = HashMap::new();
@@ -249,7 +282,7 @@ impl TypedProgram {
             input_gates.push(type_size);
             env.let_in_current_scope(param.name.clone(), wires);
         }
-        let mut circuit = CircuitBuilder::new(input_gates, const_sizes.clone());
+        let mut circuit = CircuitBuilder::new(input_gates, const_sizes.clone(), panic_enabled);
         for (const_name, const_def) in self.const_defs.iter() {
             let ConstExpr(expr, _) = &const_def.value;
             match expr {

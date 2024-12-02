@@ -1,4 +1,4 @@
-use garble_lang::compile;
+use garble_lang::{compile, compile_ignore_panic};
 
 #[test]
 fn optimize_or() -> Result<(), String> {
@@ -59,6 +59,68 @@ pub fn main(b: bool, x: i32) -> bool {
 ";
     let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
+    Ok(())
+}
+
+#[test]
+fn optimize_same_expr2() -> Result<(), String> {
+    let unoptimized = "
+pub fn main(b: bool, x: i32) -> i32 {
+    if b { x * x } else { x * x }
+}
+";
+    let optimized = "
+pub fn main(b: bool, x: i32) -> i32 {
+    let y = x * x;
+    if b { y } else { y }
+}
+";
+    let unoptimized = compile_ignore_panic(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile_ignore_panic(optimized).map_err(|e| e.prettify(optimized))?;
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
+    Ok(())
+}
+
+#[test]
+fn optimize_same_expr3() -> Result<(), String> {
+    let unoptimized = "
+pub fn main(input1: i8, input2: i8) -> bool {
+	let _unused = add(input1, input2);
+	square(input1) < input2 || square(input1) > input2
+}
+
+fn square(num: i8) -> i8 {
+	num * num
+}
+
+fn add(a: i8, b: i8) -> i8 {
+    a + b
+}
+";
+    let optimized = "
+pub fn main(input1: i8, input2: i8) -> bool {
+	let _unused = add(input1, input2);
+	let squared = square(input1);
+	squared < input2 || squared > input2
+}
+
+fn square(num: i8) -> i8 {
+	num * num
+}
+
+fn add(a: i8, b: i8) -> i8 {
+    a + b
+}
+";
+    let unoptimized = compile_ignore_panic(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile_ignore_panic(optimized).map_err(|e| e.prettify(optimized))?;
     assert_eq!(
         unoptimized.circuit.gates.len(),
         optimized.circuit.gates.len()

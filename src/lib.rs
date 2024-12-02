@@ -111,12 +111,44 @@ pub fn compile(prg: &str) -> Result<GarbleProgram, Error> {
 }
 
 /// Scans, parses, type-checks and then compiles the `"main"` fn of a program to a boolean circuit.
+pub fn compile_ignore_panic(prg: &str) -> Result<GarbleProgram, Error> {
+    let program = check(prg)?;
+    let (circuit, main) = program.compile_ignore_panic("main")?;
+    let main = main.clone();
+    Ok(GarbleProgram {
+        program,
+        main,
+        circuit,
+        consts: HashMap::new(),
+        const_sizes: HashMap::new(),
+    })
+}
+
+/// Scans, parses, type-checks and then compiles the `"main"` fn of a program to a boolean circuit.
 pub fn compile_with_constants(
     prg: &str,
     consts: HashMap<String, HashMap<String, Literal>>,
 ) -> Result<GarbleProgram, Error> {
     let program = check(prg)?;
     let (circuit, main, const_sizes) = program.compile_with_constants("main", consts.clone())?;
+    let main = main.clone();
+    Ok(GarbleProgram {
+        program,
+        main,
+        circuit,
+        consts,
+        const_sizes,
+    })
+}
+
+/// Scans, parses, type-checks and then compiles the `"main"` fn of a program to a boolean circuit.
+pub fn compile_with_constants_ignore_panic(
+    prg: &str,
+    consts: HashMap<String, HashMap<String, Literal>>,
+) -> Result<GarbleProgram, Error> {
+    let program = check(prg)?;
+    let (circuit, main, const_sizes) =
+        program.compile_with_constants_ignore_panic("main", consts.clone())?;
     let main = main.clone();
     Ok(GarbleProgram {
         program,
