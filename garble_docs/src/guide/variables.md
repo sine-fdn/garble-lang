@@ -48,4 +48,4 @@ fn inc(mut a: i32) -> i32 {
 
 > In contrast to `let`, `let mut` does not support destructuring using patterns. The left-hand side of a `let mut` statement must always be a variable name.
 
-Copying a value on every mutation might sound expensive, but this is actually not the case in a language like Garble that compiles to boolean gates: Previous values (or more specifically, "wires" with specific boolean values) can be freely reused, entirely or partially, because there are no memory locations, only gates and their connecting wires.
+Copying a value on every mutation might sound expensive, but this is actually not the case in a language like Garble that compiles to Boolean gates: Previous values (or more specifically, "wires" with specific Boolean values) can be freely reused, entirely or partially, because there are no memory locations, only gates and their connecting wires.

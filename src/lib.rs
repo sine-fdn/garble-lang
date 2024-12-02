@@ -1,8 +1,8 @@
 //! A purely functional programming language with a Rust-like syntax that compiles to logic gates
 //! for secure multi-party computation.
 //!
-//! Garble programs always terminate and are compiled into a combination of boolean AND / XOR / NOT
-//! gates. These boolean circuits can either be executed directly (mostly for testing purposes) or
+//! Garble programs always terminate and are compiled into a combination of Boolean AND / XOR / NOT
+//! gates. These Boolean circuits can either be executed directly (mostly for testing purposes) or
 //! passed to a multi-party computation engine.
 //!
 //! ```rust
@@ -96,7 +96,7 @@ pub fn check(prg: &str) -> Result<TypedProgram, Error> {
     Ok(scan(prg)?.parse()?.type_check()?)
 }
 
-/// Scans, parses, type-checks and then compiles the `"main"` fn of a program to a boolean circuit.
+/// Scans, parses, type-checks and then compiles the `"main"` fn of a program to a Boolean circuit.
 pub fn compile(prg: &str) -> Result<GarbleProgram, Error> {
     let program = check(prg)?;
     let (circuit, main) = program.compile("main")?;
@@ -110,7 +110,7 @@ pub fn compile(prg: &str) -> Result<GarbleProgram, Error> {
     })
 }
 
-/// Scans, parses, type-checks and then compiles the `"main"` fn of a program to a boolean circuit.
+/// Scans, parses, type-checks and then compiles the `"main"` fn of a program to a Boolean circuit.
 pub fn compile_with_constants(
     prg: &str,
     consts: HashMap<String, HashMap<String, Literal>>,
@@ -135,7 +135,7 @@ pub struct GarbleProgram {
     pub program: TypedProgram,
     /// The function to be executed as a circuit.
     pub main: TypedFnDef,
-    /// The compilation output, as a circuit of boolean gates.
+    /// The compilation output, as a circuit of Boolean gates.
     pub circuit: Circuit,
     /// The constants used for compiling the circuit.
     pub consts: HashMap<String, HashMap<String, Literal>>,

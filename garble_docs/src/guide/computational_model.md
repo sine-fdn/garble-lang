@@ -1,12 +1,12 @@
 # Circuits and Termination
 
-Garble programs are boolean _circuits_ consisting of a graph of logic gates, not a sequentially executed program of instructions on a von Neumann architecture with main memory and CPU. This has deep consequences for the programming style that leads to efficient Garble programs, with programs that would be efficient in "normal" programming languages resulting in highly inefficient circuits and vice versa.
+Garble programs are Boolean _circuits_ consisting of a graph of logic gates, not a sequentially executed program of instructions on a von Neumann architecture with main memory and CPU. This has deep consequences for the programming style that leads to efficient Garble programs, with programs that would be efficient in "normal" programming languages resulting in highly inefficient circuits and vice versa.
 
 ## Copying is Free
 
-One example has already been mentioned: Copying whole arrays in Garble is essentially free, because arrays (and their elements) are just a collection of output wires from a bunch of boolean logic gates. Duplicating these wires does not increase the complexity of the circuit, because no additional logic gates are required.
+One example has already been mentioned: Copying whole arrays in Garble is essentially free, because arrays (and their elements) are just a collection of output wires from a bunch of Boolean logic gates. Duplicating these wires does not increase the complexity of the circuit, because no additional logic gates are required.
 
-Replacing the element at a _constant_ index in an array with a new value is equally cheap, because the Garble compiler can just duplicate the output wires of all the other elements and only has to use the wires of the replacement element where previously the old element was being used. In contrast, replacing the element at a _non-constant_ index (i.e. an index that depends on a runtime value) is a much more expensive operation in a boolean circuit than it would be on a normal computer, because the Garble compiler has to generate a nested multiplexer circuit.
+Replacing the element at a _constant_ index in an array with a new value is equally cheap, because the Garble compiler can just duplicate the output wires of all the other elements and only has to use the wires of the replacement element where previously the old element was being used. In contrast, replacing the element at a _non-constant_ index (i.e. an index that depends on a runtime value) is a much more expensive operation in a Boolean circuit than it would be on a normal computer, because the Garble compiler has to generate a nested multiplexer circuit.
 
 The following program seems to do a lot of work, but is actually just re-arranging the bits in an array, turning each element from a tuple of three values into a nested tuple. Garble optimizes the actual loop away, resulting in a program with 0 AND gates:
 
@@ -51,7 +51,7 @@ pub fn main(arr: [u16; 500], x: u16) -> [u16; 500] {
 
 The difference in circuit size is extreme: While the first version (with `i` as an input parameter) is compiled to a circuit with more than 700,000 non-input gates, the second version (which shifts the entire array by one element) uses only 2 non-input gates (because the program is effectively a static transformation from input to output).
 
-Such an example might be a bit contrived, since it is possible to infer the inputs of both parties (except for the element that is dropped from the array) from the output of the above function, defeating the purpose of MPC, which is to keep each party's input private. But it does highlight how unintuitive the computational model of pure boolean circuits can be from the perspective of a load-and-store architecture with main memory and CPU.
+Such an example might be a bit contrived, since it is possible to infer the inputs of both parties (except for the element that is dropped from the array) from the output of the above function, defeating the purpose of MPC, which is to keep each party's input private. But it does highlight how unintuitive the computational model of pure Boolean circuits can be from the perspective of a load-and-store architecture with main memory and CPU.
 
 ## Garble's Computational Model
 

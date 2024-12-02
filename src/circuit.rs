@@ -272,7 +272,7 @@ const PANIC_RESULT_SIZE_IN_BITS: usize = 1 + 5 * USIZE_BITS;
 /// A collection of wires that carry information about whether and where a panic occurred.
 #[derive(Debug, Clone)]
 pub struct PanicResult {
-    /// A boolean wire indicating whether a panic has occurred.
+    /// A Boolean wire indicating whether a panic has occurred.
     pub has_panicked: GateIndex,
     /// The (encoded) reason why the panic occurred (overflow, div-by-zero, etc).
     pub panic_type: [GateIndex; USIZE_BITS],

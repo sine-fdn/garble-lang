@@ -28,7 +28,7 @@ pub fn main(_x: i32) -> i32 {
 }
 ```
 
-Arrays in Garble always have a fixed size, Garble does not support data structures of a dynamic length. This is by design, as it disallows any form of unbounded recursion and thus enables the Garble compiler to generate fixed circuits consisting only of boolean gates. Garble programs are thus computationally equivalent to [LOOP programs](<https://en.wikipedia.org/wiki/LOOP_(programming_language)>), corresponding precisely to the class of _primitive recursive functions_.
+Arrays in Garble always have a fixed size, Garble does not support data structures of a dynamic length. This is by design, as it disallows any form of unbounded recursion and thus enables the Garble compiler to generate fixed circuits consisting only of Boolean gates. Garble programs are thus computationally equivalent to [LOOP programs](<https://en.wikipedia.org/wiki/LOOP_(programming_language)>), corresponding precisely to the class of _primitive recursive functions_.
 
 ## For-Join Loops
 

@@ -83,7 +83,7 @@ pub fn main(a: u32, b: u32) -> [u32; 4] {
 }
 ```
 
-Arrays are indexed using `array[index]`. An element can be reassigned if the whole array has been declared as mutable by `let mut`. Each new let binding, no matter whether immutable or mutable, always copies the full array: As a result, mutating a single index only affects a single variable, never any other "copies" of the array. This might sound inefficient, but does not incur any performance penalty in a purely functional circuit using only boolean gates. Consequently, there is no shared mutable state in Garble:
+Arrays are indexed using `array[index]`. An element can be reassigned if the whole array has been declared as mutable by `let mut`. Each new let binding, no matter whether immutable or mutable, always copies the full array: As a result, mutating a single index only affects a single variable, never any other "copies" of the array. This might sound inefficient, but does not incur any performance penalty in a purely functional circuit using only Boolean gates. Consequently, there is no shared mutable state in Garble:
 
 ```rust
 pub fn main(replacement: i32) -> [i32; 4] {
