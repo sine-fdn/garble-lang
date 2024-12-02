@@ -1,6 +1,6 @@
 # The Garble Programming Language
 
-Garble is a simple programming language for [**Multi-Party Computation**](https://en.wikipedia.org/wiki/Secure_multi-party_computation) with [**Garbled Circuits**](https://en.wikipedia.org/wiki/Garbled_circuit). Garble programs are **compiled to Boolean circuits** and always terminate. Garble is **statically typed, low-level, purely functional** and uses a **Rust-like syntax**. Garble is much simpler than Rust though, making it easy to learn and simple to [integrate](./integration.md) into MPC engines.
+Garble is a simple programming language for [**Multi-Party Computation**](https://en.wikipedia.org/wiki/Secure_multi-party_computation). Garble programs are **compiled to Boolean circuits** and always terminate, making them ideal for [**Garbled Circuits**](https://en.wikipedia.org/wiki/Garbled_circuit). Garble is **statically typed, low-level, purely functional** and uses a **Rust-like syntax**. Garble is much simpler than Rust though, making it easy to learn and simple to [integrate](./integration.md) into MPC engines.
 
 ```rust
 // A program for solving Yao's Millionaires' problem in Garble:
