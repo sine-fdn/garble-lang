@@ -46,7 +46,7 @@ for joined in join(rows1, rows2) {
 ```
 
 Garble automatically joins the arrays in a for-join loop using a [bitonic sorting network](https://en.wikipedia.org/wiki/Bitonic_sorter), more concretely implementing the paper [Private Set Intersection:
-Are Garbled Circuits Better than Custom Protocols?](https://www.ndss-symposium.org/wp-content/uploads/2017/09/06_4.pdf) without the shuffle step, which has a circuit complexity of `(m + n) * log(m + n)` instead of `m * n` which would result from joining the arrays using nested loops.
+Are Garbled Circuits Better than Custom Protocols?](https://www.ndss-symposium.org/wp-content/uploads/2017/09/06_4.pdf) without the shuffle step, which has a circuit complexity of `O((m + n) * log(m + n))` instead of `O(m * n)` which would result from joining the arrays using nested loops.
 
 > It is your responsibility to ensure that the **arrays that are joined in the loop must be sorted in ascending order!** Otherwise elements might be discarded or invalid data returned.
 
