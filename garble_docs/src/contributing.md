@@ -10,6 +10,6 @@ The Garble compiler is relatively straightforward and turns a program `&str` int
 2. [`parse.rs`](https://github.com/sine-fdn/garble-lang/blob/main/src/parse.rs) parses a [`token::Token`](https://github.com/sine-fdn/garble-lang/blob/main/src/token.rs) sequence into an untyped [`ast::Program`](https://github.com/sine-fdn/garble-lang/blob/main/src/ast.rs).
 3. [`check.rs`](https://github.com/sine-fdn/garble-lang/blob/main/src/check.rs) type-checks an untyped [`ast::Program`](https://github.com/sine-fdn/garble-lang/blob/main/src/ast.rs), returning a typed [`ast::Program`](https://github.com/sine-fdn/garble-lang/blob/main/src/ast.rs).
 4. [`compile.rs`](https://github.com/sine-fdn/garble-lang/blob/main/src/compile.rs) converts a well-typed [`ast::Program`](https://github.com/sine-fdn/garble-lang/blob/main/src/ast.rs) into a [`circuit::Circuit`](https://github.com/sine-fdn/garble-lang/blob/main/src/circuit.rs).
-5. [`eval.rs`](https://github.com/sine-fdn/garble-lang/blob/main/src/eval.rs) executes a [`circuit::Circuit`](https://github.com/sine-fdn/garble-lang/blob/main/src/circuit.rs) with locally supplied inputs.
+5. [`eval.rs`](https://github.com/sine-fdn/garble-lang/blob/main/src/eval.rs) executes a [`circuit::Circuit`](https://github.com/sine-fdn/garble-lang/blob/main/src/circuit.rs) with locally supplied inputs, not using any MPC or other privacy-preserving techniques.
 
 You can also reach us at [vorstand@sine.foundation](mailto:vorstand@sine.foundation).
