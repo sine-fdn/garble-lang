@@ -1,6 +1,6 @@
 # A Guide to Garble
 
-Garble is a programming language for [MPC](<(https://en.wikipedia.org/wiki/Secure_multi-party_computation)>) that is quite easy to learn and mostly works like Rust, except that it is much simpler and only implements a subset of Rust (without the borrow checker). The following guide introduces the main features of Garble.
+Garble is a programming language for [MPC](https://en.wikipedia.org/wiki/Secure_multi-party_computation) that is quite easy to learn and mostly works like Rust, except that it is much simpler and only implements a subset of Rust (without the borrow checker). The following guide introduces the main features of Garble.
 
 A minimal Garble program is a public function (conventionally called `main`), with each function argument conceptually belonging to a different party in an MPC protocol based on Boolean circuits, e.g. [Garbled Circuits](https://en.wikipedia.org/wiki/Garbled_circuit). For example, the following program computes the Boolean `and` of two parties:
 
