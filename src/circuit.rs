@@ -263,8 +263,8 @@ pub(crate) struct CircuitBuilder {
     gates_optimized: usize,
     gate_counter: usize,
     panic_gates: PanicResult,
+    panic_wires: HashMap<usize, PanicResult>,
     consts: HashMap<String, usize>,
-    panic_enabled: bool,
 }
 
 pub(crate) const USIZE_BITS: usize = 32;
@@ -389,11 +389,7 @@ impl PanicReason {
 }
 
 impl CircuitBuilder {
-    pub fn new(
-        input_gates: Vec<usize>,
-        consts: HashMap<String, usize>,
-        panic_enabled: bool,
-    ) -> Self {
+    pub fn new(input_gates: Vec<usize>, consts: HashMap<String, usize>) -> Self {
         let mut gate_counter = 2; // for const true and false
         for input_gates_of_party in input_gates.iter() {
             gate_counter += input_gates_of_party;
@@ -407,8 +403,8 @@ impl CircuitBuilder {
             gates_optimized: 0,
             gate_counter,
             panic_gates: PanicResult::ok(),
+            panic_wires: HashMap::new(),
             consts,
-            panic_enabled,
         }
     }
 
@@ -584,7 +580,8 @@ impl CircuitBuilder {
     }
 
     pub fn push_panic_if(&mut self, cond: GateIndex, reason: PanicReason, meta: MetaInfo) {
-        if !self.panic_enabled {
+        if let Some(existing_panic) = self.panic_wires.get(&cond) {
+            self.panic_gates = existing_panic.clone();
             return;
         }
         let already_panicked = self.panic_gates.has_panicked;
@@ -626,6 +623,7 @@ impl CircuitBuilder {
                 current.panic_type[i],
             );
         }
+        self.panic_wires.insert(cond, self.panic_gates.clone());
     }
 
     pub fn peek_panic(&self) -> &PanicResult {

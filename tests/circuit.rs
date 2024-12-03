@@ -1,4 +1,4 @@
-use garble_lang::{compile, compile_ignore_panic};
+use garble_lang::compile;
 
 #[test]
 fn optimize_or() -> Result<(), String> {
@@ -79,8 +79,8 @@ pub fn main(b: bool, x: i32) -> i32 {
     if b { y } else { y }
 }
 ";
-    let unoptimized = compile_ignore_panic(unoptimized).map_err(|e| e.prettify(unoptimized))?;
-    let optimized = compile_ignore_panic(optimized).map_err(|e| e.prettify(optimized))?;
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
     assert_eq!(
         unoptimized.circuit.gates.len(),
         optimized.circuit.gates.len()
@@ -119,8 +119,8 @@ fn add(a: i8, b: i8) -> i8 {
     a + b
 }
 ";
-    let unoptimized = compile_ignore_panic(unoptimized).map_err(|e| e.prettify(unoptimized))?;
-    let optimized = compile_ignore_panic(optimized).map_err(|e| e.prettify(optimized))?;
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
     assert_eq!(
         unoptimized.circuit.gates.len(),
         optimized.circuit.gates.len()
