@@ -151,9 +151,9 @@ fn compute_bankruptcy_points(ever_bankrupt: bool, bankruptcy_score: [MatchClause
     let mut bankruptcy_points = 0;
     for clause in bankruptcy_score {
         match clause {
-            MatchClause::Bool(boolean, points) => {
+            MatchClause::Bool(b, points) => {
                 let Points { inc } = points;
-                if ever_bankrupt == boolean {
+                if ever_bankrupt == b {
                     bankruptcy_points += inc;
                 }
             }

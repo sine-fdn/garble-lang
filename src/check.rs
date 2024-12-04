@@ -62,7 +62,7 @@ pub enum TypeErrorEnum {
     TupleAccessOutOfBounds(usize),
     /// A parameter name is used more than once in a function declaration.
     DuplicateFnParam(String),
-    /// An boolean or number expression was expected.
+    /// An Boolean or number expression was expected.
     ExpectedBoolOrNumberType(Type),
     /// A number expression was expected.
     ExpectedNumberType(Type),
@@ -161,7 +161,7 @@ impl std::fmt::Display for TypeErrorEnum {
                 "The function parameter '{name}' is declared multiple times"
             )),
             TypeErrorEnum::ExpectedBoolOrNumberType(ty) => f.write_fmt(format_args!(
-                "Expected a boolean or number type, but found {ty}"
+                "Expected a Boolean or number type, but found {ty}"
             )),
             TypeErrorEnum::ExpectedNumberType(ty) => {
                 f.write_fmt(format_args!("Expected a number type, but found {ty}"))
