@@ -2,7 +2,7 @@ name: Mdbook Pages
 on:
   push:
     branches:
-      - mdbook
+      - main
 
 jobs:
   deploy:
