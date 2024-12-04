@@ -333,7 +333,7 @@ fn expect_panic(eval_result: Result<EvalOutput, EvalError>, expected: PanicReaso
     let eval_output = Vec::<bool>::try_from(eval_result.unwrap());
     assert!(eval_output.is_err());
     match eval_output.unwrap_err() {
-        EvalError::Panic(EvalPanic { reason, .. }) => assert_eq!(expected, reason),
+        EvalError::Panic(EvalPanic { reason, .. }) => assert_eq!(reason, expected),
         e => panic!("Expected a panic, but found {e:?}"),
     }
 }
