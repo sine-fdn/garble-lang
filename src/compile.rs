@@ -10,7 +10,7 @@ use crate::{
         ConstExpr, ConstExprEnum, EnumDef, ExprEnum, Op, Pattern, PatternEnum, StmtEnum, StructDef,
         Type, UnaryOp, VariantExprEnum,
     },
-    circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, PanicResult, USIZE_BITS},
+    circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, USIZE_BITS},
     env::Env,
     literal::Literal,
     token::{MetaInfo, SignedNumType, UnsignedNumType},
@@ -1057,12 +1057,13 @@ impl TypedExpr {
                 let mut muxed_ret_expr = vec![0; bits];
                 let mut muxed_panic = circuit.peek_panic().clone();
                 let mut muxed_env = env.clone();
+                let panic_before_match = circuit.peek_panic().clone();
 
                 for (pattern, ret_expr) in clauses {
                     let mut env = env.clone();
                     env.push();
 
-                    circuit.replace_panic_with(PanicResult::ok());
+                    circuit.replace_panic_with(panic_before_match.clone());
 
                     let is_match = pattern.compile(&expr, prg, &mut env, circuit);
                     let ret_expr = ret_expr.compile(prg, &mut env, circuit);

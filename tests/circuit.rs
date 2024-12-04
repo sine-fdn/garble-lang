@@ -69,14 +69,14 @@ pub fn main(b: bool, x: i32) -> bool {
 #[test]
 fn optimize_same_expr2() -> Result<(), String> {
     let unoptimized = "
-pub fn main(b: bool, x: i32) -> i32 {
-    if b { x * x } else { x * x }
+pub fn main(x: i32) -> i32 {
+    (x * x) + (x * x)
 }
 ";
     let optimized = "
-pub fn main(b: bool, x: i32) -> i32 {
+pub fn main(x: i32) -> i32 {
     let y = x * x;
-    if b { y } else { y }
+    y + y
 }
 ";
     let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
