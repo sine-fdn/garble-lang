@@ -257,7 +257,7 @@ pub struct EvalOutput<'a> {
     const_sizes: HashMap<String, usize>,
 }
 
-impl<'a> TryFrom<EvalOutput<'a>> for bool {
+impl TryFrom<EvalOutput<'_>> for bool {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -273,7 +273,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for bool {
     }
 }
 
-impl<'a> TryFrom<EvalOutput<'a>> for usize {
+impl TryFrom<EvalOutput<'_>> for usize {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -283,7 +283,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for usize {
     }
 }
 
-impl<'a> TryFrom<EvalOutput<'a>> for u8 {
+impl TryFrom<EvalOutput<'_>> for u8 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -293,7 +293,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for u8 {
     }
 }
 
-impl<'a> TryFrom<EvalOutput<'a>> for u16 {
+impl TryFrom<EvalOutput<'_>> for u16 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -303,7 +303,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for u16 {
     }
 }
 
-impl<'a> TryFrom<EvalOutput<'a>> for u32 {
+impl TryFrom<EvalOutput<'_>> for u32 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -313,7 +313,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for u32 {
     }
 }
 
-impl<'a> TryFrom<EvalOutput<'a>> for u64 {
+impl TryFrom<EvalOutput<'_>> for u64 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -321,7 +321,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for u64 {
     }
 }
 
-impl<'a> TryFrom<EvalOutput<'a>> for i8 {
+impl TryFrom<EvalOutput<'_>> for i8 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -331,7 +331,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for i8 {
     }
 }
 
-impl<'a> TryFrom<EvalOutput<'a>> for i16 {
+impl TryFrom<EvalOutput<'_>> for i16 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -341,7 +341,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for i16 {
     }
 }
 
-impl<'a> TryFrom<EvalOutput<'a>> for i32 {
+impl TryFrom<EvalOutput<'_>> for i32 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -351,7 +351,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for i32 {
     }
 }
 
-impl<'a> TryFrom<EvalOutput<'a>> for i64 {
+impl TryFrom<EvalOutput<'_>> for i64 {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -359,7 +359,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for i64 {
     }
 }
 
-impl<'a> TryFrom<EvalOutput<'a>> for Vec<bool> {
+impl TryFrom<EvalOutput<'_>> for Vec<bool> {
     type Error = EvalError;
 
     fn try_from(value: EvalOutput) -> Result<Self, Self::Error> {
@@ -370,7 +370,7 @@ impl<'a> TryFrom<EvalOutput<'a>> for Vec<bool> {
     }
 }
 
-impl<'a> EvalOutput<'a> {
+impl EvalOutput<'_> {
     fn into_unsigned(self, ty: Type) -> Result<u64, EvalError> {
         let output = EvalPanic::parse(&self.output)?;
         let size = ty.size_in_bits_for_defs(self.program, &self.const_sizes);
