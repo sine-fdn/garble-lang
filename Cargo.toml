@@ -23,12 +23,12 @@ required-features = ["bin"]
 [dependencies]
 clap = { version = "4.5.17", features = ["derive"], optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
+plotters = { version = "0.3.7", optional = true }
 
 [features]
 bin = ["clap"]
-plot = []
+plot = ["plotters"]
 
 [dev-dependencies]
 quickcheck = "1"
 quickcheck_macros = "1"
-plotters = "0.3.7"
