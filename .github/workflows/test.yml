@@ -21,6 +21,6 @@ jobs:
             Cargo.lock
             ~/.rustup
           key: ${{ env.cache-name }}-${{ hashFiles('**/Cargo.toml') }}
-      - run: cargo build --all-features
+      - run: cargo build --features="bin"
       - run: cargo test
       - run: cargo clippy -- -Dwarnings
