@@ -2207,19 +2207,61 @@ pub(crate) fn check_or_constrain_signed(
 }
 
 pub(crate) fn constrain_type(expr: &mut TypedExpr, expected: &Type) -> Result<(), TypeErrors> {
+    fn overwrite_ty_if_necessary(actual: &mut Type, expected: &Type) {
+        match expected {
+            Type::Unsigned(_) => {
+                if actual == &Type::Unsigned(UnsignedNumType::Unspecified) {
+                    *actual = expected.clone();
+                }
+            }
+            Type::Signed(_) => {
+                if actual == &Type::Unsigned(UnsignedNumType::Unspecified)
+                    || actual == &Type::Signed(SignedNumType::Unspecified)
+                {
+                    *actual = expected.clone();
+                }
+            }
+            _ => {}
+        }
+    }
     match (&mut expr.inner, expected) {
         (ExprEnum::ArrayLiteral(elems), Type::Array(elem_ty, _) | Type::ArrayConst(elem_ty, _)) => {
             for elem in elems {
                 constrain_type(elem, elem_ty)?;
             }
+            if let Type::Array(actual, _) | Type::ArrayConst(actual, _) = &mut expr.ty {
+                overwrite_ty_if_necessary(actual, elem_ty);
+            }
         }
         (
             ExprEnum::ArrayRepeatLiteral(elem, _) | ExprEnum::ArrayRepeatLiteralConst(elem, _),
             Type::Array(elem_ty, _) | Type::ArrayConst(elem_ty, _),
-        ) => constrain_type(elem, elem_ty)?,
+        ) => {
+            constrain_type(elem, elem_ty)?;
+            if let Type::Array(actual, _) | Type::ArrayConst(actual, _) = &mut expr.ty {
+                overwrite_ty_if_necessary(actual, elem_ty);
+            }
+        }
         (ExprEnum::TupleLiteral(elems), Type::Tuple(elem_tys)) if elems.len() == elem_tys.len() => {
             for (elem, elem_ty) in elems.iter_mut().zip(elem_tys) {
                 constrain_type(elem, elem_ty)?;
+            }
+            if let Type::Tuple(actual_elem_tys) = &mut expr.ty {
+                for (actual, expected) in actual_elem_tys.iter_mut().zip(elem_tys) {
+                    overwrite_ty_if_necessary(actual, expected);
+                }
+            }
+        }
+        (ExprEnum::Identifier(_), Type::Array(elem_ty, _) | Type::ArrayConst(elem_ty, _)) => {
+            if let Type::Array(actual, _) | Type::ArrayConst(actual, _) = &mut expr.ty {
+                overwrite_ty_if_necessary(actual, elem_ty);
+            }
+        }
+        (ExprEnum::Identifier(_), Type::Tuple(elem_tys)) => {
+            if let Type::Tuple(actual_elem_tys) = &mut expr.ty {
+                for (actual, expected) in actual_elem_tys.iter_mut().zip(elem_tys) {
+                    overwrite_ty_if_necessary(actual, expected);
+                }
             }
         }
         (ExprEnum::Match(_, clauses), ty) => {
@@ -2265,7 +2307,7 @@ pub(crate) fn constrain_type(expr: &mut TypedExpr, expected: &Type) -> Result<()
         (_, Type::Signed(ty)) => check_or_constrain_signed(expr, *ty)?,
         _ => {}
     }
-    expr.ty = expected.clone();
+    overwrite_ty_if_necessary(&mut expr.ty, expected);
     Ok(())
 }
 

@@ -230,6 +230,25 @@ pub fn main(x: i32) -> i32 {
     Ok(())
 }
 
+#[test]
+fn reject_different_array_size() -> Result<(), Error> {
+    let prg = "
+pub fn main(x: bool) -> [bool; 3] {
+  [x, x]
+}
+";
+    let e = scan(prg)?.parse()?.type_check();
+    let e = assert_single_type_error(e);
+    assert!(matches!(
+        e,
+        TypeErrorEnum::UnexpectedType {
+            expected: Type::Array(_, 3),
+            actual: Type::Array(_, 2),
+        }
+    ));
+    Ok(())
+}
+
 fn assert_single_type_error(e: Result<TypedProgram, Vec<TypeError>>) -> TypeErrorEnum {
     if let Err(mut e) = e {
         if e.len() == 1 {
