@@ -232,6 +232,48 @@ pub fn main(arr1: [(u16, u16, u32); 8]) -> [((u16, u16), u32); 8] {
     Ok(())
 }
 
+#[test]
+fn optimize_constant_mul() -> Result<(), String> {
+    let unoptimized = "
+pub fn main(x: i32) -> i32 {
+    2 * x
+}
+";
+    let optimized = "
+pub fn main(x: i32) -> i32 {
+    x + x
+}
+";
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
+    Ok(())
+}
+
+#[test]
+fn optimize_constant_mul_signed() -> Result<(), String> {
+    let unoptimized = "
+pub fn main(x: i32) -> i32 {
+    -2 * x
+}
+";
+    let optimized = "
+pub fn main(x: i32) -> i32 {
+    -(x + x)
+}
+";
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
+    Ok(())
+}
+
 // Run the following test using `cargo test plot --features=plot --release -- --nocapture`
 
 #[test]
