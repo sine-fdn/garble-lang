@@ -793,7 +793,7 @@ impl TypedExpr {
                                 false,
                             ),
                             ExprEnum::NumSigned(n, size) => (
-                                n.abs() as u64,
+                                n.unsigned_abs(),
                                 Type::Signed(size).size_in_bits_for_defs(prg, circuit.const_sizes())
                                     as u64,
                                 n < 0,
