@@ -770,6 +770,87 @@ impl CircuitBuilder {
         None
     }
 
+    pub fn push_xor(&mut self, x: GateIndex, y: GateIndex) -> GateIndex {
+        if let Some(optimized) = self.optimize_xor(x, y) {
+            self.gates_optimized += 1;
+            optimized
+        } else {
+            if x >= self.shift && y >= self.shift {
+                let gate_x = self.gates[x - self.shift];
+                let gate_y = self.gates[y - self.shift];
+                if let (BuilderGate::Xor(x1, x2), BuilderGate::Xor(y1, y2)) = (gate_x, gate_y) {
+                    if x1 == y1 {
+                        return self.push_xor(x2, y2);
+                    } else if x1 == y2 {
+                        return self.push_xor(x2, y1);
+                    } else if x2 == y1 {
+                        return self.push_xor(x1, y2);
+                    } else if x2 == y2 {
+                        return self.push_xor(x1, y1);
+                    }
+                } else if let (BuilderGate::And(x1, x2), BuilderGate::And(y1, y2)) =
+                    (gate_x, gate_y)
+                {
+                    for (a1, a2, b1, b2) in [
+                        (x1, x2, y1, y2),
+                        (x1, x2, y2, y1),
+                        (x2, x1, y1, y2),
+                        (x2, x1, y2, y1),
+                    ] {
+                        if a1 == b1 {
+                            if let Some(&a2_xor_b2) = self.cache.get(&BuilderGate::Xor(a2, b2)) {
+                                if let Some(&wire) =
+                                    self.cache.get(&BuilderGate::And(a1, a2_xor_b2))
+                                {
+                                    self.gates_optimized += 1;
+                                    return wire;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if x >= self.shift {
+                let gate_x = self.gates[x - self.shift];
+                if let BuilderGate::Xor(x1, x2) = gate_x {
+                    if x1 == y {
+                        self.gates_optimized += 1;
+                        return x2;
+                    } else if x2 == y {
+                        self.gates_optimized += 1;
+                        return x1;
+                    }
+                }
+            }
+            if y >= self.shift {
+                let gate_y = self.gates[y - self.shift];
+                if let BuilderGate::Xor(y1, y2) = gate_y {
+                    if x == y1 {
+                        self.gates_optimized += 1;
+                        return y2;
+                    } else if x == y2 {
+                        self.gates_optimized += 1;
+                        return y1;
+                    }
+                }
+            }
+            let gate = BuilderGate::Xor(x, y);
+            self.gate_counter += 1;
+            self.gates.push(gate);
+            let gate_index = self.gate_counter - 1;
+            self.cache.insert(gate, gate_index);
+            if x == 1 {
+                self.negated.insert(y, gate_index);
+                self.negated.insert(gate_index, y);
+            }
+            if y == 1 {
+                self.negated.insert(x, gate_index);
+                self.negated.insert(gate_index, x);
+            }
+            gate_index
+        }
+    }
+
     // - Constant evaluation (e.g. x & x == x; x & 1 == x; x & 0 == 0)
     // - Sub-expression sharing (wires are re-used if a gate with the same type and inputs exists)
     fn optimize_and(&self, x: GateIndex, y: GateIndex) -> Option<GateIndex> {
@@ -795,33 +876,54 @@ impl CircuitBuilder {
         None
     }
 
-    pub fn push_xor(&mut self, x: GateIndex, y: GateIndex) -> GateIndex {
-        if let Some(optimized) = self.optimize_xor(x, y) {
-            self.gates_optimized += 1;
-            optimized
-        } else {
-            let gate = BuilderGate::Xor(x, y);
-            self.gate_counter += 1;
-            self.gates.push(gate);
-            let gate_index = self.gate_counter - 1;
-            self.cache.insert(gate, gate_index);
-            if x == 1 {
-                self.negated.insert(y, gate_index);
-                self.negated.insert(gate_index, y);
-            }
-            if y == 1 {
-                self.negated.insert(x, gate_index);
-                self.negated.insert(gate_index, x);
-            }
-            gate_index
-        }
-    }
-
     pub fn push_and(&mut self, x: GateIndex, y: GateIndex) -> GateIndex {
         if let Some(optimized) = self.optimize_and(x, y) {
             self.gates_optimized += 1;
             optimized
         } else {
+            if x >= self.shift && y >= self.shift {
+                let gate_x = self.gates[x - self.shift];
+                let gate_y = self.gates[y - self.shift];
+                if let (BuilderGate::And(x1, x2), BuilderGate::And(y1, y2)) = (gate_x, gate_y) {
+                    if x1 == y1 || x2 == y1 {
+                        return self.push_and(x, y2);
+                    } else if x1 == y2 || x2 == y2 {
+                        return self.push_and(x, y1);
+                    }
+                }
+            }
+            if x >= self.shift {
+                let gate_x = self.gates[x - self.shift];
+                if let BuilderGate::And(x1, x2) = gate_x {
+                    if x1 == y || x2 == y {
+                        self.gates_optimized += 1;
+                        return x;
+                    }
+                } else if let BuilderGate::Xor(x1, x2) = gate_x {
+                    if let (Some(&x1_and_y), Some(&x2_and_y)) = (
+                        self.cache.get(&BuilderGate::And(x1, y)),
+                        self.cache.get(&BuilderGate::And(x2, y)),
+                    ) {
+                        return self.push_xor(x1_and_y, x2_and_y);
+                    }
+                }
+            }
+            if y >= self.shift {
+                let gate_y = self.gates[y - self.shift];
+                if let BuilderGate::And(y1, y2) = gate_y {
+                    if x == y1 || x == y2 {
+                        self.gates_optimized += 1;
+                        return y;
+                    }
+                } else if let BuilderGate::Xor(y1, y2) = gate_y {
+                    if let (Some(&x_and_y1), Some(&x_and_y2)) = (
+                        self.cache.get(&BuilderGate::And(x, y1)),
+                        self.cache.get(&BuilderGate::And(x, y2)),
+                    ) {
+                        return self.push_xor(x_and_y1, x_and_y2);
+                    }
+                }
+            }
             let gate = BuilderGate::And(x, y);
             self.gate_counter += 1;
             self.gates.push(gate);

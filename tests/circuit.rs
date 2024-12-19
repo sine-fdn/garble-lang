@@ -45,6 +45,226 @@ pub fn main(_x: i32) -> i32 {
 }
 
 #[test]
+fn optimize_trivial_patterns() -> Result<(), String> {
+    let unoptimized = "
+pub fn main(x: u32) -> [u32; 17] {
+    [
+        0 & x, x & 0,
+        0 | x, x | 0,
+        0 ^ x, x ^ 0,
+        1 & x, x & 1,
+        1 | x, x | 1,
+        x & x, x & !x,
+        x | x, x | !x,
+        x ^ x, x ^ !x,
+        !!x,
+    ]
+}
+";
+    let optimized = "
+pub fn main(x: u32) -> [u32; 17] {
+    [
+        0, 0,
+        x, x,
+        x, x,
+        x, x,
+        1, 1,
+        x, 0,
+        x, 1,
+        0, 1,
+        x,
+    ]
+}
+";
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
+    Ok(())
+}
+
+#[test]
+fn optimize_and_pattern1() -> Result<(), String> {
+    let unoptimized = "
+pub fn main(a: u32, b: u32, c: u32) -> u32 {
+    (a & b) & a
+}
+";
+    let optimized = "
+pub fn main(a: u32, b: u32, c: u32) -> u32 {
+    a & b
+}
+";
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
+    Ok(())
+}
+
+#[test]
+fn optimize_and_pattern2() -> Result<(), String> {
+    let unoptimized = "
+pub fn main(a: u32, b: u32, c: u32) -> u32 {
+    a & (b & a)
+}
+";
+    let optimized = "
+pub fn main(a: u32, b: u32, c: u32) -> u32 {
+    a & b
+}
+";
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
+    Ok(())
+}
+
+#[test]
+fn optimize_and_pattern3() -> Result<(), String> {
+    let unoptimized = "
+pub fn main(a: u32, b: u32, c: u32) -> u32 {
+    (a & b) & (a & c)
+}
+";
+    let optimized = "
+pub fn main(a: u32, b: u32, c: u32) -> u32 {
+    a & b & c
+}
+";
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
+    Ok(())
+}
+
+#[test]
+fn optimize_xor_pattern1() -> Result<(), String> {
+    let unoptimized = "
+pub fn main(a: u32, b: u32, c: u32) -> u32 {
+    (a ^ b) ^ a
+}
+";
+    let optimized = "
+pub fn main(a: u32, b: u32, c: u32) -> u32 {
+    b
+}
+";
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
+    Ok(())
+}
+
+#[test]
+fn optimize_xor_pattern2() -> Result<(), String> {
+    let unoptimized = "
+pub fn main(a: u32, b: u32, c: u32) -> u32 {
+    a ^ (b ^ a)
+}
+";
+    let optimized = "
+pub fn main(a: u32, b: u32, c: u32) -> u32 {
+    b
+}
+";
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
+    Ok(())
+}
+
+#[test]
+fn optimize_xor_pattern3() -> Result<(), String> {
+    let unoptimized = "
+pub fn main(a: u32, b: u32, c: u32) -> u32 {
+    (a ^ b) ^ (a ^ c)
+}
+";
+    let optimized = "
+pub fn main(a: u32, b: u32, c: u32) -> u32 {
+    b ^ c
+}
+";
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
+    Ok(())
+}
+
+#[test]
+fn optimize_and_xor_pattern() -> Result<(), String> {
+    let unoptimized = "
+pub fn main(a: u32, b: u32, c: u32) -> [u32; 2] {
+    [a & (b ^ c), (a & b) ^ (a & c)]
+}
+";
+    let optimized = "
+pub fn main(a: u32, b: u32, c: u32) -> [u32; 2] {
+    let x = a & (b ^ c);
+    [x, x]
+}
+";
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
+    Ok(())
+}
+
+#[test]
+fn optimize_xor_and_pattern() -> Result<(), String> {
+    let unoptimized = "
+pub fn main(a: u32, b: u32, c: u32) -> [u32; 2] {
+    [(a & b) ^ (a & c), a & (b ^ c)]
+}
+";
+    let optimized = "
+pub fn main(a: u32, b: u32, c: u32) -> [u32; 2] {
+    let x = (a & b) ^ (a & c);
+    [x, x]
+}
+";
+    let unoptimized = compile(unoptimized).map_err(|e| e.prettify(unoptimized))?;
+    let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
+
+    assert_eq!(
+        unoptimized.circuit.gates.len(),
+        optimized.circuit.gates.len()
+    );
+    Ok(())
+}
+
+#[test]
 fn optimize_same_expr() -> Result<(), String> {
     let unoptimized = "
 pub fn main(b: bool, x: i32) -> bool {
