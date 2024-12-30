@@ -817,16 +817,29 @@ impl CircuitBuilder {
                                     self.gates_optimized += 1;
                                     return wire;
                                 }
-                            } else if b2 < x && !self.used.contains(&x) && !self.used.contains(&y) {
-                                self.cache.remove(&BuilderGate::And(x1, x2));
-                                self.cache.remove(&BuilderGate::And(y1, y2));
-                                self.gates[x - self.shift] = BuilderGate::Xor(a2, b2);
-                                self.gates[y - self.shift] = BuilderGate::And(a1, x);
-                                self.cache.insert(BuilderGate::Xor(a2, b2), x);
-                                self.cache.insert(BuilderGate::And(a1, x), y);
-                                self.used.insert(x);
-                                self.gates_optimized += 1;
-                                return y;
+                            }
+                        }
+                    }
+                    for (a1, a2, b1, b2) in [
+                        (x1, x2, y1, y2),
+                        (x1, x2, y2, y1),
+                        (x2, x1, y1, y2),
+                        (x2, x1, y2, y1),
+                    ] {
+                        if a1 == b1 {
+                            if !self.used.contains(&x) && !self.used.contains(&y) {
+                                let a2_xor_b2_gate = BuilderGate::Xor(a2, b2);
+                                self.gate_counter += 1;
+                                self.gates.push(a2_xor_b2_gate);
+                                let a2_xor_b2 = self.gate_counter - 1;
+                                self.cache.insert(a2_xor_b2_gate, a2_xor_b2);
+
+                                let gate = BuilderGate::And(a1, a2_xor_b2);
+                                self.gate_counter += 1;
+                                self.gates.push(gate);
+                                self.cache.insert(gate, self.gate_counter - 1);
+                                self.used.insert(a2_xor_b2);
+                                return self.gate_counter - 1;
                             }
                         }
                     }

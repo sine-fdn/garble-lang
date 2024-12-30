@@ -1834,6 +1834,33 @@ pub fn main(_a: i32, _b: i32) -> () {
 }
 
 #[test]
+fn compile_or_xor() -> Result<(), Error> {
+    let prg = "
+pub fn main(a: bool, b: bool, c: bool) -> bool {
+    (a & b) | (a & c)
+}
+";
+    let compiled = compile(&prg).map_err(|e| pretty_print(e, &prg))?;
+    for a in [true, false] {
+        for b in [true, false] {
+            for c in [true, false] {
+                let mut eval = compiled.evaluator();
+                eval.set_bool(a);
+                eval.set_bool(b);
+                eval.set_bool(c);
+                let output = eval.run().map_err(|e| pretty_print(e, &prg))?;
+                assert_eq!(
+                    bool::try_from(output).map_err(|e| pretty_print(e, &prg))?,
+                    (a & b) | (a & c),
+                    "({a} & {b}) | ({a} & {c})"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn compile_const() -> Result<(), Error> {
     let prg = "
 const MY_CONST: u16 = PARTY_0::MY_CONST;
