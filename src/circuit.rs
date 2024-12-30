@@ -1,7 +1,7 @@
 //! The [`Circuit`] representation used by the compiler.
 
 use crate::{compile::wires_as_unsigned, env::Env, token::MetaInfo};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -258,6 +258,7 @@ pub(crate) struct CircuitBuilder {
     shift: usize,
     input_gates: Vec<usize>,
     gates: Vec<BuilderGate>,
+    used: HashSet<GateIndex>,
     cache: HashMap<BuilderGate, GateIndex>,
     negated: HashMap<GateIndex, GateIndex>,
     gates_optimized: usize,
@@ -403,6 +404,7 @@ impl CircuitBuilder {
             shift: gate_counter,
             input_gates,
             gates: vec![],
+            used: HashSet::new(),
             cache: HashMap::new(),
             negated: HashMap::new(),
             gates_optimized: 0,
@@ -417,6 +419,16 @@ impl CircuitBuilder {
 
     pub fn const_sizes(&self) -> &HashMap<String, usize> {
         &self.consts
+    }
+
+    fn get_cached(&self, gate: &BuilderGate) -> Option<&usize> {
+        match self.cache.get(gate) {
+            Some(wire) => Some(wire),
+            None => match gate {
+                BuilderGate::Xor(x, y) => self.cache.get(&BuilderGate::Xor(*y, *x)),
+                BuilderGate::And(x, y) => self.cache.get(&BuilderGate::And(*y, *x)),
+            },
+        }
     }
 
     // Pruning of useless gates (gates that are not part of the output nor used by other gates):
@@ -764,7 +776,7 @@ impl CircuitBuilder {
             }
         }
         // Sub-expression sharing:
-        if let Some(&wire) = self.cache.get(&BuilderGate::Xor(x, y)) {
+        if let Some(&wire) = self.get_cached(&BuilderGate::Xor(x, y)) {
             return Some(wire);
         }
         None
@@ -798,13 +810,23 @@ impl CircuitBuilder {
                         (x2, x1, y2, y1),
                     ] {
                         if a1 == b1 {
-                            if let Some(&a2_xor_b2) = self.cache.get(&BuilderGate::Xor(a2, b2)) {
+                            if let Some(&a2_xor_b2) = self.get_cached(&BuilderGate::Xor(a2, b2)) {
                                 if let Some(&wire) =
-                                    self.cache.get(&BuilderGate::And(a1, a2_xor_b2))
+                                    self.get_cached(&BuilderGate::And(a1, a2_xor_b2))
                                 {
                                     self.gates_optimized += 1;
                                     return wire;
                                 }
+                            } else if b2 < x && !self.used.contains(&x) && !self.used.contains(&y) {
+                                self.cache.remove(&BuilderGate::And(x1, x2));
+                                self.cache.remove(&BuilderGate::And(y1, y2));
+                                self.gates[x - self.shift] = BuilderGate::Xor(a2, b2);
+                                self.gates[y - self.shift] = BuilderGate::And(a1, x);
+                                self.cache.insert(BuilderGate::Xor(a2, b2), x);
+                                self.cache.insert(BuilderGate::And(a1, x), y);
+                                self.used.insert(x);
+                                self.gates_optimized += 1;
+                                return y;
                             }
                         }
                     }
@@ -839,6 +861,8 @@ impl CircuitBuilder {
             self.gates.push(gate);
             let gate_index = self.gate_counter - 1;
             self.cache.insert(gate, gate_index);
+            self.used.insert(x);
+            self.used.insert(y);
             if x == 1 {
                 self.negated.insert(y, gate_index);
                 self.negated.insert(gate_index, y);
@@ -870,7 +894,7 @@ impl CircuitBuilder {
             }
         }
         // Sub-expression sharing:
-        if let Some(&wire) = self.cache.get(&BuilderGate::And(x, y)) {
+        if let Some(&wire) = self.get_cached(&BuilderGate::And(x, y)) {
             return Some(wire);
         }
         None
@@ -901,8 +925,8 @@ impl CircuitBuilder {
                     }
                 } else if let BuilderGate::Xor(x1, x2) = gate_x {
                     if let (Some(&x1_and_y), Some(&x2_and_y)) = (
-                        self.cache.get(&BuilderGate::And(x1, y)),
-                        self.cache.get(&BuilderGate::And(x2, y)),
+                        self.get_cached(&BuilderGate::And(x1, y)),
+                        self.get_cached(&BuilderGate::And(x2, y)),
                     ) {
                         return self.push_xor(x1_and_y, x2_and_y);
                     }
@@ -917,8 +941,8 @@ impl CircuitBuilder {
                     }
                 } else if let BuilderGate::Xor(y1, y2) = gate_y {
                     if let (Some(&x_and_y1), Some(&x_and_y2)) = (
-                        self.cache.get(&BuilderGate::And(x, y1)),
-                        self.cache.get(&BuilderGate::And(x, y2)),
+                        self.get_cached(&BuilderGate::And(x, y1)),
+                        self.get_cached(&BuilderGate::And(x, y2)),
                     ) {
                         return self.push_xor(x_and_y1, x_and_y2);
                     }
@@ -928,6 +952,8 @@ impl CircuitBuilder {
             self.gate_counter += 1;
             self.gates.push(gate);
             self.cache.insert(gate, self.gate_counter - 1);
+            self.used.insert(x);
+            self.used.insert(y);
             self.gate_counter - 1
         }
     }

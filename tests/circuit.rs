@@ -250,7 +250,7 @@ pub fn main(a: u32, b: u32, c: u32) -> [u32; 2] {
 ";
     let optimized = "
 pub fn main(a: u32, b: u32, c: u32) -> [u32; 2] {
-    let x = (a & b) ^ (a & c);
+    let x = a & (b ^ c);
     [x, x]
 }
 ";
