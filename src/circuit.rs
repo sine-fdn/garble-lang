@@ -826,21 +826,19 @@ impl CircuitBuilder {
                         (x2, x1, y1, y2),
                         (x2, x1, y2, y1),
                     ] {
-                        if a1 == b1 {
-                            if !self.used.contains(&x) && !self.used.contains(&y) {
-                                let a2_xor_b2_gate = BuilderGate::Xor(a2, b2);
-                                self.gate_counter += 1;
-                                self.gates.push(a2_xor_b2_gate);
-                                let a2_xor_b2 = self.gate_counter - 1;
-                                self.cache.insert(a2_xor_b2_gate, a2_xor_b2);
+                        if a1 == b1 && !self.used.contains(&x) && !self.used.contains(&y) {
+                            let a2_xor_b2_gate = BuilderGate::Xor(a2, b2);
+                            self.gate_counter += 1;
+                            self.gates.push(a2_xor_b2_gate);
+                            let a2_xor_b2 = self.gate_counter - 1;
+                            self.cache.insert(a2_xor_b2_gate, a2_xor_b2);
 
-                                let gate = BuilderGate::And(a1, a2_xor_b2);
-                                self.gate_counter += 1;
-                                self.gates.push(gate);
-                                self.cache.insert(gate, self.gate_counter - 1);
-                                self.used.insert(a2_xor_b2);
-                                return self.gate_counter - 1;
-                            }
+                            let gate = BuilderGate::And(a1, a2_xor_b2);
+                            self.gate_counter += 1;
+                            self.gates.push(gate);
+                            self.cache.insert(gate, self.gate_counter - 1);
+                            self.used.insert(a2_xor_b2);
+                            return self.gate_counter - 1;
                         }
                     }
                 }
