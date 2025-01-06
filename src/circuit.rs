@@ -852,6 +852,12 @@ impl CircuitBuilder {
                     } else if x2 == y {
                         self.gates_optimized += 1;
                         return x1;
+                    } else if let Some(&y_negated) = self.negated.get(&y) {
+                        if x1 == y_negated {
+                            return self.push_xor(x2, 1);
+                        } else if x2 == y_negated {
+                            return self.push_xor(x1, 1);
+                        }
                     }
                 }
             }
@@ -864,6 +870,12 @@ impl CircuitBuilder {
                     } else if x == y2 {
                         self.gates_optimized += 1;
                         return y1;
+                    } else if let Some(&x_negated) = self.negated.get(&x) {
+                        if x_negated == y1 {
+                            return self.push_xor(1, y2);
+                        } else if x_negated == y2 {
+                            return self.push_xor(1, y1);
+                        }
                     }
                 }
             }
@@ -934,6 +946,11 @@ impl CircuitBuilder {
                         self.gates_optimized += 1;
                         return x;
                     }
+                    if let Some(&y_negated) = self.negated.get(&y) {
+                        if x1 == y_negated || x2 == y_negated {
+                            return 0;
+                        }
+                    }
                 } else if let BuilderGate::Xor(x1, x2) = gate_x {
                     if let (Some(&x1_and_y), Some(&x2_and_y)) = (
                         self.get_cached(&BuilderGate::And(x1, y)),
@@ -949,6 +966,11 @@ impl CircuitBuilder {
                     if x == y1 || x == y2 {
                         self.gates_optimized += 1;
                         return y;
+                    }
+                    if let Some(&x_negated) = self.negated.get(&x) {
+                        if x_negated == y1 || x_negated == y2 {
+                            return 0;
+                        }
                     }
                 } else if let BuilderGate::Xor(y1, y2) = gate_y {
                     if let (Some(&x_and_y1), Some(&x_and_y2)) = (
