@@ -1016,10 +1016,10 @@ impl TypedExpr {
                     }
                 }
             }
-            ExprEnum::Range((from, elem_ty), (to, _)) => {
+            ExprEnum::Range(from, to, num_ty) => {
                 let size = (to - from) as usize;
                 let elem_bits =
-                    Type::Unsigned(*elem_ty).size_in_bits_for_defs(prg, circuit.const_sizes());
+                    Type::Unsigned(*num_ty).size_in_bits_for_defs(prg, circuit.const_sizes());
                 let mut array = Vec::with_capacity(elem_bits * size);
                 for i in *from..*to {
                     for b in (0..elem_bits).rev() {

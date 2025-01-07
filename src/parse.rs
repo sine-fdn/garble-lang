@@ -32,6 +32,8 @@ pub enum ParseErrorEnum {
     InvalidLiteral,
     /// Expected a const expr, but found a non-const or invalid expr.
     InvalidConstExpr,
+    /// The specified range has different min and max types.
+    InvalidRangeTypes(UnsignedNumType, UnsignedNumType),
     /// Expected a type, but found a non-type token.
     ExpectedType,
     /// Expected a statement, but found a non-statement token.
@@ -62,6 +64,9 @@ impl std::fmt::Display for ParseErrorEnum {
             ParseErrorEnum::InvalidPattern => f.write_str("Invalid pattern"),
             ParseErrorEnum::InvalidLiteral => f.write_str("Invalid literal"),
             ParseErrorEnum::InvalidConstExpr => f.write_str("Invalid const expr"),
+            ParseErrorEnum::InvalidRangeTypes(from, to) => f.write_fmt(format_args!(
+                "Start and end of range do not have the same type; {from} vs {to}"
+            )),
             ParseErrorEnum::ExpectedType => f.write_str("Expected a type"),
             ParseErrorEnum::ExpectedStmt => f.write_str("Expected a statement"),
             ParseErrorEnum::ExpectedExpr => f.write_str("Expected an expression"),
@@ -1322,10 +1327,16 @@ impl Parser {
                         let meta_end = *meta_end;
                         self.advance();
                         let meta = join_meta(meta, meta_end);
-                        Expr::untyped(
-                            ExprEnum::Range((n, n_suffix), (range_end, range_end_suffix)),
-                            meta,
-                        )
+                        let num_ty = match (n_suffix, range_end_suffix) {
+                            (UnsignedNumType::Unspecified, ty)
+                            | (ty, UnsignedNumType::Unspecified) => ty,
+                            (ty1, ty2) if ty1 == ty2 => ty1,
+                            (ty1, ty2) => {
+                                self.push_error(ParseErrorEnum::InvalidRangeTypes(ty1, ty2), meta);
+                                ty1
+                            }
+                        };
+                        Expr::untyped(ExprEnum::Range(n, range_end, num_ty), meta)
                     } else {
                         self.push_error_for_next(ParseErrorEnum::InvalidRangeExpr);
                         return Err(());

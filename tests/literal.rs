@@ -114,8 +114,8 @@ fn serde_enum_tuple() -> Result<(), String> {
 
 #[test]
 fn serde_range() -> Result<(), String> {
-    let literal = Literal::Range((2, UnsignedNumType::U8), (10, UnsignedNumType::U8));
-    let expected = "{\"Range\":[[2,\"U8\"],[10,\"U8\"]]}";
+    let literal = Literal::Range(2, 10, UnsignedNumType::U8);
+    let expected = "{\"Range\":[2,10,\"U8\"]}";
     let json = serde_json::to_string(&literal).unwrap();
     assert_eq!(json, expected);
     assert_eq!(literal, serde_json::from_str::<Literal>(&json).unwrap());

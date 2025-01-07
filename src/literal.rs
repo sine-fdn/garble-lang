@@ -45,7 +45,7 @@ pub enum Literal {
     /// Enum literal of the specified variant, possibly with fields.
     Enum(String, String, VariantLiteral),
     /// Range of numbers from the specified min (inclusive) to the specified max (exclusive).
-    Range((u64, UnsignedNumType), (u64, UnsignedNumType)),
+    Range(u64, u64, UnsignedNumType),
 }
 
 /// A variant literal (either of unit type or containing fields), used by [`Literal::Enum`].
@@ -158,8 +158,8 @@ impl Literal {
                 }
                 false
             }
-            (Literal::Range((min, min_ty), (max, _)), Type::Array(elem_ty, size)) => {
-                elem_ty.as_ref() == &Type::Unsigned(*min_ty) && max - min == *size as u64
+            (Literal::Range(min, max, num_ty), Type::Array(elem_ty, size)) => {
+                elem_ty.as_ref() == &Type::Unsigned(*num_ty) && max - min == *size as u64
             }
             _ => false,
         }
@@ -423,9 +423,9 @@ impl Literal {
                 }
                 wires
             }
-            Literal::Range((min, min_ty), (max, _)) => {
+            Literal::Range(min, max, num_ty) => {
                 let elems: Vec<usize> = (*min as usize..*max as usize).collect();
-                let elem_size = Type::Unsigned(*min_ty).size_in_bits_for_defs(checked, const_sizes);
+                let elem_size = Type::Unsigned(*num_ty).size_in_bits_for_defs(checked, const_sizes);
                 let mut bits = Vec::with_capacity(elems.len() * elem_size);
                 for elem in elems {
                     unsigned_to_bits(elem as u64, elem_size, &mut bits);
@@ -494,8 +494,8 @@ impl Display for Literal {
                     write!(f, ")")
                 }
             },
-            Literal::Range((min, min_ty), (max, max_ty)) => {
-                write!(f, "{min}{min_ty}..{max}{max_ty}")
+            Literal::Range(min, max, num_ty) => {
+                write!(f, "{min}{num_ty}..{max}{num_ty}")
             }
         }
     }
@@ -554,7 +554,7 @@ impl TypedExpr {
                 };
                 Literal::Enum(name, variant_name.clone(), variant)
             }
-            ExprEnum::Range(min, max) => Literal::Range(min, max),
+            ExprEnum::Range(min, max, num_ty) => Literal::Range(min, max, num_ty),
             _ => unreachable!("This should result in a literal parse error instead"),
         }
     }
