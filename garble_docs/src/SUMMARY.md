@@ -11,4 +11,5 @@
   - [Const Parameters](./guide/const.md)
   - [Circuits and Termination](./guide/computational_model.md)
 - [MPC Engine Integration](./integration.md)
+- [(De-)Serializing Garble Values](./serde.md)
 - [Contributing](./contributing.md)

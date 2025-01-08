@@ -360,3 +360,40 @@ a,
 #sidebar a {
     font-weight: normal;
 }
+
+.abnf,
+.abnf>* {
+    font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace !important;
+    line-height: 1.8;
+}
+
+.abnf .str {
+    display: inline;
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+    border: 1px solid #333;
+    background-color: #fff;
+    line-height: 1.8;
+}
+
+.table-wrapper {
+    overflow-x: auto;
+}
+
+table {
+    margin: 0;
+    border: none;
+}
+
+table tbody tr:nth-child(2n) {
+    background-color: unset !important;
+}
+
+table thead th {
+    text-align: left;
+    padding: 6px 6px;
+}
+
+table td {
+    padding: 6px 4px;
+}
