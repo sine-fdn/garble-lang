@@ -1,10 +1,10 @@
 # Circuits and Termination
 
-Garble programs are Boolean _circuits_ consisting of a graph of logic gates, not a sequentially executed program of instructions on a von Neumann architecture with main memory and CPU. This has deep consequences for the programming style that leads to efficient Garble programs, with programs that would be efficient in "normal" programming languages resulting in highly inefficient circuits and vice versa.
+Garble programs are Boolean _circuits_ consisting of a graph of logic gates, not sequentially executed programs of instructions on a von Neumann architecture with main memory and CPU. This has deep consequences for the programming style that leads to efficient Garble programs, with programs that would be efficient in "normal" programming languages resulting in highly inefficient circuits and vice versa.
 
 ## Copying is Free
 
-One example has already been mentioned: Copying whole arrays in Garble is essentially free, because arrays (and their elements) are just a collection of output wires from a bunch of Boolean logic gates. Duplicating these wires does not increase the complexity of the circuit, because no additional logic gates are required.
+One example has already been mentioned in the context of [arrays](./guide/data_types.md#arrays-and-ranges): Copying whole arrays in Garble is essentially free, because arrays (and their elements) are just a collection of output wires from a bunch of Boolean logic gates. Duplicating these wires does not increase the complexity of the circuit, because no additional logic gates are required.
 
 Replacing the element at a _constant_ index in an array with a new value is equally cheap, because the Garble compiler can just duplicate the output wires of all the other elements and only has to use the wires of the replacement element where previously the old element was being used. In contrast, replacing the element at a _non-constant_ index (i.e. an index that depends on a runtime value) is a much more expensive operation in a Boolean circuit than it would be on a normal computer, because the Garble compiler has to generate a nested multiplexer circuit.
 
