@@ -103,8 +103,6 @@ pub enum TypeErrorEnum {
     },
     /// The two types are incompatible, (e.g. incompatible number types in a `+` operation).
     TypeMismatch(Type, Type),
-    /// The specified range has different min and max types.
-    RangeTypeMismatch(UnsignedNumType, UnsignedNumType),
     /// The specified range has invalid min or max values.
     InvalidRange(u64, u64),
     /// The specified pattern does not match the type of the matched expression.
@@ -200,9 +198,6 @@ impl std::fmt::Display for TypeErrorEnum {
             }
             TypeErrorEnum::TypeMismatch(x, y) => f.write_fmt(format_args!(
                 "The arguments have incompatible types; {x} vs {y}"
-            )),
-            TypeErrorEnum::RangeTypeMismatch(from, to) => f.write_fmt(format_args!(
-                "Start and end of range do not have the same type; {from} vs {to}"
             )),
             TypeErrorEnum::InvalidRange(_, _) => f.write_str("Invalid range"),
             TypeErrorEnum::PatternDoesNotMatchType(ty) => {
@@ -1156,20 +1151,13 @@ impl UntypedExpr {
                 expect_bool_or_num_type(&ty, meta)?;
                 (ExprEnum::Cast(ty.clone(), Box::new(expr)), ty)
             }
-            ExprEnum::Range((from, from_suffix), (to, to_suffix)) => {
+            ExprEnum::Range(from, to, num_ty) => {
                 if from >= to || (to - from) > u32::MAX as u64 {
                     let e = TypeErrorEnum::InvalidRange(*from, *to);
                     return Err(vec![Some(TypeError(e, meta))]);
                 }
-                if from_suffix != to_suffix {
-                    let e = TypeErrorEnum::RangeTypeMismatch(*from_suffix, *to_suffix);
-                    return Err(vec![Some(TypeError(e, meta))]);
-                }
-                let ty = Type::Array(Box::new(Type::Unsigned(*from_suffix)), (to - from) as usize);
-                (
-                    ExprEnum::Range((*from, *from_suffix), (*to, *to_suffix)),
-                    ty,
-                )
+                let ty = Type::Array(Box::new(Type::Unsigned(*num_ty)), (to - from) as usize);
+                (ExprEnum::Range(*from, *to, *num_ty), ty)
             }
             ExprEnum::EnumLiteral(identifier, variant_name, variant) => {
                 if let Some(enum_def) = defs.enums.get(identifier.as_str()) {

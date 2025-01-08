@@ -1,5 +1,8 @@
 //! A subset of [`crate::ast::Expr`] that is used as input / output by an
 //! [`crate::eval::Evaluator`].
+//!
+//! See [`crate::literal::Literal`] for examples on how to (de-)serialize to/from Garble literals
+//! using `serde`.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -23,6 +26,59 @@ use crate::{
 
 /// A subset of [`crate::ast::Expr`] that is used as input / output by an
 /// [`crate::eval::Evaluator`].
+///
+/// If the `serde` crate feature is enabled, literals can be (de-)serialized to any format supported
+/// by `serde`. The following ABNF grammar shows how literals are represented when serialized using
+/// `serde_json`:
+///
+/// ```asci
+/// literal = "\"True\"" /
+///           "\"False\"" /
+///           "{\"NumUnsigned\":[" uint "," uint-ty "]}" /
+///           "{\"NumSigned\":[" int "," int-ty "]}" /
+///           "{\"ArrayRepeat\":[" literal "," uint "]}" /
+///           "{\"Array\":[" [literal *("," literal)] "]}" /
+///           "{\"Tuple\":[" [literal *("," literal)] "]}" /
+///           "{\"Enum\":[\"" string "\",\"" string "\"," variant "]}" /
+///           "{\"Range\":[" uint "," uint "," uint-type "]}"
+///
+/// uint    = 1*DIGIT
+///
+/// uint-ty = "\"Usize\"" /
+///           "\"U8\"" /
+///           "\"U16\"" /
+///           "\"U32\"" /
+///           "\"U64\"" /
+///           "\"Unspecified\""
+///
+/// int     = ["-"] uint
+///
+/// int-ty  = "\"I8\"" /
+///           "\"I16\"" /
+///           "\"I32\"" /
+///           "\"I64\"" /
+///           "\"Unspecified\""
+///
+/// string  = 1*ALPHA
+///
+/// variant = "\"Unit\"" /
+///           "{\"Tuple\":[" [literal *("," literal)] "]}"
+/// ```
+///
+/// Here are some example Garble literals and how they would be serialized as JSON:
+///
+/// | Garble Literal                   | Serialized as JSON                                       |
+/// | -------------------------------- | -------------------------------------------------------- |
+/// | `true`                           | `"True"`                                                 |
+/// | `200u32`                         | `{"NumUnsigned":[200,"U32"]}`                            |
+/// | `-200`                           | `{"NumSigned":[-200,"Unspecified"]}`                     |
+/// | `[true; 3]`                      | `{"ArrayRepeat":["True",3]}`                             |
+/// | `[true, false]`                  | `{"Array":["True","False"]}`                             |
+/// | `(true, false, 10)`              | `{"Tuple":["True","False",{"NumUnsigned":[10,"U8"]}]}`   |
+/// | `FooBar {foo: true, bar: false}` | `{"Struct":["FooBar",[["foo","True"],["bar","False"]]]}` |
+/// | `FooBar::Foo`                    | `{"Enum":["FooBar","Foo","Unit"]}`                       |
+/// | `FooBar::Bar(true, false)`       | `{"Enum":["FooBar","Bar",{"Tuple":["True","False"]}]}`   |
+/// | `2u8..10u8`                      | `{"Range":[2,10,"U8"]}`                                  |
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Literal {
@@ -45,7 +101,7 @@ pub enum Literal {
     /// Enum literal of the specified variant, possibly with fields.
     Enum(String, String, VariantLiteral),
     /// Range of numbers from the specified min (inclusive) to the specified max (exclusive).
-    Range((u64, UnsignedNumType), (u64, UnsignedNumType)),
+    Range(u64, u64, UnsignedNumType),
 }
 
 /// A variant literal (either of unit type or containing fields), used by [`Literal::Enum`].
@@ -158,8 +214,8 @@ impl Literal {
                 }
                 false
             }
-            (Literal::Range((min, min_ty), (max, _)), Type::Array(elem_ty, size)) => {
-                elem_ty.as_ref() == &Type::Unsigned(*min_ty) && max - min == *size as u64
+            (Literal::Range(min, max, num_ty), Type::Array(elem_ty, size)) => {
+                elem_ty.as_ref() == &Type::Unsigned(*num_ty) && max - min == *size as u64
             }
             _ => false,
         }
@@ -423,9 +479,9 @@ impl Literal {
                 }
                 wires
             }
-            Literal::Range((min, min_ty), (max, _)) => {
+            Literal::Range(min, max, num_ty) => {
                 let elems: Vec<usize> = (*min as usize..*max as usize).collect();
-                let elem_size = Type::Unsigned(*min_ty).size_in_bits_for_defs(checked, const_sizes);
+                let elem_size = Type::Unsigned(*num_ty).size_in_bits_for_defs(checked, const_sizes);
                 let mut bits = Vec::with_capacity(elems.len() * elem_size);
                 for elem in elems {
                     unsigned_to_bits(elem as u64, elem_size, &mut bits);
@@ -494,8 +550,8 @@ impl Display for Literal {
                     write!(f, ")")
                 }
             },
-            Literal::Range((min, min_ty), (max, max_ty)) => {
-                write!(f, "{min}{min_ty}..{max}{max_ty}")
+            Literal::Range(min, max, num_ty) => {
+                write!(f, "{min}{num_ty}..{max}{num_ty}")
             }
         }
     }
@@ -554,7 +610,7 @@ impl TypedExpr {
                 };
                 Literal::Enum(name, variant_name.clone(), variant)
             }
-            ExprEnum::Range(min, max) => Literal::Range(min, max),
+            ExprEnum::Range(min, max, num_ty) => Literal::Range(min, max, num_ty),
             _ => unreachable!("This should result in a literal parse error instead"),
         }
     }

@@ -365,7 +365,7 @@ pub enum ExprEnum<T> {
     /// Explicit cast of an expression to the specified type.
     Cast(Type, Box<Expr<T>>),
     /// Range of numbers from the specified min (inclusive) to the specified max (exclusive).
-    Range((u64, UnsignedNumType), (u64, UnsignedNumType)),
+    Range(u64, u64, UnsignedNumType),
 }
 
 /// The different kinds of variant literals.
