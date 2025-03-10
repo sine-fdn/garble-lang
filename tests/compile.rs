@@ -1321,8 +1321,8 @@ pub fn main(i: usize) -> i32 {
 #[test]
 fn compile_main_with_array_io() -> Result<(), Error> {
     let prg = "
-pub fn main(nums: [u8; 5]) -> [u8; 5] {
-    let mut sum = 0u16;
+pub fn main(nums: [u8; 5], init: u16) -> [u8; 5] {
+    let mut sum = init;
     for n in nums {
         sum = sum + n as u16;
     }
@@ -1338,6 +1338,7 @@ pub fn main(nums: [u8; 5]) -> [u8; 5] {
     let mut eval = compiled.evaluator();
     let input = compiled.parse_arg(0, "[1, 2, 3, 4, 5]")?;
     eval.set_literal(input.as_literal())?;
+    eval.set_u16(0);
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     let r = output.into_literal().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(r.to_string(), "[15, 15, 15, 15, 15]");
@@ -2009,7 +2010,7 @@ pub fn main(x: u16) -> u16 {
 fn compile_const_size_in_fn_param() -> Result<(), Error> {
     let prg = "
 const MY_CONST: usize = max(PARTY_0::MY_CONST, PARTY_1::MY_CONST);
-pub fn main(array: [u16; MY_CONST]) -> u16 {
+pub fn main(array: [u16; MY_CONST], _: u8) -> u16 {
     array[1]
 }
 ";
@@ -2032,6 +2033,7 @@ pub fn main(array: [u16; MY_CONST]) -> u16 {
     let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
     let mut eval = compiled.evaluator();
     eval.parse_literal("[7, 8]").unwrap();
+    eval.set_u8(0);
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(u16::try_from(output).map_err(|e| pretty_print(e, prg))?, 8);
     Ok(())
@@ -2041,7 +2043,7 @@ pub fn main(array: [u16; MY_CONST]) -> u16 {
 fn compile_const_size_for_each_loop() -> Result<(), Error> {
     let prg = "
 const MY_CONST: usize = max(PARTY_0::MY_CONST, PARTY_1::MY_CONST);
-pub fn main(array: [u16; MY_CONST]) -> u16 {
+pub fn main(array: [u16; MY_CONST], _: u8) -> u16 {
     let mut result = 0u16;
     for elem in array {
         result = result + elem;
@@ -2068,6 +2070,7 @@ pub fn main(array: [u16; MY_CONST]) -> u16 {
     let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
     let mut eval = compiled.evaluator();
     eval.parse_literal("[7, 8]").unwrap();
+    eval.set_u8(0);
     let output = eval.run().map_err(|e| pretty_print(e, prg))?;
     assert_eq!(u16::try_from(output).map_err(|e| pretty_print(e, prg))?, 15);
     Ok(())
@@ -2343,5 +2346,70 @@ pub fn main(_x: i32) -> i32 {
             2 + 4 + 6 + 8,
         );
     }
+    Ok(())
+}
+
+#[test]
+fn compile_single_array_as_multiple_parties() -> Result<(), Error> {
+    let prg = "
+pub fn main(parties: [u32; 4]) -> u32 {
+  let mut result = 0u32;
+  for p in parties {
+    result += p
+  }
+  result
+}";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u32(2);
+    eval.set_u32(4);
+    eval.set_u32(6);
+    eval.set_u32(8);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u32::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        2 + 4 + 6 + 8,
+    );
+    Ok(())
+}
+
+#[test]
+fn compile_single_array_with_const_size_as_multiple_parties() -> Result<(), Error> {
+    let prg = "
+const MY_CONST: usize = max(PARTY_0::MY_CONST, PARTY_1::MY_CONST);
+pub fn main(array: [u16; MY_CONST]) -> u16 {
+    let mut result = 0u16;
+    for elem in array {
+        result = result + elem;
+    }
+    result
+}
+";
+    let consts = HashMap::from_iter(vec![
+        (
+            "PARTY_0".to_string(),
+            HashMap::from_iter(vec![(
+                "MY_CONST".to_string(),
+                Literal::NumUnsigned(1, UnsignedNumType::Usize),
+            )]),
+        ),
+        (
+            "PARTY_1".to_string(),
+            HashMap::from_iter(vec![(
+                "MY_CONST".to_string(),
+                Literal::NumUnsigned(3, UnsignedNumType::Usize),
+            )]),
+        ),
+    ]);
+    let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u16(2);
+    eval.set_u16(4);
+    eval.set_u16(6);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        2 + 4 + 6
+    );
     Ok(())
 }
