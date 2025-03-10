@@ -430,7 +430,7 @@ pub fn main(x: i16, y: i16) -> bool {
     for x in -10..10 {
         for y in -10..10 {
             let mut eval = compiled.evaluator();
-            let expected = (x > y) && (y < x);
+            let expected = x > y;
             eval.set_i16(x);
             eval.set_i16(y);
             let output = eval.run().map_err(|e| pretty_print(e, prg))?;
@@ -1840,7 +1840,7 @@ pub fn main(a: bool, b: bool, c: bool) -> bool {
     (a & b) | (a & c)
 }
 ";
-    let compiled = compile(&prg).map_err(|e| pretty_print(e, &prg))?;
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
     for a in [true, false] {
         for b in [true, false] {
             for c in [true, false] {
@@ -1848,9 +1848,9 @@ pub fn main(a: bool, b: bool, c: bool) -> bool {
                 eval.set_bool(a);
                 eval.set_bool(b);
                 eval.set_bool(c);
-                let output = eval.run().map_err(|e| pretty_print(e, &prg))?;
+                let output = eval.run().map_err(|e| pretty_print(e, prg))?;
                 assert_eq!(
-                    bool::try_from(output).map_err(|e| pretty_print(e, &prg))?,
+                    bool::try_from(output).map_err(|e| pretty_print(e, prg))?,
                     (a & b) | (a & c),
                     "({a} & {b}) | ({a} & {c})"
                 );

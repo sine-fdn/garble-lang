@@ -1241,7 +1241,7 @@ impl CircuitBuilder {
 fn unsigned_as_usize_bits(n: u64) -> [usize; USIZE_BITS] {
     let mut bits = [0; USIZE_BITS];
     for (i, bit) in bits.iter_mut().enumerate().take(USIZE_BITS) {
-        *bit = (n >> (USIZE_BITS - 1 - i) & 1) as usize;
+        *bit = ((n >> (USIZE_BITS - 1 - i)) & 1) as usize;
     }
     bits
 }
