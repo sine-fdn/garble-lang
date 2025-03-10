@@ -1386,13 +1386,13 @@ pub(crate) fn enum_max_size(
 
 pub(crate) fn unsigned_to_bits(n: u64, size: usize, bits: &mut Vec<bool>) {
     for i in 0..size {
-        bits.push((n >> (size - 1 - i) & 1) == 1);
+        bits.push(((n >> (size - 1 - i)) & 1) == 1);
     }
 }
 
 pub(crate) fn signed_to_bits(n: i64, size: usize, bits: &mut Vec<bool>) {
     for i in 0..size {
-        bits.push((n >> (size - 1 - i) & 1) == 1);
+        bits.push(((n >> (size - 1 - i)) & 1) == 1);
     }
 }
 
