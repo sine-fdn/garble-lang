@@ -342,6 +342,10 @@ code * {
     font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace !important;
 }
 
+:not(pre):not(a)>code.hljs {
+    color: #ccc;
+}
+
 p {
     line-height: 1.6em !important;
     margin-block-start: 1.6em;
@@ -372,7 +376,7 @@ a,
     padding: 0.1em 0.3em;
     border-radius: 3px;
     border: 1px solid #333;
-    background-color: #fff;
+    background-color: #666;
     line-height: 1.8;
 }
 
