@@ -2350,7 +2350,26 @@ pub fn main(_x: i32) -> i32 {
 }
 
 #[test]
-fn compile_single_array_as_multiple_parties() -> Result<(), Error> {
+fn compile_single_array_as_3_parties() -> Result<(), Error> {
+    let prg = "
+pub fn main(parties: [u32; 3]) -> u32 {
+  parties[0] + parties[1] + parties[2]
+}";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u32(2);
+    eval.set_u32(4);
+    eval.set_u32(6);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u32::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        2 + 4 + 6,
+    );
+    Ok(())
+}
+
+#[test]
+fn compile_single_array_as_4_parties() -> Result<(), Error> {
     let prg = "
 pub fn main(parties: [u32; 4]) -> u32 {
   let mut result = 0u32;
@@ -2376,8 +2395,8 @@ pub fn main(parties: [u32; 4]) -> u32 {
 #[test]
 fn compile_single_array_with_const_size_as_multiple_parties() -> Result<(), Error> {
     let prg = "
-const MY_CONST: usize = max(PARTY_0::MY_CONST, PARTY_1::MY_CONST);
-pub fn main(array: [u16; MY_CONST]) -> u16 {
+const PARTIES: usize = PARTIES::TOTAL;
+pub fn main(array: [u16; PARTIES]) -> u16 {
     let mut result = 0u16;
     for elem in array {
         result = result + elem;
@@ -2385,22 +2404,13 @@ pub fn main(array: [u16; MY_CONST]) -> u16 {
     result
 }
 ";
-    let consts = HashMap::from_iter(vec![
-        (
-            "PARTY_0".to_string(),
-            HashMap::from_iter(vec![(
-                "MY_CONST".to_string(),
-                Literal::NumUnsigned(1, UnsignedNumType::Usize),
-            )]),
-        ),
-        (
-            "PARTY_1".to_string(),
-            HashMap::from_iter(vec![(
-                "MY_CONST".to_string(),
-                Literal::NumUnsigned(3, UnsignedNumType::Usize),
-            )]),
-        ),
-    ]);
+    let consts = HashMap::from_iter(vec![(
+        "PARTIES".to_string(),
+        HashMap::from_iter(vec![(
+            "TOTAL".to_string(),
+            Literal::NumUnsigned(3, UnsignedNumType::Usize),
+        )]),
+    )]);
     let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
     let mut eval = compiled.evaluator();
     eval.set_u16(2);
