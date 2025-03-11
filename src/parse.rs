@@ -390,11 +390,17 @@ impl Parser {
             if self.next_matches(&TokenEnum::KeywordMut).is_some() {
                 // let mut <identifier> = <binding>;
                 let (identifier, _) = self.expect_identifier()?;
+                let ty = if self.next_matches(&TokenEnum::Colon).is_some() {
+                    let (ty, _) = self.parse_type()?;
+                    Some(ty)
+                } else {
+                    None
+                };
                 self.expect(&TokenEnum::Eq)?;
                 if let Ok(binding) = self.parse_expr() {
                     let meta = join_meta(meta, binding.meta);
                     self.expect(&TokenEnum::Semicolon)?;
-                    return Ok(Stmt::new(StmtEnum::LetMut(identifier, binding), meta));
+                    return Ok(Stmt::new(StmtEnum::LetMut(identifier, ty, binding), meta));
                 } else {
                     self.push_error_for_next(ParseErrorEnum::ExpectedStmt);
                     self.consume_until_one_of(&[TokenEnum::Semicolon]);
@@ -405,11 +411,17 @@ impl Parser {
             } else {
                 // let <pattern> = <binding>;
                 let pattern = self.parse_pattern()?;
+                let ty = if self.next_matches(&TokenEnum::Colon).is_some() {
+                    let (ty, _) = self.parse_type()?;
+                    Some(ty)
+                } else {
+                    None
+                };
                 self.expect(&TokenEnum::Eq)?;
                 if let Ok(binding) = self.parse_expr() {
                     let meta = join_meta(meta, binding.meta);
                     self.expect(&TokenEnum::Semicolon)?;
-                    return Ok(Stmt::new(StmtEnum::Let(pattern, binding), meta));
+                    return Ok(Stmt::new(StmtEnum::Let(pattern, ty, binding), meta));
                 } else {
                     self.consume_until_one_of(&[TokenEnum::Semicolon]);
                     self.expect(&TokenEnum::Semicolon)?;
