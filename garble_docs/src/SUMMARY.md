@@ -3,7 +3,7 @@
 - [What is Garble?](./landing.md)
 - [A Guide to Garble](./guide/intro.md)
   - [Installation](./guide/installation.md)
-  - [Functions](./guide/basics.md)
+  - [Functions](./guide/functions.md)
   - [Variables and Mutability](./guide/variables.md)
   - [Data Types](./guide/data_types.md)
   - [If/Else and Pattern Matching](./guide/control_flow.md)

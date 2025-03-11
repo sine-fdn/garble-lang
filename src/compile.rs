@@ -239,15 +239,40 @@ impl TypedProgram {
         let Some(fn_def) = self.fn_defs.get(fn_name) else {
             return Err(vec![CompilerError::FnNotFound(fn_name.to_string())]);
         };
-        for param in fn_def.params.iter() {
-            let type_size = param.ty.size_in_bits_for_defs(self, &const_sizes);
-            let mut wires = Vec::with_capacity(type_size);
-            for _ in 0..type_size {
-                wires.push(wire);
-                wire += 1;
+        let single_array_as_multiple_parties = if fn_def.params.len() == 1 {
+            let param = &fn_def.params[0];
+            match &param.ty {
+                Type::Array(elem_ty, size) => Some((param, elem_ty, size)),
+                Type::ArrayConst(elem_ty, size) => {
+                    Some((param, elem_ty, const_sizes.get(size).unwrap()))
+                }
+                _ => None,
             }
-            input_gates.push(type_size);
+        } else {
+            None
+        };
+        if let Some((param, elem_ty, size)) = single_array_as_multiple_parties {
+            let mut wires = vec![];
+            for _ in 0..*size {
+                let type_size = elem_ty.size_in_bits_for_defs(self, &const_sizes);
+                for _ in 0..type_size {
+                    wires.push(wire);
+                    wire += 1;
+                }
+                input_gates.push(type_size);
+            }
             env.let_in_current_scope(param.name.clone(), wires);
+        } else {
+            for param in fn_def.params.iter() {
+                let type_size = param.ty.size_in_bits_for_defs(self, &const_sizes);
+                let mut wires = Vec::with_capacity(type_size);
+                for _ in 0..type_size {
+                    wires.push(wire);
+                    wire += 1;
+                }
+                input_gates.push(type_size);
+                env.let_in_current_scope(param.name.clone(), wires);
+            }
         }
         let mut circuit = CircuitBuilder::new(input_gates, const_sizes.clone());
         for (const_name, const_def) in self.const_defs.iter() {

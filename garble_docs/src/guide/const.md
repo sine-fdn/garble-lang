@@ -15,6 +15,8 @@ pub fn main(x: u16) -> u16 {
 }
 ```
 
+## Min & Max
+
 Garble also supports taking the `min()` / `max()` of several constants as part of the declaration of a constant, which, for instance, can be useful to set the size of a collection to the size of the biggest collection provided by different parties:
 
 ```rust
@@ -36,5 +38,25 @@ pub fn main(x: u16) -> u16 {
 ```
 
 > Garble currently does not support type inference in const declarations, which is why you always have to use type suffixes even for simple number literals, e.g. use `2u16` instead of `2`.
+
+## A Dynamic Number of Parties
+
+Using `const` declarations is especially useful for writing Garble programs that work for any number of parties. Simply use a single array as the argument of the main function, Garble will then assume that each array element is provided by a different party:
+
+```rust
+const PARTIES: usize = PARTIES::TOTAL;
+
+pub fn main(array: [u16; PARTIES]) -> u16 {
+    let mut result = 0u16;
+    for elem in array {
+        result = result + elem;
+    }
+    result
+}
+```
+
+The above program can be type checked without specifying the exact number of parties, but all parties need to agree on the number of parties during compilation (if each party is compiling the program locally), otherwise the same program (but with different `PARTIES::TOTAL` constants) would be compiled into incompatible circuits.
+
+## Compiling Consts
 
 Garble programs can be type checked without providing concrete values for the declared constants, but all const values must be provided during compilation, using [`garble_lang::compile_with_constants`](https://docs.rs/garble_lang/latest/garble_lang/fn.compile_with_constants.html). See [MPC Engine Integration](../integration.md) for more details.

@@ -22,4 +22,4 @@ pub fn main(a: u64, b: u64) -> Richest {
 }
 ```
 
-Garble is developed by the [SINE Foundation](https://sine.foundation/) and is [open source](https://github.com/sine-fdn/garble-lang). We developed Garble for our own MPC engine, but you can use Garble in any [MPC engine](./integration.md) that executes Boolean circuits.
+Garble is developed by the [SINE Foundation](https://sine.foundation/) and is [open source](https://github.com/sine-fdn/garble-lang). Garble is integrated into [Polytune](https://github.com/sine-fdn/polytune), our own MPC engine, but you can use Garble in [any MPC engine](./integration.md) that executes Boolean circuits.
