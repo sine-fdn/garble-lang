@@ -269,9 +269,9 @@ impl<T> Stmt<T> {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum StmtEnum<T> {
     /// Let expression, binds variables to exprs.
-    Let(Pattern<T>, Expr<T>),
+    Let(Pattern<T>, Option<Type>, Expr<T>),
     /// Mutable let expression, bind a single variable to an expr.
-    LetMut(String, Expr<T>),
+    LetMut(String, Option<Type>, Expr<T>),
     /// Assignment of a (previously as mutable declared) variable.
     VarAssign(String, Expr<T>),
     /// Assignment of an index in a (mutable) array.

@@ -374,13 +374,13 @@ impl TypedStmt {
         circuit: &mut CircuitBuilder,
     ) -> Vec<GateIndex> {
         match &self.inner {
-            StmtEnum::Let(pattern, binding) => {
+            StmtEnum::Let(pattern, _, binding) => {
                 let binding = binding.compile(prg, env, circuit);
                 pattern.compile(&binding, prg, env, circuit);
                 vec![]
             }
             StmtEnum::Expr(expr) => expr.compile(prg, env, circuit),
-            StmtEnum::LetMut(identifier, binding) => {
+            StmtEnum::LetMut(identifier, _, binding) => {
                 let binding = binding.compile(prg, env, circuit);
                 env.let_in_current_scope(identifier.clone(), binding);
                 vec![]
