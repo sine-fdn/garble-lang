@@ -5,8 +5,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::{
-        self, ConstDef, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, Mutability, Op,
-        ParamDef, Pattern, PatternEnum, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant,
+        self, Accessor, ConstDef, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, Mutability,
+        Op, ParamDef, Pattern, PatternEnum, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant,
         VariantExprEnum,
     },
     env::Env,
@@ -682,43 +682,32 @@ impl UntypedStmt {
                 let expr = expr.type_check(top_level_defs, env, fns, defs)?;
                 Ok(Stmt::new(StmtEnum::Expr(expr), meta))
             }
-            ast::StmtEnum::VarAssign(identifier, value) => {
+            ast::StmtEnum::VarAssign(identifier, accessors, value) => {
                 match env.get(identifier) {
-                    Some((Some(ty), Mutability::Mutable)) => {
-                        let mut value = value.type_check(top_level_defs, env, fns, defs)?;
-                        check_type(&mut value, &ty)?;
-                        Ok(Stmt::new(
-                            StmtEnum::VarAssign(identifier.clone(), value),
-                            meta,
-                        ))
-                    }
-                    Some((None, Mutability::Mutable)) => {
-                        // binding does not have a type, must have been caused by a previous error, so
-                        // just ignore the statement here
-                        Err(vec![None])
-                    }
-                    Some((_, Mutability::Immutable)) => Err(vec![Some(TypeError(
-                        TypeErrorEnum::IdentifierNotDeclaredAsMutable(identifier.clone()),
-                        meta,
-                    ))]),
-                    None => Err(vec![Some(TypeError(
-                        TypeErrorEnum::UnknownIdentifier(identifier.clone()),
-                        meta,
-                    ))]),
-                }
-            }
-            ast::StmtEnum::ArrayAssign(identifier, index, value) => {
-                match env.get(identifier) {
-                    Some((Some(array_ty), Mutability::Mutable)) => {
-                        let elem_ty = expect_array_type(&array_ty, meta)?;
+                    Some((Some(mut elem_ty), Mutability::Mutable)) => {
+                        let mut typed_accessors = vec![];
+                        for access in accessors {
+                            let typed = match access {
+                                Accessor::ArrayAccess { index, .. } => {
+                                    let array_ty = elem_ty.clone();
+                                    elem_ty = expect_array_type(&elem_ty, meta)?;
 
-                        let mut index = index.type_check(top_level_defs, env, fns, defs)?;
-                        check_or_constrain_unsigned(&mut index, UnsignedNumType::Usize)?;
-
+                                    let mut index =
+                                        index.type_check(top_level_defs, env, fns, defs)?;
+                                    check_or_constrain_unsigned(
+                                        &mut index,
+                                        UnsignedNumType::Usize,
+                                    )?;
+                                    println!("Accessor for {array_ty} with {index:?}");
+                                    Accessor::ArrayAccess { array_ty, index }
+                                }
+                            };
+                            typed_accessors.push(typed);
+                        }
                         let mut value = value.type_check(top_level_defs, env, fns, defs)?;
                         check_type(&mut value, &elem_ty)?;
                         Ok(Stmt::new(
-                            StmtEnum::ArrayAssign(identifier.clone(), index, value),
+                            StmtEnum::VarAssign(identifier.clone(), typed_accessors, value),
                             meta,
                         ))
                     }

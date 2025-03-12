@@ -273,15 +273,26 @@ pub enum StmtEnum<T> {
     /// Mutable let expression, bind a single variable to an expr.
     LetMut(String, Option<Type>, Expr<T>),
     /// Assignment of a (previously as mutable declared) variable.
-    VarAssign(String, Expr<T>),
-    /// Assignment of an index in a (mutable) array.
-    ArrayAssign(String, Expr<T>, Expr<T>),
+    VarAssign(String, Vec<Accessor<T>>, Expr<T>),
     /// Binds an identifier to each value of an array expr, evaluating the body.
     ForEachLoop(Pattern<T>, Expr<T>, Vec<Stmt<T>>),
     /// Binds an identifier to each joined row of two tables, evaluating the body.
     JoinLoop(Pattern<T>, T, (Expr<T>, Expr<T>), Vec<Stmt<T>>),
     /// An expression (all expressions are statements, but not all statements expressions).
     Expr(Expr<T>),
+}
+
+/// The different ways a mutable variable can be accessed before assignment.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Accessor<T> {
+    /// Accessing an array by index to assing to it, e.g. `array[0] = x;`.
+    ArrayAccess {
+        /// The type of the array being accessed by the index.
+        array_ty: T,
+        /// The expression that indexes the array.
+        index: Expr<T>,
+    },
 }
 
 /// An expression and its location in the source code.

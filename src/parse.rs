@@ -4,8 +4,9 @@ use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        ConstDef, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef, Pattern,
-        PatternEnum, Program, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant, VariantExprEnum,
+        Accessor, ConstDef, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef,
+        Pattern, PatternEnum, Program, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant,
+        VariantExprEnum,
     },
     scan::Tokens,
     token::{MetaInfo, SignedNumType, Token, TokenEnum, UnsignedNumType},
@@ -455,7 +456,7 @@ impl Parser {
                     if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
                         self.expect(&TokenEnum::Semicolon)?;
                     }
-                    Stmt::new(StmtEnum::VarAssign(identifier, value), meta)
+                    Stmt::new(StmtEnum::VarAssign(identifier, vec![], value), meta)
                 } else if let Some(Token(next, _)) = self.tokens.peek() {
                     let op = match next {
                         TokenEnum::AddAssign => Some(Op::Add),
@@ -489,7 +490,7 @@ impl Parser {
                             ),
                             meta,
                         );
-                        Stmt::new(StmtEnum::VarAssign(identifier, binary_op), meta)
+                        Stmt::new(StmtEnum::VarAssign(identifier, vec![], binary_op), meta)
                     } else {
                         let expr = Expr::untyped(ExprEnum::Identifier(identifier), meta);
                         if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
@@ -514,7 +515,14 @@ impl Parser {
                         self.expect(&TokenEnum::Semicolon)?;
                     }
                     Stmt::new(
-                        StmtEnum::ArrayAssign(identifier.clone(), *index, value),
+                        StmtEnum::VarAssign(
+                            identifier.clone(),
+                            vec![Accessor::ArrayAccess {
+                                array_ty: (),
+                                index: *index,
+                            }],
+                            value,
+                        ),
                         meta,
                     )
                 } else {
