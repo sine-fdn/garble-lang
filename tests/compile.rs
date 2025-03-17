@@ -2425,7 +2425,7 @@ pub fn main(array: [u16; PARTIES]) -> u16 {
 }
 
 #[test]
-fn type_declaration_in_let() -> Result<(), Error> {
+fn compile_type_declaration_in_let() -> Result<(), Error> {
     let prg = "
 pub fn main(a: u16, b: u16) -> u16 {
     let c: u16 = 6;
@@ -2445,7 +2445,7 @@ pub fn main(a: u16, b: u16) -> u16 {
 }
 
 #[test]
-fn type_declaration_in_let_mut() -> Result<(), Error> {
+fn compile_type_declaration_in_let_mut() -> Result<(), Error> {
     let prg = "
 pub fn main(a: u16, b: u16) -> u16 {
     let mut result: u16 = 6;
@@ -2466,12 +2466,12 @@ pub fn main(a: u16, b: u16) -> u16 {
 }
 
 #[test]
-fn type_declaration_of_array_in_let_mut() -> Result<(), Error> {
+fn compile_array_assign_via_index() -> Result<(), Error> {
     let prg = "
 pub fn main(a: u16, b: u16) -> u16 {
     let mut result: [u16; 2] = [3, 3];
-    result[0] = result[0] + a;
-    result[1] = result[1] + b;
+    result[0] += a;
+    result[1] += b;
     result[0] + result[1]
 }
 ";

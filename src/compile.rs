@@ -7,8 +7,8 @@ use std::{
 
 use crate::{
     ast::{
-        ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, Op, Pattern, PatternEnum, StmtEnum,
-        StructDef, Type, UnaryOp, VariantExprEnum,
+        Accessor, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, Op, Pattern, PatternEnum,
+        StmtEnum, StructDef, Type, UnaryOp, VariantExprEnum,
     },
     circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, USIZE_BITS},
     env::Env,
@@ -385,58 +385,126 @@ impl TypedStmt {
                 env.let_in_current_scope(identifier.clone(), binding);
                 vec![]
             }
-            StmtEnum::VarAssign(identifier, value) => {
-                let value = value.compile(prg, env, circuit);
-                env.assign_mut(identifier.clone(), value);
-                vec![]
-            }
-            StmtEnum::ArrayAssign(identifier, index, value) => {
-                let elem_bits = value.ty.size_in_bits_for_defs(prg, circuit.const_sizes());
+            StmtEnum::VarAssign(identifier, accessors, value) => {
                 let mut array = env.get(identifier).unwrap();
-                let size = array.len() / elem_bits;
-                let mut index = index.compile(prg, env, circuit);
-                let value = value.compile(prg, env, circuit);
-                let index_bits = Type::Unsigned(UnsignedNumType::Usize)
-                    .size_in_bits_for_defs(prg, circuit.const_sizes());
-                extend_to_bits(
-                    &mut index,
-                    &Type::Unsigned(UnsignedNumType::Usize),
-                    index_bits,
-                );
-
-                let mut index_negated = vec![0; index.len()];
-                for (i, index) in index.iter().copied().enumerate() {
-                    index_negated[i] = circuit.push_not(index);
-                }
-                // for each array element...
-                for i in 0..size {
-                    // ...and each bit of that array element...
-                    for b in 0..elem_bits {
-                        // ...use a index-length chain of mux, select the value if index == i
-                        let mut x1 = value[b];
-                        for s in 0..index.len() {
-                            let s_must_be_negated = ((i >> (index.len() - s - 1)) & 1) > 0;
-                            let s = if s_must_be_negated {
-                                index_negated[s]
-                            } else {
-                                index[s]
+                let mut accessed = vec![];
+                for access in accessors {
+                    match access {
+                        Accessor::ArrayAccess { array_ty, index } => {
+                            let array_before_access = array.clone();
+                            let (elem_ty, num_elems) = match &array_ty {
+                                Type::Array(elem_ty, size) => (elem_ty, *size),
+                                Type::ArrayConst(elem_ty, size) => {
+                                    (elem_ty, *circuit.const_sizes().get(size).unwrap())
+                                }
+                                ty => {
+                                    panic!("Found a non-array value in an array access expr: {ty}")
+                                }
                             };
-                            // x0 is selected by the mux-chain whenever a single bit of index != i
-                            let x0 = array[i * elem_bits + b];
-                            // x1 is value[b] only if index == i in all bits
-                            x1 = circuit.push_mux(s, x0, x1);
+                            let elem_bits =
+                                elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes());
+                            let mut index = index.compile(prg, env, circuit);
+                            let index_bits = Type::Unsigned(UnsignedNumType::Usize)
+                                .size_in_bits_for_defs(prg, circuit.const_sizes());
+                            extend_to_bits(
+                                &mut index,
+                                &Type::Unsigned(UnsignedNumType::Usize),
+                                index_bits,
+                            );
+                            let out_of_bounds_elem = 1;
+                            for mux_layer in (0..index.len()).rev() {
+                                let mut muxed_array = Vec::new();
+                                let s = index[mux_layer];
+                                let mut i = 0;
+                                while i < array.len() {
+                                    for _ in 0..elem_bits {
+                                        if i + elem_bits < array.len() {
+                                            let a0 = array[i];
+                                            let a1 = array[i + elem_bits];
+                                            muxed_array.push(circuit.push_mux(s, a1, a0));
+                                        } else if i < array.len() {
+                                            let a0 = array[i];
+                                            muxed_array.push(circuit.push_mux(
+                                                s,
+                                                out_of_bounds_elem,
+                                                a0,
+                                            ));
+                                        }
+                                        i += 1;
+                                    }
+                                    i += elem_bits;
+                                }
+                                array = muxed_array;
+                            }
+                            let mut array_len = Vec::with_capacity(index_bits);
+                            unsigned_to_bits(num_elems as u64, index_bits, &mut array_len);
+                            let array_len: Vec<usize> =
+                                array_len.into_iter().map(|b| b as usize).collect();
+                            let (index_less_than_array_len, _) = circuit.push_comparator_circuit(
+                                index_bits, &index, false, &array_len, false,
+                            );
+                            let out_of_bounds = circuit.push_not(index_less_than_array_len);
+                            circuit.push_panic_if(
+                                out_of_bounds,
+                                PanicReason::OutOfBounds,
+                                self.meta,
+                            );
+                            if array.is_empty() {
+                                // accessing a 0-size array will result in a panic, but we still need to return
+                                // an element of a valid size (even though it will not be used)
+                                array = vec![0; elem_bits]
+                            }
+                            accessed.push((array_before_access, elem_ty, index));
                         }
-                        array[i * elem_bits + b] = x1;
                     }
                 }
-                let mut array_len = Vec::with_capacity(index_bits);
-                unsigned_to_bits(size as u64, index_bits, &mut array_len);
-                let array_len: Vec<usize> = array_len.into_iter().map(|b| b as usize).collect();
-                let (index_less_than_array_len, _) =
-                    circuit.push_comparator_circuit(index_bits, &index, false, &array_len, false);
-                let out_of_bounds = circuit.push_not(index_less_than_array_len);
-                circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, self.meta);
-                env.assign_mut(identifier.clone(), array);
+                let mut value = value.compile(prg, env, circuit);
+                for (mut array, elem_ty, mut index) in accessed.into_iter().rev() {
+                    let elem_bits = elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes());
+                    let size = array.len() / elem_bits;
+                    let index_bits = Type::Unsigned(UnsignedNumType::Usize)
+                        .size_in_bits_for_defs(prg, circuit.const_sizes());
+                    extend_to_bits(
+                        &mut index,
+                        &Type::Unsigned(UnsignedNumType::Usize),
+                        index_bits,
+                    );
+
+                    let mut index_negated = vec![0; index.len()];
+                    for (i, index) in index.iter().copied().enumerate() {
+                        index_negated[i] = circuit.push_not(index);
+                    }
+                    // for each array element...
+                    for i in 0..size {
+                        // ...and each bit of that array element...
+                        for b in 0..elem_bits {
+                            // ...use a index-length chain of mux, select the value if index == i
+                            let mut x1 = value[b];
+                            for s in 0..index.len() {
+                                let s_must_be_negated = ((i >> (index.len() - s - 1)) & 1) > 0;
+                                let s = if s_must_be_negated {
+                                    index_negated[s]
+                                } else {
+                                    index[s]
+                                };
+                                // x0 is selected by the mux-chain whenever a single bit of index != i
+                                let x0 = array[i * elem_bits + b];
+                                // x1 is value[b] only if index == i in all bits
+                                x1 = circuit.push_mux(s, x0, x1);
+                            }
+                            array[i * elem_bits + b] = x1;
+                        }
+                    }
+                    let mut array_len = Vec::with_capacity(index_bits);
+                    unsigned_to_bits(size as u64, index_bits, &mut array_len);
+                    let array_len: Vec<usize> = array_len.into_iter().map(|b| b as usize).collect();
+                    let (index_less_than_array_len, _) = circuit
+                        .push_comparator_circuit(index_bits, &index, false, &array_len, false);
+                    let out_of_bounds = circuit.push_not(index_less_than_array_len);
+                    circuit.push_panic_if(out_of_bounds, PanicReason::OutOfBounds, self.meta);
+                    value = array;
+                }
+                env.assign_mut(identifier.clone(), value);
                 vec![]
             }
             StmtEnum::ForEachLoop(pattern, array, body) => {
