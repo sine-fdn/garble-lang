@@ -2423,3 +2423,66 @@ pub fn main(array: [u16; PARTIES]) -> u16 {
     );
     Ok(())
 }
+
+#[test]
+fn type_declaration_in_let() -> Result<(), Error> {
+    let prg = "
+pub fn main(a: u16, b: u16) -> u16 {
+    let c: u16 = 6;
+    a + b + c
+}
+";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u16(2);
+    eval.set_u16(4);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        2 + 4 + 6
+    );
+    Ok(())
+}
+
+#[test]
+fn type_declaration_in_let_mut() -> Result<(), Error> {
+    let prg = "
+pub fn main(a: u16, b: u16) -> u16 {
+    let mut result: u16 = 6;
+    result += a + b;
+    result
+}
+";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u16(2);
+    eval.set_u16(4);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        2 + 4 + 6
+    );
+    Ok(())
+}
+
+#[test]
+fn type_declaration_of_array_in_let_mut() -> Result<(), Error> {
+    let prg = "
+pub fn main(a: u16, b: u16) -> u16 {
+    let mut result: [u16; 2] = [3, 3];
+    result[0] = result[0] + a;
+    result[1] = result[1] + b;
+    result[0] + result[1]
+}
+";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u16(2);
+    eval.set_u16(4);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        2 + 4 + 3 + 3
+    );
+    Ok(())
+}

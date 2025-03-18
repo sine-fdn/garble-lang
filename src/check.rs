@@ -627,12 +627,15 @@ impl UntypedStmt {
     ) -> Result<TypedStmt, TypeErrors> {
         let meta = self.meta;
         match &self.inner {
-            ast::StmtEnum::Let(pattern, binding) => {
+            ast::StmtEnum::Let(pattern, ty, binding) => {
                 match binding.type_check(top_level_defs, env, fns, defs) {
-                    Ok(binding) => {
+                    Ok(mut binding) => {
+                        if let Some(ty) = ty {
+                            check_type(&mut binding, ty)?;
+                        }
                         let pattern =
                             pattern.type_check(env, fns, defs, Some(binding.ty.clone()))?;
-                        Ok(Stmt::new(StmtEnum::Let(pattern, binding), meta))
+                        Ok(Stmt::new(StmtEnum::Let(pattern, ty.clone(), binding), meta))
                     }
                     Err(mut errors) => {
                         if let Err(e) = pattern.type_check(env, fns, defs, None) {
@@ -642,9 +645,12 @@ impl UntypedStmt {
                     }
                 }
             }
-            ast::StmtEnum::LetMut(identifier, binding) => {
+            ast::StmtEnum::LetMut(identifier, ty, binding) => {
                 match binding.type_check(top_level_defs, env, fns, defs) {
                     Ok(mut binding) => {
+                        if let Some(ty) = ty {
+                            check_type(&mut binding, ty)?;
+                        }
                         if binding.ty == Type::Unsigned(UnsignedNumType::Unspecified)
                             || binding.ty == Type::Signed(SignedNumType::Unspecified)
                         {
@@ -662,7 +668,7 @@ impl UntypedStmt {
                             (Some(binding.ty.clone()), Mutability::Mutable),
                         );
                         Ok(Stmt::new(
-                            StmtEnum::LetMut(identifier.clone(), binding),
+                            StmtEnum::LetMut(identifier.clone(), ty.clone(), binding),
                             meta,
                         ))
                     }
