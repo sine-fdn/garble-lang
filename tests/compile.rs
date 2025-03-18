@@ -2425,7 +2425,7 @@ pub fn main(array: [u16; PARTIES]) -> u16 {
 }
 
 #[test]
-fn type_declaration_in_let() -> Result<(), Error> {
+fn compile_type_declaration_in_let() -> Result<(), Error> {
     let prg = "
 pub fn main(a: u16, b: u16) -> u16 {
     let c: u16 = 6;
@@ -2445,7 +2445,7 @@ pub fn main(a: u16, b: u16) -> u16 {
 }
 
 #[test]
-fn type_declaration_in_let_mut() -> Result<(), Error> {
+fn compile_type_declaration_in_let_mut() -> Result<(), Error> {
     let prg = "
 pub fn main(a: u16, b: u16) -> u16 {
     let mut result: u16 = 6;
@@ -2466,12 +2466,12 @@ pub fn main(a: u16, b: u16) -> u16 {
 }
 
 #[test]
-fn type_declaration_of_array_in_let_mut() -> Result<(), Error> {
+fn compile_array_assign_via_index() -> Result<(), Error> {
     let prg = "
 pub fn main(a: u16, b: u16) -> u16 {
     let mut result: [u16; 2] = [3, 3];
-    result[0] = result[0] + a;
-    result[1] = result[1] + b;
+    result[0] += a;
+    result[1] += b;
     result[0] + result[1]
 }
 ";
@@ -2483,6 +2483,28 @@ pub fn main(a: u16, b: u16) -> u16 {
     assert_eq!(
         u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
         2 + 4 + 3 + 3
+    );
+    Ok(())
+}
+
+#[test]
+fn compile_array_assign_via_nested_index() -> Result<(), Error> {
+    let prg = "
+pub fn main(a: u16, b: u16) -> u16 {
+    let mut result: [[u16; 3]; 2] = [[1u16, 2u16, 3u16], [4u16, 5u16, 6u16]];
+    result[1][2] += a;
+    result[1][2] += b;
+    result[1][2]
+}
+";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u16(2);
+    eval.set_u16(4);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        2 + 4 + 6
     );
     Ok(())
 }
