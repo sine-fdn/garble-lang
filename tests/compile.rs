@@ -2486,3 +2486,25 @@ pub fn main(a: u16, b: u16) -> u16 {
     );
     Ok(())
 }
+
+#[test]
+fn compile_array_assign_via_nested_index() -> Result<(), Error> {
+    let prg = "
+pub fn main(a: u16, b: u16) -> u16 {
+    let mut result: [[u16; 3]; 2] = [[1u16, 2u16, 3u16], [4u16, 5u16, 6u16]];
+    result[1][2] += a;
+    result[1][2] += b;
+    result[1][2]
+}
+";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u16(2);
+    eval.set_u16(4);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        2 + 4 + 6
+    );
+    Ok(())
+}

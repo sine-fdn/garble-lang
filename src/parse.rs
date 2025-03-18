@@ -449,14 +449,33 @@ impl Parser {
                 || self.peek(&TokenEnum::LeftBrace);
             let expr = self.parse_expr()?;
             let meta = expr.meta;
-            let stmt = if let ExprEnum::Identifier(identifier) = expr.inner {
+            fn accessors(expr: &Expr<()>) -> Option<(&String, Vec<Accessor<()>>)> {
+                match &expr.inner {
+                    ExprEnum::Identifier(identifier) => Some((identifier, vec![])),
+                    ExprEnum::ArrayAccess(array, index) => match accessors(array) {
+                        Some((identifier, mut accessors)) => {
+                            accessors.push(Accessor::ArrayAccess {
+                                array_ty: (),
+                                index: *index.clone(),
+                            });
+                            Some((identifier, accessors))
+                        }
+                        None => None,
+                    },
+                    _ => None,
+                }
+            }
+            let stmt = if let Some((identifier, accessors)) = accessors(&expr) {
                 if self.next_matches(&TokenEnum::Eq).is_some() {
                     let value = self.parse_expr()?;
                     let meta = join_meta(meta, value.meta);
                     if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
                         self.expect(&TokenEnum::Semicolon)?;
                     }
-                    Stmt::new(StmtEnum::VarAssign(identifier, vec![], value), meta)
+                    Stmt::new(
+                        StmtEnum::VarAssign(identifier.clone(), accessors, value),
+                        meta,
+                    )
                 } else if let Some(Token(next, _)) = self.tokens.peek() {
                     let op = match next {
                         TokenEnum::AddAssign => Some(Op::Add),
@@ -479,54 +498,38 @@ impl Parser {
                         if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
                             self.expect(&TokenEnum::Semicolon)?;
                         }
+                        let mut target = Expr::untyped(
+                            ExprEnum::Identifier(identifier.clone()),
+                            identifier_meta,
+                        );
+                        for access in accessors.iter() {
+                            match access {
+                                Accessor::ArrayAccess { index, .. } => {
+                                    target = Expr::untyped(
+                                        ExprEnum::ArrayAccess(
+                                            Box::new(target),
+                                            Box::new(index.clone()),
+                                        ),
+                                        meta,
+                                    );
+                                }
+                            }
+                        }
                         let binary_op = Expr::untyped(
-                            ExprEnum::Op(
-                                op,
-                                Box::new(Expr::untyped(
-                                    ExprEnum::Identifier(identifier.clone()),
-                                    identifier_meta,
-                                )),
-                                Box::new(value),
-                            ),
+                            ExprEnum::Op(op, Box::new(target), Box::new(value)),
                             meta,
                         );
-                        Stmt::new(StmtEnum::VarAssign(identifier, vec![], binary_op), meta)
+                        Stmt::new(
+                            StmtEnum::VarAssign(identifier.clone(), accessors, binary_op),
+                            meta,
+                        )
                     } else {
-                        let expr = Expr::untyped(ExprEnum::Identifier(identifier), meta);
                         if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
                             self.expect(&TokenEnum::Semicolon)?;
                         }
                         Stmt::new(StmtEnum::Expr(expr), meta)
                     }
                 } else {
-                    let expr = Expr::untyped(ExprEnum::Identifier(identifier), meta);
-                    if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
-                        self.expect(&TokenEnum::Semicolon)?;
-                    }
-                    Stmt::new(StmtEnum::Expr(expr), meta)
-                }
-            } else if let ExprEnum::ArrayAccess(array, index) = expr.inner {
-                if let (ExprEnum::Identifier(identifier), Some(_)) =
-                    (&array.as_ref().inner, self.next_matches(&TokenEnum::Eq))
-                {
-                    let value = self.parse_expr()?;
-                    let meta = join_meta(meta, value.meta);
-                    if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
-                        self.expect(&TokenEnum::Semicolon)?;
-                    }
-                    Stmt::new(
-                        StmtEnum::VarAssign(
-                            identifier.clone(),
-                            vec![Accessor::ArrayAccess {
-                                array_ty: (),
-                                index: *index,
-                            }],
-                            value,
-                        ),
-                        meta,
-                    )
-                } else {
-                    let expr = Expr::untyped(ExprEnum::ArrayAccess(array, index), meta);
                     if !self.peek(&TokenEnum::RightBrace) && !self.peek(&TokenEnum::Comma) {
                         self.expect(&TokenEnum::Semicolon)?;
                     }
