@@ -449,7 +449,8 @@ impl Parser {
                 || self.peek(&TokenEnum::LeftBrace);
             let expr = self.parse_expr()?;
             let meta = expr.meta;
-            fn accessors(expr: &Expr<()>) -> Option<(&String, Vec<(Accessor<()>, MetaInfo)>)> {
+            type Accessors = Vec<(Accessor<()>, MetaInfo)>;
+            fn accessors(expr: &Expr<()>) -> Option<(&String, Accessors)> {
                 match &expr.inner {
                     ExprEnum::Identifier(identifier) => Some((identifier, vec![])),
                     ExprEnum::ArrayAccess(array, index) => match accessors(array) {
