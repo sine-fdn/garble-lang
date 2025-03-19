@@ -649,22 +649,51 @@ impl UntypedStmt {
             ast::StmtEnum::LetMut(identifier, ty, binding) => {
                 match binding.type_check(top_level_defs, env, fns, defs) {
                     Ok(mut binding) => {
+                        // set the type to none, so that an error during type checking does not mark
+                        // the identifier as unknown:
+                        env.let_in_current_scope(identifier.clone(), (None, Mutability::Mutable));
                         if let Some(ty) = ty {
                             let ty = ty.as_concrete_type(top_level_defs)?;
                             check_type(&mut binding, &ty)?;
                         }
-                        if binding.ty == Type::Unsigned(UnsignedNumType::Unspecified)
-                            || binding.ty == Type::Signed(SignedNumType::Unspecified)
-                        {
-                            check_or_constrain_signed(&mut binding, SignedNumType::I32)?;
-                        }
-                        if let Type::Array(ty, _) | Type::ArrayConst(ty, _) = &mut binding.ty {
-                            if let Type::Unsigned(UnsignedNumType::Unspecified)
-                            | Type::Signed(SignedNumType::Unspecified) = ty.as_ref()
+                        fn constrain_to_i32(binding: &mut Expr<Type>) -> Result<(), TypeErrors> {
+                            if binding.ty == Type::Unsigned(UnsignedNumType::Unspecified)
+                                || binding.ty == Type::Signed(SignedNumType::Unspecified)
                             {
-                                *ty = Box::new(Type::Signed(SignedNumType::I32));
+                                check_or_constrain_signed(binding, SignedNumType::I32)?;
                             }
+                            match &mut binding.inner {
+                                ExprEnum::ArrayLiteral(exprs) | ExprEnum::TupleLiteral(exprs) => {
+                                    for expr in exprs {
+                                        constrain_to_i32(expr)?;
+                                    }
+                                }
+                                ExprEnum::ArrayRepeatLiteral(expr, _)
+                                | ExprEnum::ArrayRepeatLiteralConst(expr, _) => {
+                                    constrain_to_i32(expr)?;
+                                }
+
+                                _ => {}
+                            };
+                            if let Type::Array(ty, _) | Type::ArrayConst(ty, _) = &mut binding.ty {
+                                if let Type::Unsigned(UnsignedNumType::Unspecified)
+                                | Type::Signed(SignedNumType::Unspecified) = ty.as_ref()
+                                {
+                                    *ty = Box::new(Type::Signed(SignedNumType::I32));
+                                }
+                            }
+                            if let Type::Tuple(value_types) = &mut binding.ty {
+                                for ty in value_types {
+                                    if let Type::Unsigned(UnsignedNumType::Unspecified)
+                                    | Type::Signed(SignedNumType::Unspecified) = ty
+                                    {
+                                        *ty = Type::Signed(SignedNumType::I32);
+                                    }
+                                }
+                            }
+                            Ok(())
                         }
+                        constrain_to_i32(&mut binding)?;
                         env.let_in_current_scope(
                             identifier.clone(),
                             (Some(binding.ty.clone()), Mutability::Mutable),
@@ -2241,6 +2270,18 @@ pub(crate) fn constrain_type(expr: &mut TypedExpr, expected: &Type) -> Result<()
                     || actual == &Type::Signed(SignedNumType::Unspecified)
                 {
                     *actual = expected.clone();
+                }
+            }
+            Type::Array(expected, _) | Type::ArrayConst(expected, _) => {
+                if let Type::Array(actual, _) | Type::ArrayConst(actual, _) = actual {
+                    overwrite_ty_if_necessary(actual, expected);
+                }
+            }
+            Type::Tuple(expected) => {
+                if let Type::Tuple(actual) = actual {
+                    for (expected, actual) in expected.iter().zip(actual.iter_mut()) {
+                        overwrite_ty_if_necessary(actual, expected);
+                    }
                 }
             }
             _ => {}

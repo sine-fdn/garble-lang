@@ -2563,7 +2563,7 @@ struct Foo {
   foo: u16
 }
 pub fn main(a: u16, b: u16) -> u16 {
-    let mut result: [(u16, Foo); 2] = [(1u16, Foo { foo: 2 }), (1u16, Foo { foo: 4 })];
+    let mut result: [(u16, Foo); 2] = [(1, Foo { foo: 2 }), (1, Foo { foo: 4 })];
     result[1].0 += a;
     result[1].1.foo += b;
     result[1].0 + result[1].1.foo
