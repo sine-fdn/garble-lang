@@ -273,7 +273,7 @@ pub enum StmtEnum<T> {
     /// Mutable let expression, bind a single variable to an expr.
     LetMut(String, Option<Type>, Expr<T>),
     /// Assignment of a (previously as mutable declared) variable.
-    VarAssign(String, Vec<Accessor<T>>, Expr<T>),
+    VarAssign(String, Vec<(Accessor<T>, MetaInfo)>, Expr<T>),
     /// Binds an identifier to each value of an array expr, evaluating the body.
     ForEachLoop(Pattern<T>, Expr<T>, Vec<Stmt<T>>),
     /// Binds an identifier to each joined row of two tables, evaluating the body.
@@ -286,12 +286,26 @@ pub enum StmtEnum<T> {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Accessor<T> {
-    /// Accessing an array by index to assing to it, e.g. `array[0] = x;`.
+    /// Accessing an array by index to assign to it, e.g. `array[0] = x;`.
     ArrayAccess {
         /// The type of the array being accessed by the index.
         array_ty: T,
         /// The expression that indexes the array.
         index: Expr<T>,
+    },
+    /// Accessing a tuple field by index to assign to it, e.g. `tuple.0 = x;`.
+    TupleAccess {
+        /// The type of the tuple being accessed by the index.
+        tuple_ty: T,
+        /// The index of the field of the tuple.
+        index: usize,
+    },
+    /// Accessing a struct field by index to assign to it, e.g. `struct.foo = x;`.
+    StructAccess {
+        /// The type of the struct being accessed by the field.
+        struct_ty: T,
+        /// The name of the field of the struct.
+        field: String,
     },
 }
 

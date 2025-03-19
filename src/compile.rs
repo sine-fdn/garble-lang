@@ -386,12 +386,12 @@ impl TypedStmt {
                 vec![]
             }
             StmtEnum::VarAssign(identifier, accessors, value) => {
-                let mut array = env.get(identifier).unwrap();
+                let mut collection = env.get(identifier).unwrap();
                 let mut accessed = vec![];
-                for access in accessors {
+                for (access, meta) in accessors {
                     match access {
                         Accessor::ArrayAccess { array_ty, index } => {
-                            let array_before_access = array.clone();
+                            let array_before_access = collection.clone();
                             let (elem_ty, num_elems) = match &array_ty {
                                 Type::Array(elem_ty, size) => (elem_ty, *size),
                                 Type::ArrayConst(elem_ty, size) => {
@@ -416,14 +416,14 @@ impl TypedStmt {
                                 let mut muxed_array = Vec::new();
                                 let s = index[mux_layer];
                                 let mut i = 0;
-                                while i < array.len() {
+                                while i < collection.len() {
                                     for _ in 0..elem_bits {
-                                        if i + elem_bits < array.len() {
-                                            let a0 = array[i];
-                                            let a1 = array[i + elem_bits];
+                                        if i + elem_bits < collection.len() {
+                                            let a0 = collection[i];
+                                            let a1 = collection[i + elem_bits];
                                             muxed_array.push(circuit.push_mux(s, a1, a0));
-                                        } else if i < array.len() {
-                                            let a0 = array[i];
+                                        } else if i < collection.len() {
+                                            let a0 = collection[i];
                                             muxed_array.push(circuit.push_mux(
                                                 s,
                                                 out_of_bounds_elem,
@@ -434,7 +434,7 @@ impl TypedStmt {
                                     }
                                     i += elem_bits;
                                 }
-                                array = muxed_array;
+                                collection = muxed_array;
                             }
                             let mut array_len = Vec::with_capacity(index_bits);
                             unsigned_to_bits(num_elems as u64, index_bits, &mut array_len);
@@ -449,18 +449,40 @@ impl TypedStmt {
                                 PanicReason::OutOfBounds,
                                 self.meta,
                             );
-                            if array.is_empty() {
+                            if collection.is_empty() {
                                 // accessing a 0-size array will result in a panic, but we still need to return
                                 // an element of a valid size (even though it will not be used)
-                                array = vec![0; elem_bits]
+                                collection = vec![0; elem_bits]
                             }
-                            accessed.push((array_before_access, elem_ty, index));
+                            accessed.push((array_before_access, elem_bits, index));
                         }
+                        Accessor::TupleAccess { tuple_ty, index } => {
+                            let tuple_before_access = collection.clone();
+                            let (wires_before, wires_at_index) = match &tuple_ty {
+                                Type::Tuple(values) => {
+                                    let mut wires_before = 0;
+                                    for v in values[0..*index].iter() {
+                                        wires_before +=
+                                            v.size_in_bits_for_defs(prg, circuit.const_sizes());
+                                    }
+                                    (
+                                        wires_before,
+                                        values[*index]
+                                            .size_in_bits_for_defs(prg, circuit.const_sizes()),
+                                    )
+                                }
+                                _ => panic!("Expected a tuple type, but found {meta:?}"),
+                            };
+                            collection =
+                                collection[wires_before..wires_before + wires_at_index].to_vec();
+                            //accessed.push((tuple_before_access, wires_at_index, index));
+                            todo!()
+                        }
+                        Accessor::StructAccess { struct_ty, field } => todo!(),
                     }
                 }
                 let mut value = value.compile(prg, env, circuit);
-                for (mut array, elem_ty, mut index) in accessed.into_iter().rev() {
-                    let elem_bits = elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes());
+                for (mut array, elem_bits, mut index) in accessed.into_iter().rev() {
                     let size = array.len() / elem_bits;
                     let index_bits = Type::Unsigned(UnsignedNumType::Usize)
                         .size_in_bits_for_defs(prg, circuit.const_sizes());

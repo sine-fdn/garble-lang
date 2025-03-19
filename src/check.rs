@@ -631,7 +631,8 @@ impl UntypedStmt {
                 match binding.type_check(top_level_defs, env, fns, defs) {
                     Ok(mut binding) => {
                         if let Some(ty) = ty {
-                            check_type(&mut binding, ty)?;
+                            let ty = ty.as_concrete_type(top_level_defs)?;
+                            check_type(&mut binding, &ty)?;
                         }
                         let pattern =
                             pattern.type_check(env, fns, defs, Some(binding.ty.clone()))?;
@@ -649,7 +650,8 @@ impl UntypedStmt {
                 match binding.type_check(top_level_defs, env, fns, defs) {
                     Ok(mut binding) => {
                         if let Some(ty) = ty {
-                            check_type(&mut binding, ty)?;
+                            let ty = ty.as_concrete_type(top_level_defs)?;
+                            check_type(&mut binding, &ty)?;
                         }
                         if binding.ty == Type::Unsigned(UnsignedNumType::Unspecified)
                             || binding.ty == Type::Signed(SignedNumType::Unspecified)
@@ -686,11 +688,11 @@ impl UntypedStmt {
                 match env.get(identifier) {
                     Some((Some(mut elem_ty), Mutability::Mutable)) => {
                         let mut typed_accessors = vec![];
-                        for access in accessors {
+                        for (access, meta) in accessors {
                             let typed = match access {
                                 Accessor::ArrayAccess { index, .. } => {
                                     let array_ty = elem_ty.clone();
-                                    elem_ty = expect_array_type(&elem_ty, meta)?;
+                                    elem_ty = expect_array_type(&elem_ty, *meta)?;
 
                                     let mut index =
                                         index.type_check(top_level_defs, env, fns, defs)?;
@@ -698,11 +700,46 @@ impl UntypedStmt {
                                         &mut index,
                                         UnsignedNumType::Usize,
                                     )?;
-                                    println!("Accessor for {array_ty} with {index:?}");
                                     Accessor::ArrayAccess { array_ty, index }
                                 }
+                                Accessor::TupleAccess { index, .. } => {
+                                    let value_types = expect_tuple_type(&elem_ty, *meta)?;
+                                    if *index < value_types.len() {
+                                        elem_ty = value_types[*index].clone();
+                                        Accessor::TupleAccess {
+                                            tuple_ty: elem_ty.clone(),
+                                            index: *index,
+                                        }
+                                    } else {
+                                        let e = TypeErrorEnum::TupleAccessOutOfBounds(
+                                            value_types.len(),
+                                        );
+                                        return Err(vec![Some(TypeError(e, *meta))]);
+                                    }
+                                }
+                                Accessor::StructAccess { field, .. } => {
+                                    let name = expect_struct_type(&elem_ty, *meta)?;
+                                    if let Some((_, struct_def)) = defs.structs.get(name.as_str()) {
+                                        if let Some(field_ty) = struct_def.get(field.as_str()) {
+                                            elem_ty = field_ty.clone();
+                                            Accessor::StructAccess {
+                                                struct_ty: elem_ty.clone(),
+                                                field: field.clone(),
+                                            }
+                                        } else {
+                                            let e = TypeErrorEnum::UnknownStructField(
+                                                name.clone(),
+                                                field.clone(),
+                                            );
+                                            return Err(vec![Some(TypeError(e, *meta))]);
+                                        }
+                                    } else {
+                                        let e = TypeErrorEnum::UnknownStruct(name.clone());
+                                        return Err(vec![Some(TypeError(e, *meta))]);
+                                    }
+                                }
                             };
-                            typed_accessors.push(typed);
+                            typed_accessors.push((typed, *meta));
                         }
                         let mut value = value.type_check(top_level_defs, env, fns, defs)?;
                         check_type(&mut value, &elem_ty)?;
