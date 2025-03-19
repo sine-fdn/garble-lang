@@ -449,15 +449,45 @@ impl Parser {
                 || self.peek(&TokenEnum::LeftBrace);
             let expr = self.parse_expr()?;
             let meta = expr.meta;
-            fn accessors(expr: &Expr<()>) -> Option<(&String, Vec<Accessor<()>>)> {
+            type Accessors = Vec<(Accessor<()>, MetaInfo)>;
+            fn accessors(expr: &Expr<()>) -> Option<(&String, Accessors)> {
                 match &expr.inner {
                     ExprEnum::Identifier(identifier) => Some((identifier, vec![])),
                     ExprEnum::ArrayAccess(array, index) => match accessors(array) {
                         Some((identifier, mut accessors)) => {
-                            accessors.push(Accessor::ArrayAccess {
-                                array_ty: (),
-                                index: *index.clone(),
-                            });
+                            accessors.push((
+                                Accessor::ArrayAccess {
+                                    array_ty: (),
+                                    index: *index.clone(),
+                                },
+                                expr.meta,
+                            ));
+                            Some((identifier, accessors))
+                        }
+                        None => None,
+                    },
+                    ExprEnum::TupleAccess(tuple, index) => match accessors(tuple) {
+                        Some((identifier, mut accessors)) => {
+                            accessors.push((
+                                Accessor::TupleAccess {
+                                    tuple_ty: (),
+                                    index: *index,
+                                },
+                                expr.meta,
+                            ));
+                            Some((identifier, accessors))
+                        }
+                        None => None,
+                    },
+                    ExprEnum::StructAccess(s, field) => match accessors(s) {
+                        Some((identifier, mut accessors)) => {
+                            accessors.push((
+                                Accessor::StructAccess {
+                                    struct_ty: (),
+                                    field: field.clone(),
+                                },
+                                expr.meta,
+                            ));
                             Some((identifier, accessors))
                         }
                         None => None,
@@ -502,7 +532,7 @@ impl Parser {
                             ExprEnum::Identifier(identifier.clone()),
                             identifier_meta,
                         );
-                        for access in accessors.iter() {
+                        for (access, _) in accessors.iter() {
                             match access {
                                 Accessor::ArrayAccess { index, .. } => {
                                     target = Expr::untyped(
@@ -510,6 +540,18 @@ impl Parser {
                                             Box::new(target),
                                             Box::new(index.clone()),
                                         ),
+                                        meta,
+                                    );
+                                }
+                                Accessor::TupleAccess { index, .. } => {
+                                    target = Expr::untyped(
+                                        ExprEnum::TupleAccess(Box::new(target), *index),
+                                        meta,
+                                    );
+                                }
+                                Accessor::StructAccess { field, .. } => {
+                                    target = Expr::untyped(
+                                        ExprEnum::StructAccess(Box::new(target), field.clone()),
                                         meta,
                                     );
                                 }

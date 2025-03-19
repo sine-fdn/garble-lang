@@ -2508,3 +2508,75 @@ pub fn main(a: u16, b: u16) -> u16 {
     );
     Ok(())
 }
+
+#[test]
+fn compile_tuple_assign() -> Result<(), Error> {
+    let prg = "
+pub fn main(a: u16, b: u16) -> u16 {
+    let mut t: (u16, u16) = (0, 2);
+    t.1 += a;
+    t.1 += b;
+    t.1
+}
+";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u16(4);
+    eval.set_u16(6);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        2 + 4 + 6
+    );
+    Ok(())
+}
+
+#[test]
+fn compile_struct_assign() -> Result<(), Error> {
+    let prg = "
+struct Foo {
+  foo: u16
+}
+pub fn main(a: u16, b: u16) -> u16 {
+    let mut f = Foo { foo: 0 };
+    f.foo += a;
+    f.foo += b;
+    f.foo
+}
+";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u16(2);
+    eval.set_u16(4);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        2 + 4
+    );
+    Ok(())
+}
+
+#[test]
+fn compile_tuple_and_struct_assign_via_nested_index() -> Result<(), Error> {
+    let prg = "
+struct Foo {
+  foo: u16
+}
+pub fn main(a: u16, b: u16) -> u16 {
+    let mut result: [(u16, Foo); 2] = [(1, Foo { foo: 2 }), (1, Foo { foo: 4 })];
+    result[1].0 += a;
+    result[1].1.foo += b;
+    result[1].0 + result[1].1.foo
+}
+";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u16(2);
+    eval.set_u16(6);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        1 + 2 + 4 + 6
+    );
+    Ok(())
+}
