@@ -703,11 +703,12 @@ impl UntypedStmt {
                                     Accessor::ArrayAccess { array_ty, index }
                                 }
                                 Accessor::TupleAccess { index, .. } => {
+                                    let tuple_ty = elem_ty.clone();
                                     let value_types = expect_tuple_type(&elem_ty, *meta)?;
                                     if *index < value_types.len() {
                                         elem_ty = value_types[*index].clone();
                                         Accessor::TupleAccess {
-                                            tuple_ty: elem_ty.clone(),
+                                            tuple_ty,
                                             index: *index,
                                         }
                                     } else {
@@ -718,12 +719,13 @@ impl UntypedStmt {
                                     }
                                 }
                                 Accessor::StructAccess { field, .. } => {
+                                    let struct_ty = elem_ty.clone();
                                     let name = expect_struct_type(&elem_ty, *meta)?;
                                     if let Some((_, struct_def)) = defs.structs.get(name.as_str()) {
                                         if let Some(field_ty) = struct_def.get(field.as_str()) {
                                             elem_ty = field_ty.clone();
                                             Accessor::StructAccess {
-                                                struct_ty: elem_ty.clone(),
+                                                struct_ty,
                                                 field: field.clone(),
                                             }
                                         } else {
