@@ -1,7 +1,7 @@
 on:
   push:
-    tags:        
-      - 'v*'
+    tags:
+      - "v*"
 
 name: Publish
 
@@ -14,7 +14,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-      - run: cargo test --all-features
+      - run: cargo test --features="serde"
       - run: cargo clippy -- -Dwarnings
       - run: cargo publish --token ${CRATES_TOKEN}
         env:
