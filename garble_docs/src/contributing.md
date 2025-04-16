@@ -19,4 +19,11 @@ The other modules are less important, but here's a quick overview:
 - [`literal.rs`](https://github.com/sine-fdn/garble-lang/blob/main/src/literal.rs) contains a subset of Garble expressions which can be used as inputs/outputs of a circuit and which support conversion from/to a circuit's bit representation.
 - [`main.rs`](https://github.com/sine-fdn/garble-lang/blob/main/src/main.rs) is the optional binary, which can be used to run or type check Garble programs from the command line.
 
+Here's how the most important tests are organized in the `tests/` directory:
+
+- [`check.rs`](https://github.com/sine-fdn/garble-lang/blob/main/tests/check.rs) contains test cases that should be rejected by the type checker with a specific error message, for example because a pattern is not exhaustive.
+- [`circuit.rs`](https://github.com/sine-fdn/garble-lang/blob/main/tests/circuit.rs) tests that circuits are optimized in such a way that an unoptimized program has the same number of gates as a hand-optimized version.
+- [`compile.rs`](https://github.com/sine-fdn/garble-lang/blob/main/tests/compile.rs) contains the bulk of the tests, testing that language constructs are compiled to circuits that can be evaluated as expected.
+- [`panic.rs`](https://github.com/sine-fdn/garble-lang/blob/main/tests/panic.rs) tests that panics are properly handled by a circuit and that different panics in the same circuit interact as expected.
+
 You can also reach us at [vorstand@sine.foundation](mailto:vorstand@sine.foundation).
