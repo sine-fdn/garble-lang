@@ -343,7 +343,11 @@ code * {
 }
 
 :not(pre):not(a)>code.hljs {
-    color: #ccc;
+    color: #222;
+}
+
+:not(pre)>code.hljs {
+    background-color: #eee;
 }
 
 p {
