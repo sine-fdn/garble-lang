@@ -90,8 +90,9 @@ fn convert_bristol_to_garble() -> Result<(), String> {
         compile_bristol_to_circuit("bristol_examples/mult64.txt").map_err(|e| e.prettify(""))?;
 
     // Evaluate the circuit with inputs 45678 and 1234 both as Circuit and as Bristol circuit
-    let input1_bits: Vec<bool> = (0..64).rev().map(|i| (45678 >> i) & 1 != 0).collect();
-    let input2_bits: Vec<bool> = (0..64).rev().map(|i| (1234 >> i) & 1 != 0).collect();
+    let input1_bits: Vec<bool> = (0..64).rev().map(|i| 45678 & (1 << i) != 0).collect();
+    let input2_bits: Vec<bool> = (0..64).rev().map(|i| 1234 & (1 << i) != 0).collect();
+
     let output1 = mult.eval(&[input1_bits.clone(), input2_bits.clone()]);
     let output2 = bristol_eval(
         "bristol_examples/mult64.txt",
@@ -115,10 +116,8 @@ fn convert_garble_to_bristol_to_garble() -> Result<(), String> {
     let new_circuit =
         compile_bristol_to_circuit("bristol_examples/circuit.txt").map_err(|e| e.prettify(""))?;
 
-    let input1: u64 = 45678;
-    let input1_bits: Vec<bool> = (0..64).rev().map(|i| (input1 >> i) & 1 != 0).collect();
-    let input2: u64 = 1234;
-    let input2_bits: Vec<bool> = (0..64).rev().map(|i| (input2 >> i) & 1 != 0).collect();
+    let input1_bits: Vec<bool> = (0..64).rev().map(|i| 45678 & (1 << i) != 0).collect();
+    let input2_bits: Vec<bool> = (0..64).rev().map(|i| 1234 & (1 << i) != 0).collect();
     // Evaluate the circuit with inputs 45678 and 1234 both as Circuit and as Bristol circuit
     // PANIC_RESULT_SIZE_IN_BITS gets removed from the output as Bristol format does not have panic support
     let output1 = compiled
