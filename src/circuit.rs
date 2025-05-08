@@ -268,7 +268,8 @@ pub(crate) struct CircuitBuilder {
 }
 
 pub(crate) const USIZE_BITS: usize = 32;
-const PANIC_RESULT_SIZE_IN_BITS: usize = 1 + 5 * USIZE_BITS;
+/// The number of bits needed to represent a panic result.
+pub const PANIC_RESULT_SIZE_IN_BITS: usize = 1 + 5 * USIZE_BITS;
 
 /// A collection of wires that carry information about whether and where a panic occurred.
 #[derive(Debug, Clone)]
