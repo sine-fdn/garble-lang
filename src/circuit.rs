@@ -1010,10 +1010,10 @@ impl CircuitBuilder {
         if x0 == x1 {
             return x0;
         }
-        let not_s = self.push_not(s);
-        let x0_selected = self.push_and(x0, s);
-        let x1_selected = self.push_and(x1, not_s);
-        self.push_xor(x0_selected, x1_selected)
+        let x0_xor_x1 = self.push_xor(x0, x1);
+        let nots = self.push_not(s);
+        let swap = self.push_and(x0_xor_x1, nots);
+        self.push_xor(x0, swap)
     }
 
     pub fn push_adder(
