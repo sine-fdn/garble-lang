@@ -134,8 +134,8 @@ pub fn compile_with_constants(
 /// This is useful for generating a circuit that can be used with other tools or libraries that
 /// support the Bristol format.
 pub fn compile_to_bristol(prg: &str, path: &str) -> Result<(), Error> {
-    let mut program = compile(prg)?;
-    garble_to_bristol(&mut program.circuit, path)?;
+    let program = compile(prg)?;
+    garble_to_bristol(program.circuit, path)?;
     Ok(())
 }
 
