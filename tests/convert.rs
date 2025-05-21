@@ -17,15 +17,21 @@ fn bristol_eval(path: &str, inputs: &[Vec<bool>]) -> Result<Vec<bool>, Converter
 
     // Parse wire and gate counts
     let (wires_num, _gates_num) = {
-        let parts = parse_line(lines.next())?;
+        let (parts, line_str) = parse_line(lines.next())?;
+        if parts.len() != 2 {
+            return Err(ConverterError::MalformedLine(line_str));
+        }
         (parts[1], parts[0])
     };
 
-    // Parse input parts
-    let _input_parts = parse_line(lines.next())?;
+    // Skip the line with the input parts
+    lines.next();
 
     // Parse output parts
-    let output_parts = parse_line(lines.next())?;
+    let (output_parts, line_str) = parse_line(lines.next())?;
+    if output_parts.len() < 2 {
+        return Err(ConverterError::MalformedLine(line_str));
+    }
     let num_output_wires: usize = output_parts[1..].iter().sum();
 
     // Bristol eval
@@ -42,12 +48,18 @@ fn bristol_eval(path: &str, inputs: &[Vec<bool>]) -> Result<Vec<bool>, Converter
     // Parse gates
     for line in lines {
         let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() < 4 {
+        if parts.is_empty() {
             continue;
+        }
+        if parts.len() < 4 {
+            return Err(ConverterError::MalformedLine(line_str));
         }
         let num_inputs: usize = parts[0]
             .parse()
             .map_err(|_| ConverterError::ParseError("Missing number of inputs".to_string()))?;
+        if parts.len() != num_inputs + 4 {
+            return Err(ConverterError::MalformedLine(line_str));
+        }
         let input_wires: Vec<usize> = parts[2..(2 + num_inputs)]
             .iter()
             .map(|s| {
@@ -63,20 +75,24 @@ fn bristol_eval(path: &str, inputs: &[Vec<bool>]) -> Result<Vec<bool>, Converter
             .ok_or_else(|| ConverterError::ParseError("Missing gate type".to_string()))?;
 
         match *gate_type {
-            "XOR" => {
-                wires[output_wire] = wires[input_wires[0]] ^ wires[input_wires[1]];
-            }
-            "AND" => {
-                wires[output_wire] = wires[input_wires[0]] & wires[input_wires[1]];
+            "XOR" | "AND" => {
+                if input_wires.len() != 2 {
+                    return Err(ConverterError::MalformedLine(line_str));
+                }
+                if *gate_type == "XOR" {
+                    wires[output_wire] = wires[input_wires[0]] ^ wires[input_wires[1]];
+                } else {
+                    wires[output_wire] = wires[input_wires[0]] & wires[input_wires[1]];
+                }
             }
             "INV" => {
+                if input_wires.len() != 1 {
+                    return Err(ConverterError::MalformedLine(line_str));
+                }
                 wires[output_wire] = !wires[input_wires[0]];
             }
             _ => {
-                return Err(ConverterError::UnknownGate(format!(
-                    "Invalid gate type: {}",
-                    gate_type
-                )));
+                return Err(ConverterError::UnknownGate(gate_type.to_string()));
             }
         }
     }
