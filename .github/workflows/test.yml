@@ -10,7 +10,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.83
       - name: Cache target
         uses: actions/cache@v4
         env:
