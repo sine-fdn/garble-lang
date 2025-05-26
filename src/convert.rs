@@ -45,7 +45,7 @@ pub(crate) fn garble_to_bristol(circuit: Circuit, path: &str) -> Result<(), Conv
     let mut total_wires = total_gates + total_input_gates;
 
     // Though Garble provides panic support, the bristol fashion format and other circuit
-    // compilers do not, hence we remove the bits of the output that correcpond to panic support,
+    // compilers do not, hence we remove the bits of the output that correspond to panic support,
     // assuming that we do the conversion to use the circuit in a different compiler.
     let mut output_gates = mod_circuit.output_gates[PANIC_RESULT_SIZE_IN_BITS..].to_vec();
 
