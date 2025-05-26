@@ -57,7 +57,7 @@ pub(crate) fn garble_to_bristol(circuit: Circuit, path: &str) -> Result<(), Conv
         return Err(ConverterError::OutputWireIsInput);
     }
 
-    // Deal with duplicate output wires that is possible in Garble by simulate "identity" gates using two Xor
+    // Deal with duplicate output wires that is possible in Garble by simulating "identity" gates using two Xor
     // gates, i.e., x XOR x XOR x = x, since the Bristol format requires every output bit to be a separate wire.
     let mut seen = HashSet::new();
     let mut wire_max = total_wires;
