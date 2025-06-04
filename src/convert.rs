@@ -16,9 +16,17 @@ pub enum ConverterError {
     /// An unknown gate was encountered.
     UnknownGate(String),
     /// An error occurred while writing to the file.
-    FileWrite(std::io::Error),
+    IoError(std::io::Error),
+    /// Missing number of inputs in the gate definition.
+    MissingNumberOfInputs,
+    /// Missing input wires in the gate definition.
+    MissingInputWires,
+    /// Missing output wires in the gate definition.
+    MissingOutputWires,
+    /// Missing gate type in the gate definition.
+    MissingGateType,
     /// An error occurred while parsing the file.
-    ParseError(String),
+    OtherParseError(String),
     /// The number of input wires does not match the number of parties.
     InputPartiesMismatch(usize, usize),
     /// The number of output wires does not match the number of output gates.
@@ -29,7 +37,7 @@ pub enum ConverterError {
 
 impl From<std::io::Error> for ConverterError {
     fn from(e: std::io::Error) -> Self {
-        ConverterError::FileWrite(e)
+        ConverterError::IoError(e)
     }
 }
 
@@ -73,18 +81,18 @@ pub(crate) fn garble_to_bristol(circuit: Circuit, path: &str) -> Result<(), Conv
     }
 
     // Create the file that will contain the circuit described in Bristol fashion.
-    let mut file = File::create(path).map_err(ConverterError::FileWrite)?;
+    let mut file = File::create(path)?;
     // The first line contains the number of parties, the number of wires, and the number of gates.
-    writeln!(file, "{} {}", total_gates, total_wires).map_err(ConverterError::FileWrite)?;
+    writeln!(file, "{} {}", total_gates, total_wires)?;
     // The second line contains the number of parties, and the number of input wires per party.
-    write!(file, "{} ", mod_circuit.input_gates.len()).map_err(ConverterError::FileWrite)?;
+    write!(file, "{} ", mod_circuit.input_gates.len())?;
     for &input_len in &mod_circuit.input_gates {
-        write!(file, "{} ", input_len).map_err(ConverterError::FileWrite)?;
+        write!(file, "{} ", input_len)?;
     }
-    writeln!(file).map_err(ConverterError::FileWrite)?;
+    writeln!(file)?;
     // The third line contains the number of output wires.
-    writeln!(file, "1 {}", output_gates.len()).map_err(ConverterError::FileWrite)?;
-    writeln!(file).map_err(ConverterError::FileWrite)?;
+    writeln!(file, "1 {}", output_gates.len())?;
+    writeln!(file)?;
 
     // In order to convert the circuit to the Bristol format, we need to create a mapping
     // from the wires in the circuit to the wires in the Bristol format, where we need to make
@@ -132,7 +140,7 @@ pub(crate) fn garble_to_bristol(circuit: Circuit, path: &str) -> Result<(), Conv
             output_idx,
             gate_type
         )
-        .map_err(ConverterError::FileWrite)?;
+        ?;
     }
 
     Ok(())
@@ -211,7 +219,7 @@ pub(crate) fn bristol_to_garble(path: &str) -> Result<Circuit, ConverterError> {
         }
         let num_inputs: usize = parts[0]
             .parse()
-            .map_err(|_| ConverterError::ParseError("Missing number of inputs".to_string()))?;
+            .map_err(|_| ConverterError::MissingNumberOfInputs)?;
         if parts.len() != num_inputs + 4 {
             return Err(ConverterError::MalformedLine(line_str));
         }
@@ -219,15 +227,15 @@ pub(crate) fn bristol_to_garble(path: &str) -> Result<Circuit, ConverterError> {
             .iter()
             .map(|s| {
                 s.parse::<usize>()
-                    .map_err(|_| ConverterError::ParseError("Missing input wires".to_string()))
+                    .map_err(|_| ConverterError::MissingInputWires)
             })
             .collect::<Result<_, _>>()?;
         let output_wire: usize = parts[2 + num_inputs]
             .parse()
-            .map_err(|_| ConverterError::ParseError("Missing output wires".to_string()))?;
+            .map_err(|_| ConverterError::MissingOutputWires)?;
         let gate_type = parts
             .last()
-            .ok_or_else(|| ConverterError::ParseError("Missing gate type".to_string()))?;
+            .ok_or_else(|| ConverterError::MissingGateType)?;
 
         // Check if the output wire is an output gate
         if output_wire < wires_num && output_wire >= wires_num - num_output_wires {
@@ -277,7 +285,7 @@ pub fn parse_line(line: Option<String>) -> Result<(Vec<usize>, String), Converte
         .split_whitespace()
         .map(|s| {
             s.parse::<usize>()
-                .map_err(|e| ConverterError::ParseError(e.to_string()))
+                .map_err(|e| ConverterError::OtherParseError(e.to_string()))
         })
         .collect::<Result<_, _>>()?;
 
