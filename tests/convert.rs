@@ -1,7 +1,7 @@
 use garble_lang::{
     circuit::PANIC_RESULT_SIZE_IN_BITS,
     compile, compile_bristol_to_circuit, compile_to_bristol,
-    convert::{parse_line, ConverterError},
+    convert::{parse_line, ConverterError, FromBristolError},
 };
 
 use std::{
@@ -19,7 +19,7 @@ fn bristol_eval(path: &str, inputs: &[Vec<bool>]) -> Result<Vec<bool>, Converter
     let (wires_num, _gates_num) = {
         let (parts, line_str) = parse_line(lines.next())?;
         if parts.len() != 2 {
-            return Err(ConverterError::MalformedLine(line_str));
+            return Err(FromBristolError::MalformedLine(line_str).into());
         }
         (parts[1], parts[0])
     };
@@ -30,7 +30,7 @@ fn bristol_eval(path: &str, inputs: &[Vec<bool>]) -> Result<Vec<bool>, Converter
     // Parse output parts
     let (output_parts, line_str) = parse_line(lines.next())?;
     if output_parts.len() < 2 {
-        return Err(ConverterError::MalformedLine(line_str));
+        return Err(FromBristolError::MalformedLine(line_str).into());
     }
     let num_output_wires: usize = output_parts[1..].iter().sum();
 
@@ -52,32 +52,33 @@ fn bristol_eval(path: &str, inputs: &[Vec<bool>]) -> Result<Vec<bool>, Converter
             continue;
         }
         if parts.len() < 4 {
-            return Err(ConverterError::MalformedLine(line_str));
+            return Err(FromBristolError::MalformedLine(line_str).into());
         }
-        let num_inputs: usize = parts[0]
-            .parse()
-            .map_err(|_| ConverterError::ParseError("Missing number of inputs".to_string()))?;
+        let num_inputs: usize = parts[0].parse().map_err(|_| {
+            FromBristolError::OtherParseError("Missing number of inputs".to_string())
+        })?;
         if parts.len() != num_inputs + 4 {
-            return Err(ConverterError::MalformedLine(line_str));
+            return Err(FromBristolError::MalformedLine(line_str).into());
         }
         let input_wires: Vec<usize> = parts[2..(2 + num_inputs)]
             .iter()
             .map(|s| {
-                s.parse::<usize>()
-                    .map_err(|_| ConverterError::ParseError("Missing input wires".to_string()))
+                s.parse::<usize>().map_err(|_| {
+                    FromBristolError::OtherParseError("Missing input wires".to_string())
+                })
             })
             .collect::<Result<_, _>>()?;
         let output_wire: usize = parts[2 + num_inputs]
             .parse()
-            .map_err(|_| ConverterError::ParseError("Missing output wires".to_string()))?;
+            .map_err(|_| FromBristolError::OtherParseError("Missing output wires".to_string()))?;
         let gate_type = parts
             .last()
-            .ok_or_else(|| ConverterError::ParseError("Missing gate type".to_string()))?;
+            .ok_or_else(|| FromBristolError::OtherParseError("Missing gate type".to_string()))?;
 
         match *gate_type {
             "XOR" | "AND" => {
                 if input_wires.len() != 2 {
-                    return Err(ConverterError::MalformedLine(line_str));
+                    return Err(FromBristolError::MalformedLine(line_str).into());
                 }
                 if *gate_type == "XOR" {
                     wires[output_wire] = wires[input_wires[0]] ^ wires[input_wires[1]];
@@ -87,12 +88,12 @@ fn bristol_eval(path: &str, inputs: &[Vec<bool>]) -> Result<Vec<bool>, Converter
             }
             "INV" => {
                 if input_wires.len() != 1 {
-                    return Err(ConverterError::MalformedLine(line_str));
+                    return Err(FromBristolError::MalformedLine(line_str).into());
                 }
                 wires[output_wire] = !wires[input_wires[0]];
             }
             _ => {
-                return Err(ConverterError::UnknownGate(gate_type.to_string()));
+                return Err(FromBristolError::UnknownGate(gate_type.to_string()).into());
             }
         }
     }
@@ -114,7 +115,7 @@ fn convert_bristol_to_garble() -> Result<(), String> {
         "bristol_examples/mult64.txt",
         &[input1_bits.clone(), input2_bits.clone()],
     )
-    .map_err(|e| e.prettify(""))?;
+    .map_err(|e| e.prettify())?;
     assert_eq!(output2, output1);
 
     Ok(())
@@ -144,7 +145,7 @@ fn convert_garble_to_bristol_to_garble() -> Result<(), String> {
         "bristol_examples/circuit.txt",
         &[input1_bits.clone(), input2_bits.clone()],
     )
-    .map_err(|e| e.prettify(""))?;
+    .map_err(|e| e.prettify())?;
     let output3 = new_circuit.eval(&[input1_bits.clone(), input2_bits.clone()]);
     assert_eq!(output2, output1);
     assert_eq!(output3, output2);

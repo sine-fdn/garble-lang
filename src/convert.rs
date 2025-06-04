@@ -12,11 +12,25 @@ use std::{
 #[derive(Debug)]
 pub enum ConverterError {
     /// Some input wires are also output wires.
-    OutputWireIsInput,
-    /// An unknown gate was encountered.
-    UnknownGate(String),
+    ToBristolError(ToBristolError),
+    /// An error occurred while writing to the file.
+    FromBristolError(FromBristolError),
     /// An error occurred while writing to the file.
     IoError(std::io::Error),
+}
+
+/// An error that occurred during compilation.
+#[derive(Debug)]
+pub enum ToBristolError {
+    /// Some input wires are also output wires.
+    OutputWireIsInput,
+}
+
+/// An error that occurred during compilation.
+#[derive(Debug)]
+pub enum FromBristolError {
+    /// An unknown gate was encountered.
+    UnknownGate(String),
     /// Missing number of inputs in the gate definition.
     MissingNumberOfInputs,
     /// Missing input wires in the gate definition.
@@ -31,13 +45,88 @@ pub enum ConverterError {
     InputPartiesMismatch(usize, usize),
     /// The number of output wires does not match the number of output gates.
     OutputCountMismatch(usize, usize),
+    /// Missing line in the Bristol fashion circuit file.
+    MissingLine,
     /// Malformed Bristol fashion circuit file.
     MalformedLine(String),
 }
 
+impl std::fmt::Display for ConverterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConverterError::ToBristolError(e) => {
+                f.write_fmt(format_args!("Garble to Bristol error: {}", e))
+            }
+            ConverterError::FromBristolError(e) => {
+                f.write_fmt(format_args!("Bristol to Garble error: {}", e))
+            }
+            ConverterError::IoError(e) => f.write_fmt(format_args!("IO error: {}", e)),
+        }
+    }
+}
+
+impl std::fmt::Display for ToBristolError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ToBristolError::OutputWireIsInput => f.write_str(
+                "Output wire is also an input wire, which is not allowed in Bristol fashion format",
+            ),
+        }
+    }
+}
+
+impl std::fmt::Display for FromBristolError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FromBristolError::UnknownGate(gate) => {
+                f.write_fmt(format_args!("Unknown gate: {}", gate))
+            }
+            FromBristolError::MissingNumberOfInputs => {
+                f.write_str("Missing number of inputs in gate definition")
+            }
+            FromBristolError::MissingInputWires => {
+                f.write_str("Missing input wires in gate definition")
+            }
+            FromBristolError::MissingOutputWires => {
+                f.write_str("Missing output wires in gate definition")
+            }
+            FromBristolError::MissingGateType => {
+                f.write_str("Missing gate type in gate definition")
+            }
+            FromBristolError::OtherParseError(e) => f.write_fmt(format_args!("Parse error: {}", e)),
+            FromBristolError::InputPartiesMismatch(actual, expected) => f.write_fmt(format_args!(
+                "Input parties mismatch: actual {}, expected {}",
+                actual, expected
+            )),
+            FromBristolError::OutputCountMismatch(actual, expected) => f.write_fmt(format_args!(
+                "Output count mismatch: actual {}, expected {}",
+                actual, expected
+            )),
+            FromBristolError::MissingLine => f.write_str("Missing line in the file"),
+            FromBristolError::MalformedLine(line) => {
+                f.write_fmt(format_args!("Malformed line: {}", line))
+            }
+        }
+    }
+}
+
+impl std::error::Error for ConverterError {}
+
 impl From<std::io::Error> for ConverterError {
     fn from(e: std::io::Error) -> Self {
         ConverterError::IoError(e)
+    }
+}
+
+impl From<FromBristolError> for ConverterError {
+    fn from(e: FromBristolError) -> Self {
+        ConverterError::FromBristolError(e)
+    }
+}
+
+impl From<ToBristolError> for ConverterError {
+    fn from(e: ToBristolError) -> Self {
+        ConverterError::ToBristolError(e)
     }
 }
 
@@ -62,7 +151,7 @@ pub(crate) fn garble_to_bristol(circuit: Circuit, path: &str) -> Result<(), Conv
     // it reveals information about the input.
     let input_wire_set: HashSet<_> = (0..total_input_gates).collect();
     if output_gates.iter().any(|w| input_wire_set.contains(w)) {
-        return Err(ConverterError::OutputWireIsInput);
+        return Err(ToBristolError::OutputWireIsInput.into());
     }
 
     // Deal with duplicate output wires that is possible in Garble by simulating "identity" gates using two Xor
@@ -139,8 +228,7 @@ pub(crate) fn garble_to_bristol(circuit: Circuit, path: &str) -> Result<(), Conv
             input_str,
             output_idx,
             gate_type
-        )
-        ?;
+        )?;
     }
 
     Ok(())
@@ -158,7 +246,7 @@ pub(crate) fn bristol_to_garble(path: &str) -> Result<Circuit, ConverterError> {
     let (wires_num, _gates_num) = {
         let (parts, line_str) = parse_line(lines.next())?;
         if parts.len() != 2 {
-            return Err(ConverterError::MalformedLine(line_str));
+            return Err(FromBristolError::MalformedLine(line_str).into());
         }
         (parts[1], parts[0])
     };
@@ -167,15 +255,16 @@ pub(crate) fn bristol_to_garble(path: &str) -> Result<Circuit, ConverterError> {
     let (input_gates, input_wires_num) = {
         let (parts, line_str) = parse_line(lines.next())?;
         if parts.len() < 2 {
-            return Err(ConverterError::MalformedLine(line_str));
+            return Err(FromBristolError::MalformedLine(line_str).into());
         }
         let input_gates = parts[1..].to_vec();
         let expected_parties = parts[0];
         if input_gates.len() != expected_parties {
-            return Err(ConverterError::InputPartiesMismatch(
+            return Err(FromBristolError::InputPartiesMismatch(
                 input_gates.len(),
                 expected_parties,
-            ));
+            )
+            .into());
         }
         let input_wires: usize = input_gates.iter().sum();
         (input_gates, input_wires)
@@ -185,15 +274,14 @@ pub(crate) fn bristol_to_garble(path: &str) -> Result<Circuit, ConverterError> {
     let (mut output_gates, num_output_wires) = {
         let (parts, line_str) = parse_line(lines.next())?;
         if parts.len() < 2 {
-            return Err(ConverterError::MalformedLine(line_str));
+            return Err(FromBristolError::MalformedLine(line_str).into());
         }
         let num_outputs = parts[0];
         let gates_per_output = parts[1..].to_vec();
         if gates_per_output.len() != num_outputs {
-            return Err(ConverterError::OutputCountMismatch(
-                gates_per_output.len(),
-                num_outputs,
-            ));
+            return Err(
+                FromBristolError::OutputCountMismatch(gates_per_output.len(), num_outputs).into(),
+            );
         }
         let total_outputs = gates_per_output.iter().sum();
         let num_output_wires = gates_per_output.iter().sum::<usize>();
@@ -215,27 +303,25 @@ pub(crate) fn bristol_to_garble(path: &str) -> Result<Circuit, ConverterError> {
             continue;
         }
         if parts.len() < 4 {
-            return Err(ConverterError::MalformedLine(line_str));
+            return Err(FromBristolError::MalformedLine(line_str).into());
         }
         let num_inputs: usize = parts[0]
             .parse()
-            .map_err(|_| ConverterError::MissingNumberOfInputs)?;
+            .map_err(|_| FromBristolError::MissingNumberOfInputs)?;
         if parts.len() != num_inputs + 4 {
-            return Err(ConverterError::MalformedLine(line_str));
+            return Err(FromBristolError::MalformedLine(line_str).into());
         }
         let input_wires: Vec<usize> = parts[2..(2 + num_inputs)]
             .iter()
             .map(|s| {
                 s.parse::<usize>()
-                    .map_err(|_| ConverterError::MissingInputWires)
+                    .map_err(|_| FromBristolError::MissingInputWires)
             })
             .collect::<Result<_, _>>()?;
         let output_wire: usize = parts[2 + num_inputs]
             .parse()
-            .map_err(|_| ConverterError::MissingOutputWires)?;
-        let gate_type = parts
-            .last()
-            .ok_or_else(|| ConverterError::MissingGateType)?;
+            .map_err(|_| FromBristolError::MissingOutputWires)?;
+        let gate_type = parts.last().ok_or(FromBristolError::MissingGateType)?;
 
         // Check if the output wire is an output gate
         if output_wire < wires_num && output_wire >= wires_num - num_output_wires {
@@ -248,7 +334,7 @@ pub(crate) fn bristol_to_garble(path: &str) -> Result<Circuit, ConverterError> {
         let gate = match *gate_type {
             "XOR" | "AND" => {
                 if input_wires.len() != 2 {
-                    return Err(ConverterError::MalformedLine(line_str));
+                    return Err(FromBristolError::MalformedLine(line_str).into());
                 }
                 if *gate_type == "XOR" {
                     Gate::Xor(wires_map[input_wires[0]], wires_map[input_wires[1]])
@@ -258,12 +344,12 @@ pub(crate) fn bristol_to_garble(path: &str) -> Result<Circuit, ConverterError> {
             }
             "INV" => {
                 if input_wires.len() != 1 {
-                    return Err(ConverterError::MalformedLine(line_str));
+                    return Err(FromBristolError::MalformedLine(line_str).into());
                 }
                 Gate::Not(wires_map[input_wires[0]])
             }
             _ => {
-                return Err(ConverterError::UnknownGate(gate_type.to_string()));
+                return Err(FromBristolError::UnknownGate(gate_type.to_string()).into());
             }
         };
         gates.push(gate);
@@ -277,15 +363,14 @@ pub(crate) fn bristol_to_garble(path: &str) -> Result<Circuit, ConverterError> {
 }
 
 /// Parses a line from the Bristol format file and returns a vector of usize.
-pub fn parse_line(line: Option<String>) -> Result<(Vec<usize>, String), ConverterError> {
-    let line_str =
-        line.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "Missing line"))?;
+pub fn parse_line(line: Option<String>) -> Result<(Vec<usize>, String), FromBristolError> {
+    let line_str = line.ok_or(FromBristolError::MissingLine)?;
 
     let parts: Vec<usize> = line_str
         .split_whitespace()
         .map(|s| {
             s.parse::<usize>()
-                .map_err(|e| ConverterError::OtherParseError(e.to_string()))
+                .map_err(|e| FromBristolError::OtherParseError(e.to_string()))
         })
         .collect::<Result<_, _>>()?;
 

@@ -334,8 +334,8 @@ impl Error {
 }
 
 impl ConverterError {
-    /// Returns a human-readable error description, showing where the error occurred in the source.
-    pub fn prettify(&self, _: &str) -> String {
+    /// Returns a human-readable error description.
+    pub fn prettify(&self) -> String {
         format!("Bristol conversion error: {self:?}")
     }
 }
