@@ -132,9 +132,16 @@ impl From<ToBristolError> for ConverterError {
 
 /// Converts a Circuit into a [Bristol fashion circuit format](https://nigelsmart.github.io/MPC-Circuits/).
 ///
-/// The bristol format is a simple text format that describes a circuit in terms of its gates.
-/// Each line of the file describes a gate, with the first line containing the number of parties,
-/// the number of wires, and the number of gates.
+/// The 'basic' bristol format is a simple text format that describes a circuit in terms of its gates.
+///
+/// The first line contains the number of gates, and then the number of wires in the circuit.
+/// The second line contains the number of input values, and the number of bits per input value.
+/// The third line contains the number of output values, and the number of bits per output value.
+/// The remaining lines contain the gates in the circuit, where each line contains the number of input
+/// wires, the number of output wires, then lists the input and output wires and the gate type (XOR, AND, INV).
+///
+/// Garble circuits can contain panic gates, which are not supported in the Bristol format.
+/// Hence, the panic gates are removed from the circuit, and the output wires are adjusted accordingly.
 pub(crate) fn garble_to_bristol(circuit: Circuit, path: &str) -> Result<(), ConverterError> {
     let mut mod_circuit = circuit.clone();
     let total_input_gates = mod_circuit.input_gates.iter().sum::<usize>();
@@ -171,15 +178,15 @@ pub(crate) fn garble_to_bristol(circuit: Circuit, path: &str) -> Result<(), Conv
 
     // Create the file that will contain the circuit described in Bristol fashion.
     let mut file = File::create(path)?;
-    // The first line contains the number of parties, the number of wires, and the number of gates.
+    // The first line contains the number of gates, and then the number of wires in the circuit.
     writeln!(file, "{} {}", total_gates, total_wires)?;
-    // The second line contains the number of parties, and the number of input wires per party.
+    // The second line contains the number of input values, and the number of bits per input value.
     write!(file, "{} ", mod_circuit.input_gates.len())?;
     for &input_len in &mod_circuit.input_gates {
         write!(file, "{} ", input_len)?;
     }
     writeln!(file)?;
-    // The third line contains the number of output wires.
+    // The third line contains the number of output values, and the number of bits per output value.
     writeln!(file, "1 {}", output_gates.len())?;
     writeln!(file)?;
 
@@ -192,12 +199,7 @@ pub(crate) fn garble_to_bristol(circuit: Circuit, path: &str) -> Result<(), Conv
     }
 
     let mut out_idx = 0;
-    for (i, wire) in wires_map
-        .iter_mut()
-        .enumerate()
-        .take(total_wires)
-        .skip(total_input_gates)
-    {
+    for (i, wire) in wires_map.iter_mut().enumerate().skip(total_input_gates) {
         if let Some(idx) = output_gates.iter().position(|&x| x == i) {
             *wire = total_wires - output_gates.len() + idx;
             out_idx += 1;
@@ -283,9 +285,8 @@ pub(crate) fn bristol_to_garble(path: &str) -> Result<Circuit, ConverterError> {
                 FromBristolError::OutputCountMismatch(gates_per_output.len(), num_outputs).into(),
             );
         }
-        let total_outputs = gates_per_output.iter().sum();
         let num_output_wires = gates_per_output.iter().sum::<usize>();
-        (vec![0; total_outputs], num_output_wires)
+        (vec![0; num_output_wires], num_output_wires)
     };
 
     // Create the wires map to map the wires in the Bristol format to the wires in the Garble format.
@@ -302,7 +303,7 @@ pub(crate) fn bristol_to_garble(path: &str) -> Result<Circuit, ConverterError> {
         if parts.is_empty() {
             continue;
         }
-        if parts.len() < 4 {
+        if parts.len() < 5 {
             return Err(FromBristolError::MalformedLine(line_str).into());
         }
         let num_inputs: usize = parts[0]
