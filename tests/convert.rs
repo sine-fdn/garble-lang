@@ -5,14 +5,14 @@ use garble_lang::{
 };
 
 use std::{
-    fs::File,
+    fs,
     io::{BufRead, BufReader},
     path::Path,
 };
 
 /// Evaluates a Bristol format circuit using the given inputs.
 fn bristol_eval(path: &Path, inputs: &[Vec<bool>]) -> Result<Vec<bool>, FromBristolError> {
-    let file = File::open(path)?;
+    let file = fs::File::open(path)?;
     let reader = BufReader::new(file);
     let mut lines = reader.lines().map_while(Result::ok);
 
@@ -157,6 +157,8 @@ fn convert_garble_to_bristol_to_garble() -> Result<(), String> {
     let product: u64 = 45678 * 1234;
     let bits: Vec<bool> = (0..64).rev().map(|i| product & (1u64 << i) != 0).collect();
     assert_eq!(output1, bits);
-
+    
+    fs::remove_file("bristol_examples/circuit.txt")
+        .map_err(|e| e.to_string())?;
     Ok(())
 }

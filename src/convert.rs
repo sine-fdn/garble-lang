@@ -230,13 +230,15 @@ impl Circuit {
             *wire = i;
         }
 
-        let mut out_idx = 0;
+        let output_gate_set: HashSet<_> = output_gates.iter().copied().collect();
+        let mut out_count = 0;
         for (i, wire) in wires_map.iter_mut().enumerate().skip(total_input_gates) {
-            if let Some(idx) = output_gates.iter().position(|&x| x == i) {
+            if output_gate_set.contains(&i) {
+                let idx = output_gates.iter().position(|&x| x == i).unwrap();
                 *wire = total_wires - output_gates.len() + idx;
-                out_idx += 1;
+                out_count += 1;
             } else {
-                *wire = i - out_idx;
+                *wire = i - out_count;
             }
         }
 
