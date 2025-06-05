@@ -6,6 +6,8 @@ use std::{
     collections::HashSet,
     fs::File,
     io::{BufRead, BufReader, Write},
+    num::ParseIntError,
+    path::Path,
 };
 
 /// An error that occurred during compilation.
@@ -15,6 +17,8 @@ pub enum ConverterError {
     ToBristolError(ToBristolError),
     /// An error occurred while writing to the file.
     FromBristolError(FromBristolError),
+    /// An error occurred while parsing the number of inputs, input wires or output wires as integers.
+    ParseIntError(ParseIntError),
     /// An error occurred while writing to the file.
     IoError(std::io::Error),
 }
@@ -31,12 +35,6 @@ pub enum ToBristolError {
 pub enum FromBristolError {
     /// An unknown gate was encountered.
     UnknownGate(String),
-    /// Missing number of inputs in the gate definition.
-    MissingNumberOfInputs,
-    /// Missing input wires in the gate definition.
-    MissingInputWires,
-    /// Missing output wires in the gate definition.
-    MissingOutputWires,
     /// Missing gate type in the gate definition.
     MissingGateType,
     /// An error occurred while parsing the file.
@@ -61,6 +59,9 @@ impl std::fmt::Display for ConverterError {
                 f.write_fmt(format_args!("Bristol to Garble error: {}", e))
             }
             ConverterError::IoError(e) => f.write_fmt(format_args!("IO error: {}", e)),
+            ConverterError::ParseIntError(e) => {
+                f.write_fmt(format_args!("Parse integer error while parsing number of inputs, input wires or output wires: {}", e))
+            }
         }
     }
 }
@@ -80,15 +81,6 @@ impl std::fmt::Display for FromBristolError {
         match self {
             FromBristolError::UnknownGate(gate) => {
                 f.write_fmt(format_args!("Unknown gate: {}", gate))
-            }
-            FromBristolError::MissingNumberOfInputs => {
-                f.write_str("Missing number of inputs in gate definition")
-            }
-            FromBristolError::MissingInputWires => {
-                f.write_str("Missing input wires in gate definition")
-            }
-            FromBristolError::MissingOutputWires => {
-                f.write_str("Missing output wires in gate definition")
             }
             FromBristolError::MissingGateType => {
                 f.write_str("Missing gate type in gate definition")
@@ -130,6 +122,12 @@ impl From<ToBristolError> for ConverterError {
     }
 }
 
+impl From<ParseIntError> for ConverterError {
+    fn from(e: ParseIntError) -> Self {
+        ConverterError::ParseIntError(e)
+    }
+}
+
 /// Converts a Circuit into a [Bristol fashion circuit format](https://nigelsmart.github.io/MPC-Circuits/).
 ///
 /// The 'basic' bristol format is a simple text format that describes a circuit in terms of its gates.
@@ -142,7 +140,7 @@ impl From<ToBristolError> for ConverterError {
 ///
 /// Garble circuits can contain panic gates, which are not supported in the Bristol format.
 /// Hence, the panic gates are removed from the circuit, and the output wires are adjusted accordingly.
-pub(crate) fn garble_to_bristol(circuit: Circuit, path: &str) -> Result<(), ConverterError> {
+pub(crate) fn garble_to_bristol(circuit: Circuit, path: &Path) -> Result<(), ConverterError> {
     let mut mod_circuit = circuit.clone();
     let total_input_gates = mod_circuit.input_gates.iter().sum::<usize>();
     let mut total_gates = mod_circuit.gates.len();
@@ -181,6 +179,8 @@ pub(crate) fn garble_to_bristol(circuit: Circuit, path: &str) -> Result<(), Conv
     // The first line contains the number of gates, and then the number of wires in the circuit.
     writeln!(file, "{} {}", total_gates, total_wires)?;
     // The second line contains the number of input values, and the number of bits per input value.
+    // Note that inputs in the resulting bristol circuit correspond to the input of the computing parties in
+    // ascending order.
     write!(file, "{} ", mod_circuit.input_gates.len())?;
     for &input_len in &mod_circuit.input_gates {
         write!(file, "{} ", input_len)?;
@@ -239,7 +239,7 @@ pub(crate) fn garble_to_bristol(circuit: Circuit, path: &str) -> Result<(), Conv
 /// Converts a Bristol fashion circuit format into a Garble Circuit. Important to note that
 /// the Bristol format does not support panic gates, hence the panic gates are removed from the
 /// circuit.
-pub(crate) fn bristol_to_garble(path: &str) -> Result<Circuit, ConverterError> {
+pub(crate) fn bristol_to_garble(path: &Path) -> Result<Circuit, ConverterError> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     let mut lines = reader.lines().map_while(Result::ok);
@@ -254,6 +254,7 @@ pub(crate) fn bristol_to_garble(path: &str) -> Result<Circuit, ConverterError> {
     };
 
     // Parse input line
+    // The conversion assumes that each party provides one of the inputs in ascending order of their party IDs.
     let (input_gates, input_wires_num) = {
         let (parts, line_str) = parse_line(lines.next())?;
         if parts.len() < 2 {
@@ -306,22 +307,15 @@ pub(crate) fn bristol_to_garble(path: &str) -> Result<Circuit, ConverterError> {
         if parts.len() < 5 {
             return Err(FromBristolError::MalformedLine(line_str).into());
         }
-        let num_inputs: usize = parts[0]
-            .parse()
-            .map_err(|_| FromBristolError::MissingNumberOfInputs)?;
+        let num_inputs: usize = parts[0].parse()?;
         if parts.len() != num_inputs + 4 {
             return Err(FromBristolError::MalformedLine(line_str).into());
         }
         let input_wires: Vec<usize> = parts[2..(2 + num_inputs)]
             .iter()
-            .map(|s| {
-                s.parse::<usize>()
-                    .map_err(|_| FromBristolError::MissingInputWires)
-            })
-            .collect::<Result<_, _>>()?;
-        let output_wire: usize = parts[2 + num_inputs]
-            .parse()
-            .map_err(|_| FromBristolError::MissingOutputWires)?;
+            .map(|s| s.parse::<usize>().map_err(Into::into))
+            .collect::<Result<_, ConverterError>>()?;
+        let output_wire: usize = parts[2 + num_inputs].parse()?;
         let gate_type = parts.last().ok_or(FromBristolError::MissingGateType)?;
 
         // Check if the output wire is an output gate

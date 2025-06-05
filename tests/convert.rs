@@ -7,10 +7,11 @@ use garble_lang::{
 use std::{
     fs::File,
     io::{BufRead, BufReader},
+    path::Path,
 };
 
 /// Evaluates a Bristol format circuit using the given inputs.
-fn bristol_eval(path: &str, inputs: &[Vec<bool>]) -> Result<Vec<bool>, ConverterError> {
+fn bristol_eval(path: &Path, inputs: &[Vec<bool>]) -> Result<Vec<bool>, ConverterError> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     let mut lines = reader.lines().map_while(Result::ok);
@@ -103,8 +104,8 @@ fn bristol_eval(path: &str, inputs: &[Vec<bool>]) -> Result<Vec<bool>, Converter
 #[test]
 fn convert_bristol_to_garble() -> Result<(), String> {
     // Compile the Bristol circuit to a Circuit in Garble
-    let mult =
-        compile_bristol_to_circuit("bristol_examples/mult64.txt").map_err(|e| e.prettify(""))?;
+    let mult = compile_bristol_to_circuit(Path::new("bristol_examples/mult64.txt"))
+        .map_err(|e| e.prettify(""))?;
 
     // Evaluate the circuit with inputs 45678 and 1234 both as Circuit and as Bristol circuit
     let input1_bits: Vec<bool> = (0..64).rev().map(|i| 45678u64 & (1u64 << i) != 0).collect();
@@ -112,7 +113,7 @@ fn convert_bristol_to_garble() -> Result<(), String> {
 
     let output1 = mult.eval(&[input1_bits.clone(), input2_bits.clone()]);
     let output2 = bristol_eval(
-        "bristol_examples/mult64.txt",
+        Path::new("bristol_examples/mult64.txt"),
         &[input1_bits.clone(), input2_bits.clone()],
     )
     .map_err(|e| e.prettify())?;
@@ -129,9 +130,10 @@ fn convert_garble_to_bristol_to_garble() -> Result<(), String> {
     }
     ";
     let compiled = compile(&naive).map_err(|e| e.prettify(naive))?;
-    compile_to_bristol(naive, "bristol_examples/circuit.txt").map_err(|e| e.prettify(naive))?;
-    let new_circuit =
-        compile_bristol_to_circuit("bristol_examples/circuit.txt").map_err(|e| e.prettify(""))?;
+    compile_to_bristol(naive, Path::new("bristol_examples/circuit.txt"))
+        .map_err(|e| e.prettify(naive))?;
+    let new_circuit = compile_bristol_to_circuit(Path::new("bristol_examples/circuit.txt"))
+        .map_err(|e| e.prettify(""))?;
 
     let input1_bits: Vec<bool> = (0..64).rev().map(|i| 45678u64 & (1u64 << i) != 0).collect();
     let input2_bits: Vec<bool> = (0..64).rev().map(|i| 1234u64 & (1u64 << i) != 0).collect();
@@ -142,7 +144,7 @@ fn convert_garble_to_bristol_to_garble() -> Result<(), String> {
         .eval(&[input1_bits.clone(), input2_bits.clone()])[PANIC_RESULT_SIZE_IN_BITS..]
         .to_vec();
     let output2 = bristol_eval(
-        "bristol_examples/circuit.txt",
+        Path::new("bristol_examples/circuit.txt"),
         &[input1_bits.clone(), input2_bits.clone()],
     )
     .map_err(|e| e.prettify())?;
