@@ -151,6 +151,9 @@ fn convert_garble_to_bristol_to_garble() -> Result<(), String> {
     let output3 = new_circuit.eval(&[input1_bits.clone(), input2_bits.clone()]);
     assert_eq!(output2, output1);
     assert_eq!(output3, output2);
+    let product: u64 = 45678 * 1234;
+    let bits: Vec<bool> = (0..64).rev().map(|i| product & (1u64 << i) != 0).collect();
+    assert_eq!(output1, bits);
 
     Ok(())
 }

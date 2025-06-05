@@ -135,8 +135,8 @@ impl From<ParseIntError> for ConverterError {
 }
 
 /// Converts a Circuit into a [Bristol fashion circuit format](https://nigelsmart.github.io/MPC-Circuits/).
-///
-/// The 'basic' bristol format is a simple text format that describes a circuit in terms of its gates.
+/// We support the 'basic' bristol format (no MAND gates), and we only support the following gates: XOR, AND, INV.
+/// Gates EQ and EQW are not supported, though might occur in the circuit.
 ///
 /// The first line contains the number of gates, and then the number of wires in the circuit.
 /// The second line contains the number of input values, and the number of bits per input value.
@@ -245,9 +245,9 @@ pub(crate) fn garble_to_bristol(circuit: Circuit, path: &Path) -> Result<(), Con
     Ok(())
 }
 
-/// Converts a Bristol fashion circuit format into a Garble Circuit. Important to note that
-/// the Bristol format does not support panic gates, hence the panic gates are removed from the
-/// circuit.
+/// Converts a Bristol fashion circuit format into a Garble Circuit.
+/// We support the 'basic' bristol format (no MAND gates), and we only support the following gates: XOR, AND, INV.
+/// Gates EQ and EQW are not supported, though might occur in the bristol circuit.
 pub(crate) fn bristol_to_garble(path: &Path) -> Result<Circuit, ConverterError> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
@@ -319,7 +319,8 @@ pub(crate) fn bristol_to_garble(path: &Path) -> Result<Circuit, ConverterError> 
             return Err(FromBristolError::MalformedLine(line_str).into());
         }
         let num_inputs: usize = parts[0].parse()?;
-        if parts.len() != num_inputs + 4 {
+        let num_outputs: usize = parts[1].parse()?;
+        if num_outputs != 1 || parts.len() != num_inputs + 4 {
             return Err(FromBristolError::MalformedLine(line_str).into());
         }
         let input_wires: Vec<usize> = parts[2..(2 + num_inputs)]
