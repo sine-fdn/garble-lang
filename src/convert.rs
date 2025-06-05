@@ -47,6 +47,8 @@ pub enum FromBristolError {
     MissingLine,
     /// Malformed Bristol fashion circuit file.
     MalformedLine(String),
+    /// The output wire is not a valid wire in the circuit.
+    InvalidWireIndex(usize),
 }
 
 impl std::fmt::Display for ConverterError {
@@ -98,6 +100,10 @@ impl std::fmt::Display for FromBristolError {
             FromBristolError::MalformedLine(line) => {
                 f.write_fmt(format_args!("Malformed line: {}", line))
             }
+            FromBristolError::InvalidWireIndex(wire) => f.write_fmt(format_args!(
+                "Wire index larger than number of wires: {}",
+                wire
+            )),
         }
     }
 }
@@ -164,8 +170,11 @@ pub(crate) fn garble_to_bristol(circuit: Circuit, path: &Path) -> Result<(), Con
     let mut seen = HashSet::new();
     let mut wire_max = total_wires;
     for out in &mut output_gates {
-        if !seen.insert(*out) {
+        let inserted = seen.insert(*out);
+        if !inserted {
+            // This output wire (always false) with index wire_max will be used to simulate the identity gate.
             mod_circuit.gates.push(Gate::Xor(*out, *out));
+            // We XOR the result of wire_max (false) with the wire *out to simulate the identity gate.
             mod_circuit.gates.push(Gate::Xor(*out, wire_max));
             *out = wire_max + 1;
             wire_max += 2;
@@ -242,7 +251,9 @@ pub(crate) fn garble_to_bristol(circuit: Circuit, path: &Path) -> Result<(), Con
 pub(crate) fn bristol_to_garble(path: &Path) -> Result<Circuit, ConverterError> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
-    let mut lines = reader.lines().map_while(Result::ok);
+    let lines_res: Result<Vec<String>, std::io::Error> = reader.lines().collect();
+    let lines_str = lines_res?;
+    let mut lines = lines_str.into_iter();
 
     // Parse wire and gate counts
     let (wires_num, _gates_num) = {
@@ -316,10 +327,19 @@ pub(crate) fn bristol_to_garble(path: &Path) -> Result<Circuit, ConverterError> 
             .map(|s| s.parse::<usize>().map_err(Into::into))
             .collect::<Result<_, ConverterError>>()?;
         let output_wire: usize = parts[2 + num_inputs].parse()?;
+        // Validate input wires and output wire are within bounds
+        if let Some(&ind) = input_wires.iter().find(|&&w| w >= wires_num) {
+            return Err(FromBristolError::InvalidWireIndex(ind).into());
+        }
+        if output_wire >= wires_num {
+            return Err(FromBristolError::InvalidWireIndex(output_wire).into());
+        }
+
         let gate_type = parts.last().ok_or(FromBristolError::MissingGateType)?;
 
         // Check if the output wire is an output gate
-        if output_wire < wires_num && output_wire >= wires_num - num_output_wires {
+
+        if output_wire >= wires_num - num_output_wires {
             output_gates[output_wire - (wires_num - num_output_wires)] = next_wire;
         }
 
