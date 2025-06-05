@@ -1,7 +1,7 @@
 use garble_lang::{
-    circuit::PANIC_RESULT_SIZE_IN_BITS,
-    compile, compile_bristol_to_circuit, compile_to_bristol,
-    convert::{parse_line, ConverterError, FromBristolError},
+    circuit::{Circuit, PANIC_RESULT_SIZE_IN_BITS},
+    compile,
+    convert::{parse_line, FromBristolError},
 };
 
 use std::{
@@ -11,7 +11,7 @@ use std::{
 };
 
 /// Evaluates a Bristol format circuit using the given inputs.
-fn bristol_eval(path: &Path, inputs: &[Vec<bool>]) -> Result<Vec<bool>, ConverterError> {
+fn bristol_eval(path: &Path, inputs: &[Vec<bool>]) -> Result<Vec<bool>, FromBristolError> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     let mut lines = reader.lines().map_while(Result::ok);
@@ -104,8 +104,8 @@ fn bristol_eval(path: &Path, inputs: &[Vec<bool>]) -> Result<Vec<bool>, Converte
 #[test]
 fn convert_bristol_to_garble() -> Result<(), String> {
     // Compile the Bristol circuit to a Circuit in Garble
-    let mult = compile_bristol_to_circuit(Path::new("bristol_examples/mult64.txt"))
-        .map_err(|e| e.prettify(""))?;
+    let mult = Circuit::bristol_to_garble(Path::new("bristol_examples/mult64.txt"))
+        .map_err(|e| e.prettify())?;
 
     // Evaluate the circuit with inputs 45678 and 1234 both as Circuit and as Bristol circuit
     let input1_bits: Vec<bool> = (0..64).rev().map(|i| 45678u64 & (1u64 << i) != 0).collect();
@@ -130,10 +130,13 @@ fn convert_garble_to_bristol_to_garble() -> Result<(), String> {
     }
     ";
     let compiled = compile(&naive).map_err(|e| e.prettify(naive))?;
-    compile_to_bristol(naive, Path::new("bristol_examples/circuit.txt"))
-        .map_err(|e| e.prettify(naive))?;
-    let new_circuit = compile_bristol_to_circuit(Path::new("bristol_examples/circuit.txt"))
-        .map_err(|e| e.prettify(""))?;
+
+    compiled
+        .circuit
+        .format_as_bristol(Path::new("bristol_examples/circuit.txt"))
+        .map_err(|e| e.prettify())?;
+    let new_circuit = Circuit::bristol_to_garble(Path::new("bristol_examples/circuit.txt"))
+        .map_err(|e| e.prettify())?;
 
     let input1_bits: Vec<bool> = (0..64).rev().map(|i| 45678u64 & (1u64 << i) != 0).collect();
     let input2_bits: Vec<bool> = (0..64).rev().map(|i| 1234u64 & (1u64 << i) != 0).collect();

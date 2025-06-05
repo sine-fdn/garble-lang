@@ -60,6 +60,8 @@ use token::MetaInfo;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+use crate::convert::{FromBristolError, ToBristolError};
+
 /// [`crate::ast::Program`] without any associated type information.
 pub type UntypedProgram = Program<()>;
 /// [`crate::ast::FnDef`] without any associated type information.
@@ -289,9 +291,15 @@ impl From<EvalError> for Error {
     }
 }
 
-impl From<ConverterError> for Error {
-    fn from(e: ConverterError) -> Self {
-        Self::ConvertError(e)
+impl From<FromBristolError> for Error {
+    fn from(e: FromBristolError) -> Self {
+        Self::ConvertError(e.into())
+    }
+}
+
+impl From<ToBristolError> for Error {
+    fn from(e: ToBristolError) -> Self {
+        Self::ConvertError(e.into())
     }
 }
 
@@ -334,10 +342,21 @@ impl Error {
     }
 }
 
-impl ConverterError {
+impl FromBristolError {
     /// Returns a human-readable error description.
     pub fn prettify(&self) -> String {
-        format!("Bristol conversion error: {self:?}")
+        format!(
+            "Error occured during the conversion from Bristol format to Garble Circuit: {self:?}"
+        )
+    }
+}
+
+impl ToBristolError {
+    /// Returns a human-readable error description.
+    pub fn prettify(&self) -> String {
+        format!(
+            "Error occured during the conversion from Garble Circuit to Bristol format: {self:?}"
+        )
     }
 }
 

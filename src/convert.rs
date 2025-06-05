@@ -17,22 +17,26 @@ pub enum ConverterError {
     ToBristolError(ToBristolError),
     /// An error occurred while writing to the file.
     FromBristolError(FromBristolError),
-    /// An error occurred while parsing the number of inputs, input wires or output wires as integers.
-    ParseIntError(ParseIntError),
+}
+
+/// An error that occurred during compilation.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum ToBristolError {
+    /// Some input wires are also output wires.
+    OutputWireIsInput,
     /// An error occurred while writing to the file.
     IoError(std::io::Error),
 }
 
 /// An error that occurred during compilation.
 #[derive(Debug)]
-pub enum ToBristolError {
-    /// Some input wires are also output wires.
-    OutputWireIsInput,
-}
-
-/// An error that occurred during compilation.
-#[derive(Debug)]
+#[non_exhaustive]
 pub enum FromBristolError {
+    /// An error occurred while writing to the file.
+    IoError(std::io::Error),
+    /// An error occurred while parsing the number of inputs, input wires or output wires as integers.
+    ParseIntError(ParseIntError),
     /// An unknown gate was encountered.
     UnknownGate(String),
     /// Missing gate type in the gate definition.
@@ -60,10 +64,6 @@ impl std::fmt::Display for ConverterError {
             ConverterError::FromBristolError(e) => {
                 f.write_fmt(format_args!("Bristol to Garble error: {}", e))
             }
-            ConverterError::IoError(e) => f.write_fmt(format_args!("IO error: {}", e)),
-            ConverterError::ParseIntError(e) => {
-                f.write_fmt(format_args!("Parse integer error while parsing number of inputs, input wires or output wires: {}", e))
-            }
         }
     }
 }
@@ -74,6 +74,7 @@ impl std::fmt::Display for ToBristolError {
             ToBristolError::OutputWireIsInput => f.write_str(
                 "Output wire is also an input wire, which is not allowed in Bristol fashion format",
             ),
+            ToBristolError::IoError(e) => f.write_fmt(format_args!("IO error: {}", e)),
         }
     }
 }
@@ -81,6 +82,10 @@ impl std::fmt::Display for ToBristolError {
 impl std::fmt::Display for FromBristolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            FromBristolError::IoError(e) => f.write_fmt(format_args!("IO error: {}", e)),
+            FromBristolError::ParseIntError(e) => {
+                f.write_fmt(format_args!("Parse integer error while parsing number of inputs, input wires or output wires: {}", e))
+            }
             FromBristolError::UnknownGate(gate) => {
                 f.write_fmt(format_args!("Unknown gate: {}", gate))
             }
@@ -110,9 +115,15 @@ impl std::fmt::Display for FromBristolError {
 
 impl std::error::Error for ConverterError {}
 
-impl From<std::io::Error> for ConverterError {
+impl From<std::io::Error> for ToBristolError {
     fn from(e: std::io::Error) -> Self {
-        ConverterError::IoError(e)
+        ToBristolError::IoError(e)
+    }
+}
+
+impl From<std::io::Error> for FromBristolError {
+    fn from(e: std::io::Error) -> Self {
+        FromBristolError::IoError(e)
     }
 }
 
@@ -128,9 +139,9 @@ impl From<ToBristolError> for ConverterError {
     }
 }
 
-impl From<ParseIntError> for ConverterError {
+impl From<ParseIntError> for FromBristolError {
     fn from(e: ParseIntError) -> Self {
-        ConverterError::ParseIntError(e)
+        FromBristolError::ParseIntError(e)
     }
 }
 
@@ -147,8 +158,8 @@ impl Circuit {
     ///
     /// Garble circuits can contain panic gates, which are not supported in the Bristol format.
     /// Hence, the panic gates are removed from the circuit, and the output wires are adjusted accordingly.
-    pub(crate) fn format_as_bristol(&self, path: &Path) -> Result<(), ConverterError> {
-        let mut circuit = &*self;
+    pub fn format_as_bristol(&self, path: &Path) -> Result<(), ToBristolError> {
+        let mut circuit = self;
         let total_input_gates = circuit.input_gates.iter().sum::<usize>();
         let mut total_gates = circuit.gates.len();
         let mut total_wires = total_gates + total_input_gates;
@@ -163,7 +174,7 @@ impl Circuit {
         // it reveals information about the input.
         let input_wire_set: HashSet<_> = (0..total_input_gates).collect();
         if output_gates.iter().any(|w| input_wire_set.contains(w)) {
-            return Err(ToBristolError::OutputWireIsInput.into());
+            return Err(ToBristolError::OutputWireIsInput);
         }
 
         // Deal with duplicate output wires that is possible in Garble by simulating "identity" gates using two Xor
@@ -171,9 +182,14 @@ impl Circuit {
         let mut seen = HashSet::new();
         let mut mod_circuit = None;
         let mut wire_max = total_wires;
+
         for out in &mut output_gates {
             let inserted = seen.insert(*out);
             if !inserted {
+                println!(
+                    "Output wire {} is duplicated, simulating identity gate",
+                    out
+                );
                 let circuit = mod_circuit.get_or_insert_with(|| circuit.clone());
                 // This output wire (always false) with index wire_max will be used to simulate the identity gate.
                 circuit.gates.push(Gate::Xor(*out, *out));
@@ -255,7 +271,7 @@ impl Circuit {
     /// Converts a Bristol fashion circuit format into a Garble Circuit.
     /// We support the 'basic' bristol format (no MAND gates), and we only support the following gates: XOR, AND, INV.
     /// Gates EQ and EQW are not supported, though might occur in the bristol circuit.
-    pub(crate) fn bristol_to_garble(path: &Path) -> Result<Circuit, ConverterError> {
+    pub fn bristol_to_garble(path: &Path) -> Result<Circuit, FromBristolError> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let lines_res: Result<Vec<String>, std::io::Error> = reader.lines().collect();
@@ -266,7 +282,7 @@ impl Circuit {
         let (wires_num, _gates_num) = {
             let (parts, line_str) = parse_line(lines.next())?;
             if parts.len() != 2 {
-                return Err(FromBristolError::MalformedLine(line_str).into());
+                return Err(FromBristolError::MalformedLine(line_str));
             }
             (parts[1], parts[0])
         };
@@ -276,7 +292,7 @@ impl Circuit {
         let (input_gates, input_wires_num) = {
             let (parts, line_str) = parse_line(lines.next())?;
             if parts.len() < 2 {
-                return Err(FromBristolError::MalformedLine(line_str).into());
+                return Err(FromBristolError::MalformedLine(line_str));
             }
             let input_gates = parts[1..].to_vec();
             let expected_parties = parts[0];
@@ -284,8 +300,7 @@ impl Circuit {
                 return Err(FromBristolError::InputPartiesMismatch(
                     input_gates.len(),
                     expected_parties,
-                )
-                .into());
+                ));
             }
             let input_wires: usize = input_gates.iter().sum();
             (input_gates, input_wires)
@@ -295,7 +310,7 @@ impl Circuit {
         let (mut output_gates, num_output_wires) = {
             let (parts, line_str) = parse_line(lines.next())?;
             if parts.len() < 2 {
-                return Err(FromBristolError::MalformedLine(line_str).into());
+                return Err(FromBristolError::MalformedLine(line_str));
             }
             let num_outputs = parts[0];
             let gates_per_output = parts[1..].to_vec();
@@ -303,8 +318,7 @@ impl Circuit {
                 return Err(FromBristolError::OutputCountMismatch(
                     gates_per_output.len(),
                     num_outputs,
-                )
-                .into());
+                ));
             }
             let num_output_wires = gates_per_output.iter().sum::<usize>();
             (vec![0; num_output_wires], num_output_wires)
@@ -325,24 +339,24 @@ impl Circuit {
                 continue;
             }
             if parts.len() < 5 {
-                return Err(FromBristolError::MalformedLine(line_str).into());
+                return Err(FromBristolError::MalformedLine(line_str));
             }
             let num_inputs: usize = parts[0].parse()?;
             let num_outputs: usize = parts[1].parse()?;
             if num_outputs != 1 || parts.len() != num_inputs + 4 {
-                return Err(FromBristolError::MalformedLine(line_str).into());
+                return Err(FromBristolError::MalformedLine(line_str));
             }
             let input_wires: Vec<usize> = parts[2..(2 + num_inputs)]
                 .iter()
                 .map(|s| s.parse::<usize>().map_err(Into::into))
-                .collect::<Result<_, ConverterError>>()?;
+                .collect::<Result<_, FromBristolError>>()?;
             let output_wire: usize = parts[2 + num_inputs].parse()?;
             // Validate input wires and output wire are within bounds
             if let Some(&ind) = input_wires.iter().find(|&&w| w >= wires_num) {
-                return Err(FromBristolError::InvalidWireIndex(ind).into());
+                return Err(FromBristolError::InvalidWireIndex(ind));
             }
             if output_wire >= wires_num {
-                return Err(FromBristolError::InvalidWireIndex(output_wire).into());
+                return Err(FromBristolError::InvalidWireIndex(output_wire));
             }
 
             let gate_type = parts.last().ok_or(FromBristolError::MissingGateType)?;
@@ -359,7 +373,7 @@ impl Circuit {
             let gate = match *gate_type {
                 "XOR" | "AND" => {
                     if input_wires.len() != 2 {
-                        return Err(FromBristolError::MalformedLine(line_str).into());
+                        return Err(FromBristolError::MalformedLine(line_str));
                     }
                     if *gate_type == "XOR" {
                         Gate::Xor(wires_map[input_wires[0]], wires_map[input_wires[1]])
@@ -369,12 +383,12 @@ impl Circuit {
                 }
                 "INV" => {
                     if input_wires.len() != 1 {
-                        return Err(FromBristolError::MalformedLine(line_str).into());
+                        return Err(FromBristolError::MalformedLine(line_str));
                     }
                     Gate::Not(wires_map[input_wires[0]])
                 }
                 _ => {
-                    return Err(FromBristolError::UnknownGate(gate_type.to_string()).into());
+                    return Err(FromBristolError::UnknownGate(gate_type.to_string()));
                 }
             };
             gates.push(gate);
