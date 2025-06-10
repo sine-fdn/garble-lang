@@ -186,10 +186,6 @@ impl Circuit {
         for out in &mut output_gates {
             let inserted = seen.insert(*out);
             if !inserted {
-                println!(
-                    "Output wire {} is duplicated, simulating identity gate",
-                    out
-                );
                 let circuit = mod_circuit.get_or_insert_with(|| circuit.clone());
                 // This output wire (always false) with index wire_max will be used to simulate the identity gate.
                 circuit.gates.push(Gate::Xor(*out, *out));
