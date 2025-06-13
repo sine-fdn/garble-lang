@@ -8,9 +8,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - name: Install 1.83
+        uses: dtolnay/rust-toolchain@master
+        id: toolchain
         with:
-          toolchain: stable
+          toolchain: 1.83
+          components: clippy
       - name: Cache target
         uses: actions/cache@v4
         env:
