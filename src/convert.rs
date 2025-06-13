@@ -3,7 +3,7 @@
 
 use crate::circuit::{Circuit, Gate, PANIC_RESULT_SIZE_IN_BITS};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs::File,
     io::{BufRead, BufReader, Write},
     num::ParseIntError,
@@ -226,11 +226,15 @@ impl Circuit {
             *wire = i;
         }
 
-        let output_gate_set: HashSet<_> = output_gates.iter().copied().collect();
+        let output_gate_positions: HashMap<_, _> = output_gates
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(pos, gate)| (gate, pos))
+            .collect();
         let mut out_count = 0;
         for (i, wire) in wires_map.iter_mut().enumerate().skip(total_input_gates) {
-            if output_gate_set.contains(&i) {
-                let idx = output_gates.iter().position(|&x| x == i).unwrap();
+            if let Some(&idx) = output_gate_positions.get(&i) {
                 *wire = total_wires - output_gates.len() + idx;
                 out_count += 1;
             } else {
