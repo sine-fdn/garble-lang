@@ -53,7 +53,7 @@ pub enum EvalError {
     /// The circuit does not have an input argument with the given index.
     InvalidArgIndex(usize),
     /// The literal is not of the expected parameter type.
-    InvalidLiteralType(Literal, Type),
+    InvalidLiteralType(Box<Literal>, Box<Type>),
     /// The number of output bits does not match the expected type.
     OutputTypeMismatch {
         /// The expected output type.
@@ -200,7 +200,10 @@ impl<'a> Evaluator<'a> {
                     .extend(literal.as_bits(self.program, self.const_sizes));
                 Ok(())
             } else {
-                Err(EvalError::InvalidLiteralType(literal, ty.clone()))
+                Err(EvalError::InvalidLiteralType(
+                    Box::new(literal),
+                    Box::new(ty.clone()),
+                ))
             }
         } else {
             Err(EvalError::UnexpectedNumberOfParties)

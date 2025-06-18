@@ -186,7 +186,10 @@ impl GarbleProgram {
         };
         let ty = resolve_const_type(&param.ty, &self.const_sizes);
         if !literal.is_of_type(&self.program, &ty) {
-            return Err(EvalError::InvalidLiteralType(literal, ty));
+            return Err(EvalError::InvalidLiteralType(
+                Box::new(literal),
+                Box::new(ty),
+            ));
         }
         Ok(GarbleArgument(literal, &self.program, &self.const_sizes))
     }
@@ -250,7 +253,7 @@ pub enum Error {
     /// Errors occurring during compile time.
     CompileTimeError(CompileTimeError),
     /// Errors occurring during the run-time evaluation of the circuit.
-    EvalError(EvalError),
+    EvalError(Box<EvalError>),
     /// Errors occurring during the conversion of the circuit to bristol fashion.
     ConvertError(ConverterError),
 }
@@ -287,7 +290,7 @@ impl<E: Into<CompileTimeError>> From<E> for Error {
 
 impl From<EvalError> for Error {
     fn from(e: EvalError) -> Self {
-        Self::EvalError(e)
+        Self::EvalError(Box::new(e))
     }
 }
 
