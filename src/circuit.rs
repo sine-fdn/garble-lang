@@ -112,22 +112,28 @@ pub enum CircuitError {
 
 impl Circuit {
     /// Returns all the wires (inputs + gates) in the circuit, in ascending order.
-    pub fn wires(&self) -> Vec<Wire> {
-        let mut gates = vec![];
-        for (party, inputs) in self.input_gates.iter().enumerate() {
-            for _ in 0..*inputs {
-                gates.push(Wire::Input(party))
-            }
-        }
-        for gate in self.gates.iter() {
-            let gate = match gate {
-                Gate::Xor(x, y) => Wire::Xor(*x, *y),
-                Gate::And(x, y) => Wire::And(*x, *y),
-                Gate::Not(x) => Wire::Not(*x),
-            };
-            gates.push(gate);
-        }
-        gates
+    pub fn wires(&self) -> impl Iterator<Item = Wire> + use<'_> {
+        let input_gates = self
+            .input_gates
+            .iter()
+            .enumerate()
+            .flat_map(|(party, inputs)| (0..*inputs).map(move |_| Wire::Input(party)));
+
+        let gates = self.gates.iter().map(|gate| match gate {
+            Gate::Xor(x, y) => Wire::Xor(*x, *y),
+            Gate::And(x, y) => Wire::And(*x, *y),
+            Gate::Not(x) => Wire::Not(*x),
+        });
+        input_gates.chain(gates)
+    }
+
+    /// Returns the number of wires in this circuit.
+    ///
+    /// Equal to the number of items returnes by the [`Circuit::wires`] iterator.
+    pub fn wires_len(&self) -> usize {
+        let mut len = self.input_gates.iter().sum();
+        len += self.gates.len();
+        len
     }
 
     /// Returns the number of AND gates in the circuit.
@@ -144,15 +150,15 @@ impl Circuit {
         if self.input_gates.iter().all(|i| *i == 0) {
             return Err(CircuitError::EmptyInputs);
         }
-        for (i, g) in wires.iter().enumerate() {
+        for (i, g) in wires.enumerate() {
             match g {
                 Wire::Input(_) => {}
-                &Wire::Xor(x, y) | &Wire::And(x, y) => {
+                Wire::Xor(x, y) | Wire::And(x, y) => {
                     if x >= i || y >= i {
                         return Err(CircuitError::InvalidGate(i));
                     }
                 }
-                &Wire::Not(x) => {
+                Wire::Not(x) => {
                     if x >= i {
                         return Err(CircuitError::InvalidGate(i));
                     }
@@ -163,11 +169,11 @@ impl Circuit {
             return Err(CircuitError::EmptyOutputs);
         }
         for &o in self.output_gates.iter() {
-            if o >= wires.len() {
+            if o >= self.wires_len() {
                 return Err(CircuitError::InvalidOutput(o));
             }
         }
-        if wires.len() + self.input_gates.iter().sum::<usize>() > MAX_GATES {
+        if self.wires_len() + self.input_gates.iter().sum::<usize>() > MAX_GATES {
             return Err(CircuitError::MaxCircuitSizeExceeded);
         }
         Ok(())
