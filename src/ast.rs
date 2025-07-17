@@ -6,7 +6,10 @@ use std::{collections::HashMap, fmt::Display};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::token::{MetaInfo, SignedNumType, UnsignedNumType};
+use crate::{
+    token::{MetaInfo, SignedNumType, UnsignedNumType},
+    UntypedExpr,
+};
 
 /// A program, consisting of top level definitions (enums or functions).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -424,6 +427,43 @@ impl Expr<Type> {
     }
 }
 
+/// Function calls to in-built functions.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum BuiltInFnCall<T> {
+    /// In-built bitonic sorting-based join function.
+    BitonicJoin {
+        /// The type of the element that is joined on.
+        join_ty: T,
+        /// False if we do a simple set intersection and true if we join
+        /// on the first element of tuple and have associated data with
+        /// each entry. Is set during type checking.
+        has_assoc_data: bool,
+        /// The arguments to join.
+        args: Vec<Expr<T>>,
+    },
+}
+
+impl BuiltInFnCall<()> {
+    /// Try to construct an [`InBuiltFnCall`] from an ident and args.
+    ///
+    /// Returns the args if the ident matches no in-built fn.
+    pub fn try_from_ident_args(
+        ident: &str,
+        args: Vec<UntypedExpr>,
+    ) -> Result<Self, Vec<UntypedExpr>> {
+        let has_assoc_data = false;
+        match ident {
+            "bitonic_join" => Ok(Self::BitonicJoin {
+                join_ty: (),
+                has_assoc_data,
+                args,
+            }),
+            _ => Err(args),
+        }
+    }
+}
+
 /// The different kinds of expressions.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -466,6 +506,8 @@ pub enum ExprEnum<T> {
     Block(Vec<Stmt<T>>),
     /// Call of the specified function with a list of arguments.
     FnCall(String, Vec<Expr<T>>),
+    /// A call to an in-built, potentially generic function.
+    InBuiltFnCall(BuiltInFnCall<T>),
     /// If-else expression for the specified condition, if-expr and else-expr.
     If(Box<Expr<T>>, Box<Expr<T>>, Box<Expr<T>>),
     /// Explicit cast of an expression to the specified type.

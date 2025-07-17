@@ -4,9 +4,9 @@ use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        Accessor, ConstDef, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, FnDef, Op, ParamDef,
-        Pattern, PatternEnum, Program, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant,
-        VariantExprEnum,
+        Accessor, ConstDef, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, FnDef,
+        BuiltInFnCall, Op, ParamDef, Pattern, PatternEnum, Program, Stmt, StmtEnum, StructDef,
+        Type, UnaryOp, Variant, VariantExprEnum,
     },
     scan::Tokens,
     token::{MetaInfo, SignedNumType, Token, TokenEnum, UnsignedNumType},
@@ -1235,7 +1235,15 @@ impl Parser {
                             }
                             let end = self.expect(&TokenEnum::RightParen)?;
                             let meta = join_meta(meta, end);
-                            Expr::untyped(ExprEnum::FnCall(identifier.to_string(), args), meta)
+                            match BuiltInFnCall::try_from_ident_args(identifier, args) {
+                                Ok(in_built) => {
+                                    Expr::untyped(ExprEnum::InBuiltFnCall(in_built), meta)
+                                }
+                                Err(args) => Expr::untyped(
+                                    ExprEnum::FnCall(identifier.to_string(), args),
+                                    meta,
+                                ),
+                            }
                         } else if self.peek(&TokenEnum::LeftBrace) && self.struct_literals_allowed {
                             // Struct literal:
                             self.parse_literal(Token(token_enum, meta), false)?
