@@ -380,7 +380,7 @@ impl CompileTimeError {
             }
             CompileTimeError::TypeError(errs) => {
                 for TypeError(e, meta) in errs {
-                    errs_for_display.push(("Type error", format!("{e}"), Some(*meta)));
+                    errs_for_display.push(("Type error", format!("{e}"), Some(**meta)));
                 }
             }
             CompileTimeError::CompilerError(errs) => {
