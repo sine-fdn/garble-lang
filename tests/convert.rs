@@ -22,7 +22,7 @@ fn bristol_eval(path: &Path, inputs: &[Vec<bool>]) -> Result<Vec<bool>, FromBris
     let (wires_num, _gates_num) = {
         let (parts, line_str) = parse_line(lines.next())?;
         if parts.len() != 2 {
-            return Err(FromBristolError::MalformedLine(line_str).into());
+            return Err(FromBristolError::MalformedLine(line_str));
         }
         (parts[1], parts[0])
     };
@@ -33,7 +33,7 @@ fn bristol_eval(path: &Path, inputs: &[Vec<bool>]) -> Result<Vec<bool>, FromBris
     // Parse output parts
     let (output_parts, line_str) = parse_line(lines.next())?;
     if output_parts.len() < 2 {
-        return Err(FromBristolError::MalformedLine(line_str).into());
+        return Err(FromBristolError::MalformedLine(line_str));
     }
     let num_output_wires: usize = output_parts[1..].iter().sum();
 
@@ -55,13 +55,13 @@ fn bristol_eval(path: &Path, inputs: &[Vec<bool>]) -> Result<Vec<bool>, FromBris
             continue;
         }
         if parts.len() < 4 {
-            return Err(FromBristolError::MalformedLine(line_str).into());
+            return Err(FromBristolError::MalformedLine(line_str));
         }
         let num_inputs: usize = parts[0].parse().map_err(|_| {
             FromBristolError::OtherParseError("Missing number of inputs".to_string())
         })?;
         if parts.len() != num_inputs + 4 {
-            return Err(FromBristolError::MalformedLine(line_str).into());
+            return Err(FromBristolError::MalformedLine(line_str));
         }
         let input_wires: Vec<usize> = parts[2..(2 + num_inputs)]
             .iter()
@@ -81,7 +81,7 @@ fn bristol_eval(path: &Path, inputs: &[Vec<bool>]) -> Result<Vec<bool>, FromBris
         match *gate_type {
             "XOR" | "AND" => {
                 if input_wires.len() != 2 {
-                    return Err(FromBristolError::MalformedLine(line_str).into());
+                    return Err(FromBristolError::MalformedLine(line_str));
                 }
                 if *gate_type == "XOR" {
                     wires[output_wire] = wires[input_wires[0]] ^ wires[input_wires[1]];
@@ -91,12 +91,12 @@ fn bristol_eval(path: &Path, inputs: &[Vec<bool>]) -> Result<Vec<bool>, FromBris
             }
             "INV" => {
                 if input_wires.len() != 1 {
-                    return Err(FromBristolError::MalformedLine(line_str).into());
+                    return Err(FromBristolError::MalformedLine(line_str));
                 }
                 wires[output_wire] = !wires[input_wires[0]];
             }
             _ => {
-                return Err(FromBristolError::UnknownGate(gate_type.to_string()).into());
+                return Err(FromBristolError::UnknownGate(gate_type.to_string()));
             }
         }
     }
@@ -131,7 +131,7 @@ fn convert_garble_to_bristol_to_garble() -> Result<(), String> {
         x * y
     }
     ";
-    let mult_garble_prg = compile(&mult_garble).map_err(|e| e.prettify(mult_garble))?;
+    let mult_garble_prg = compile(mult_garble).map_err(|e| e.prettify(mult_garble))?;
 
     let mult_bristol = NamedTempFile::new().map_err(|e| e.to_string())?;
     mult_garble_prg
@@ -170,7 +170,7 @@ fn convert_garble_to_bristol_output_wire_input() -> Result<(), String> {
         x + 4
     }
     ";
-    let bad_compiled = compile(&bad_example).map_err(|e| e.prettify(bad_example))?;
+    let bad_compiled = compile(bad_example).map_err(|e| e.prettify(bad_example))?;
 
     let in_out = NamedTempFile::new().map_err(|e| e.to_string())?;
     let result = bad_compiled.circuit.format_as_bristol(in_out.path());
@@ -187,7 +187,7 @@ fn convert_garble_to_bristol_no_directory() -> Result<(), String> {
         x + y
     }
     ";
-    let add_garble_prg = compile(&add_garble).map_err(|e| e.prettify(add_garble))?;
+    let add_garble_prg = compile(add_garble).map_err(|e| e.prettify(add_garble))?;
 
     let result = add_garble_prg
         .circuit

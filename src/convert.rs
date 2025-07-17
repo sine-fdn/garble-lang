@@ -59,10 +59,10 @@ impl std::fmt::Display for ConverterError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ConverterError::ToBristolError(e) => {
-                f.write_fmt(format_args!("Garble to Bristol error: {}", e))
+                f.write_fmt(format_args!("Garble to Bristol error: {e}"))
             }
             ConverterError::FromBristolError(e) => {
-                f.write_fmt(format_args!("Bristol to Garble error: {}", e))
+                f.write_fmt(format_args!("Bristol to Garble error: {e}"))
             }
         }
     }
@@ -74,7 +74,7 @@ impl std::fmt::Display for ToBristolError {
             ToBristolError::OutputWireIsInput => f.write_str(
                 "Output wire is also an input wire, which is not allowed in Bristol fashion format",
             ),
-            ToBristolError::IoError(e) => f.write_fmt(format_args!("IO error: {}", e)),
+            ToBristolError::IoError(e) => f.write_fmt(format_args!("IO error: {e}")),
         }
     }
 }
@@ -82,32 +82,29 @@ impl std::fmt::Display for ToBristolError {
 impl std::fmt::Display for FromBristolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FromBristolError::IoError(e) => f.write_fmt(format_args!("IO error: {}", e)),
+            FromBristolError::IoError(e) => f.write_fmt(format_args!("IO error: {e}")),
             FromBristolError::ParseIntError(e) => {
-                f.write_fmt(format_args!("Parse integer error while parsing number of inputs, input wires or output wires: {}", e))
+                f.write_fmt(format_args!("Parse integer error while parsing number of inputs, input wires or output wires: {e}"))
             }
             FromBristolError::UnknownGate(gate) => {
-                f.write_fmt(format_args!("Unknown gate: {}", gate))
+                f.write_fmt(format_args!("Unknown gate: {gate}"))
             }
             FromBristolError::MissingGateType => {
                 f.write_str("Missing gate type in gate definition")
             }
-            FromBristolError::OtherParseError(e) => f.write_fmt(format_args!("Parse error: {}", e)),
+            FromBristolError::OtherParseError(e) => f.write_fmt(format_args!("Parse error: {e}")),
             FromBristolError::InputPartiesMismatch(actual, expected) => f.write_fmt(format_args!(
-                "Input parties mismatch: actual {}, expected {}",
-                actual, expected
+                "Input parties mismatch: actual {actual}, expected {expected}",
             )),
             FromBristolError::OutputCountMismatch(actual, expected) => f.write_fmt(format_args!(
-                "Output count mismatch: actual {}, expected {}",
-                actual, expected
+                "Output count mismatch: actual {actual}, expected {expected}",
             )),
             FromBristolError::MissingLine => f.write_str("Missing line in the file"),
             FromBristolError::MalformedLine(line) => {
-                f.write_fmt(format_args!("Malformed line: {}", line))
+                f.write_fmt(format_args!("Malformed line: {line}"))
             }
             FromBristolError::InvalidWireIndex(wire) => f.write_fmt(format_args!(
-                "Wire index larger than number of wires: {}",
-                wire
+                "Wire index larger than number of wires: {wire}",
             )),
         }
     }
@@ -205,13 +202,13 @@ impl Circuit {
         // Create the file that will contain the circuit described in Bristol fashion.
         let mut file = File::create(path)?;
         // The first line contains the number of gates, and then the number of wires in the circuit.
-        writeln!(file, "{} {}", total_gates, total_wires)?;
+        writeln!(file, "{total_gates} {total_wires}")?;
         // The second line contains the number of input values, and the number of bits per input value.
         // Note that inputs in the resulting bristol circuit correspond to the input of the computing parties in
         // ascending order.
         write!(file, "{} ", circuit.input_gates.len())?;
         for &input_len in &circuit.input_gates {
-            write!(file, "{} ", input_len)?;
+            write!(file, "{input_len} ")?;
         }
         writeln!(file)?;
         // The third line contains the number of output values, and the number of bits per output value.

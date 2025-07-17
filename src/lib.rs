@@ -339,7 +339,7 @@ impl Error {
             Error::CompileTimeError(e) => e.prettify(prg),
             Error::EvalError(e) => e.prettify(prg),
             Error::ConvertError(e) => {
-                format!("Could not convert between a Circuit in Garble and the Bristol format due to {:?}", e)
+                format!("Could not convert between a Circuit in Garble and the Bristol format due to {e:?}")
             }
         }
     }
@@ -406,7 +406,7 @@ impl CompileTimeError {
                 )
                 .unwrap();
             } else {
-                writeln!(msg, "\n{}:", err_type).unwrap();
+                writeln!(msg, "\n{err_type}:").unwrap();
             }
             writeln!(msg, "{err}:").unwrap();
             if let Some(meta) = meta {
