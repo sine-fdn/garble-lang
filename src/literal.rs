@@ -18,7 +18,9 @@ use crate::{
     ast::{Expr, ExprEnum, Type, Variant, VariantExprEnum},
     check::{check_type, Defs, TopLevelTypes, TypeError, TypedFns},
     circuit::EvalPanic,
-    compile::{enum_max_size, enum_tag_number, enum_tag_size, signed_to_bits, unsigned_to_bits},
+    compile::{
+        self, enum_max_size, enum_tag_number, enum_tag_size, signed_to_bits, unsigned_to_bits,
+    },
     env::Env,
     eval::EvalError,
     scan::scan,
@@ -327,6 +329,27 @@ impl Literal {
                 let mut elems = vec![];
                 let mut i = 0;
                 for _ in 0..*size {
+                    let bits = &bits[i..i + ty_size];
+                    elems.push(Literal::from_unwrapped_bits(
+                        checked,
+                        ty,
+                        bits,
+                        const_sizes,
+                    )?);
+                    i += ty_size;
+                }
+                Ok(Literal::Array(elems))
+            }
+            Type::ArrayConstExpr(ty, size_expr) => {
+                let const_sizes_u64 = const_sizes
+                    .iter()
+                    .map(|(k, v)| (k.clone(), *v as u64))
+                    .collect();
+                let size = compile::resolve_const_expr_unsigned(size_expr, &const_sizes_u64);
+                let ty_size = ty.size_in_bits_for_defs(checked, const_sizes);
+                let mut elems = vec![];
+                let mut i = 0;
+                for _ in 0..size {
                     let bits = &bits[i..i + ty_size];
                     elems.push(Literal::from_unwrapped_bits(
                         checked,

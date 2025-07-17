@@ -140,59 +140,11 @@ impl TypedProgram {
             errs.sort();
             return Err(errs);
         }
-        fn resolve_const_expr_unsigned(
-            ConstExpr(expr, _): &ConstExpr,
-            consts_unsigned: &HashMap<String, u64>,
-        ) -> u64 {
-            match expr {
-                ConstExprEnum::NumUnsigned(n, _) => *n,
-                ConstExprEnum::ExternalValue { party, identifier } => *consts_unsigned
-                    .get(&format!("{party}::{identifier}"))
-                    .unwrap(),
-                ConstExprEnum::Max(args) => {
-                    let mut result = 0;
-                    for arg in args {
-                        result = max(result, resolve_const_expr_unsigned(arg, consts_unsigned));
-                    }
-                    result
-                }
-                ConstExprEnum::Min(args) => {
-                    let mut result = u64::MAX;
-                    for arg in args {
-                        result = min(result, resolve_const_expr_unsigned(arg, consts_unsigned));
-                    }
-                    result
-                }
-                expr => panic!("Not an unsigned const expr: {expr:?}"),
-            }
-        }
-        fn resolve_const_expr_signed(
-            ConstExpr(expr, _): &ConstExpr,
-            consts_signed: &HashMap<String, i64>,
-        ) -> i64 {
-            match expr {
-                ConstExprEnum::NumSigned(n, _) => *n,
-                ConstExprEnum::ExternalValue { party, identifier } => *consts_signed
-                    .get(&format!("{party}::{identifier}"))
-                    .unwrap(),
-                ConstExprEnum::Max(args) => {
-                    let mut result = 0;
-                    for arg in args {
-                        result = max(result, resolve_const_expr_signed(arg, consts_signed));
-                    }
-                    result
-                }
-                ConstExprEnum::Min(args) => {
-                    let mut result = i64::MAX;
-                    for arg in args {
-                        result = min(result, resolve_const_expr_signed(arg, consts_signed));
-                    }
-                    result
-                }
-                expr => panic!("Not an unsigned const expr: {expr:?}"),
-            }
-        }
-        for (const_name, const_def) in self.const_defs.iter() {
+        let mut sorted_const_defs: Vec<_> = self.const_defs.iter().collect();
+        // Sort by the meta information of the const defs so we iterate them in the order that
+        // they occur in the source code
+        sorted_const_defs.sort_by_key(|(_name, const_def)| const_def.meta);
+        for (const_name, const_def) in sorted_const_defs {
             if let Type::Unsigned(UnsignedNumType::Usize) = const_def.ty {
                 if let ConstExpr(ConstExprEnum::ExternalValue { party, identifier }, _) =
                     &const_def.value
@@ -202,6 +154,7 @@ impl TypedProgram {
                 }
                 let n = resolve_const_expr_unsigned(&const_def.value, &consts_unsigned);
                 const_sizes.insert(const_name.clone(), n as usize);
+                consts_unsigned.insert(const_name.clone(), n);
             }
         }
 
@@ -308,7 +261,14 @@ impl TypedProgram {
                     let bits = env.get(&format!("{party}::{identifier}")).unwrap();
                     env.let_in_current_scope(const_name.clone(), bits);
                 }
-                ConstExprEnum::Max(_) | ConstExprEnum::Min(_) => {
+                ConstExprEnum::ConstExprIdent(identifier) => {
+                    let bits = env.get(identifier).unwrap();
+                    env.let_in_current_scope(const_name.clone(), bits);
+                }
+                ConstExprEnum::Max(_)
+                | ConstExprEnum::Min(_)
+                | ConstExprEnum::Add(_, _)
+                | ConstExprEnum::Sub(_, _) => {
                     if let Type::Unsigned(_) = const_def.ty {
                         let result =
                             resolve_const_expr_unsigned(&const_def.value, &consts_unsigned);
@@ -348,6 +308,114 @@ impl TypedProgram {
         }
         let output_gates = compile_block(&fn_def.body, self, &mut env, &mut circuit);
         Ok((circuit.build(output_gates), fn_def, const_sizes))
+    }
+}
+
+// TODO there is a lot of code duplication between this and the next two functions (robinhundt 31.07.25)
+pub(crate) fn resolve_const_expr_usize(
+    ConstExpr(expr, _): &ConstExpr,
+    consts_unsigned: &HashMap<String, usize>,
+) -> usize {
+    match expr {
+        ConstExprEnum::NumUnsigned(n, _) => *n as usize,
+        ConstExprEnum::ExternalValue { party, identifier } => *consts_unsigned
+            .get(&format!("{party}::{identifier}"))
+            .unwrap(),
+        ConstExprEnum::Max(args) => {
+            let mut result = 0;
+            for arg in args {
+                result = max(result, resolve_const_expr_usize(arg, consts_unsigned));
+            }
+            result
+        }
+        ConstExprEnum::Min(args) => {
+            let mut result = usize::MAX;
+            for arg in args {
+                result = min(result, resolve_const_expr_usize(arg, consts_unsigned));
+            }
+            result
+        }
+        ConstExprEnum::Add(lhs, rhs) => resolve_const_expr_usize(lhs, consts_unsigned)
+            .wrapping_add(resolve_const_expr_usize(rhs, consts_unsigned)),
+        ConstExprEnum::Sub(lhs, rhs) => resolve_const_expr_usize(lhs, consts_unsigned)
+            .wrapping_sub(resolve_const_expr_usize(rhs, consts_unsigned)),
+        ConstExprEnum::ConstExprIdent(ident) => *consts_unsigned
+            .get(ident)
+            .expect("Identifier existence checked during type cheking"),
+        ConstExprEnum::True | ConstExprEnum::False | ConstExprEnum::NumSigned(_, _) => {
+            panic!("Not a signed const expr: {expr:?}")
+        }
+    }
+}
+
+pub(crate) fn resolve_const_expr_unsigned(
+    ConstExpr(expr, _): &ConstExpr,
+    consts_unsigned: &HashMap<String, u64>,
+) -> u64 {
+    match expr {
+        ConstExprEnum::NumUnsigned(n, _) => *n,
+        ConstExprEnum::ExternalValue { party, identifier } => *consts_unsigned
+            .get(&format!("{party}::{identifier}"))
+            .unwrap(),
+        ConstExprEnum::Max(args) => {
+            let mut result = 0;
+            for arg in args {
+                result = max(result, resolve_const_expr_unsigned(arg, consts_unsigned));
+            }
+            result
+        }
+        ConstExprEnum::Min(args) => {
+            let mut result = u64::MAX;
+            for arg in args {
+                result = min(result, resolve_const_expr_unsigned(arg, consts_unsigned));
+            }
+            result
+        }
+        ConstExprEnum::Add(lhs, rhs) => resolve_const_expr_unsigned(lhs, consts_unsigned)
+            .wrapping_add(resolve_const_expr_unsigned(rhs, consts_unsigned)),
+        ConstExprEnum::Sub(lhs, rhs) => resolve_const_expr_unsigned(lhs, consts_unsigned)
+            .wrapping_sub(resolve_const_expr_unsigned(rhs, consts_unsigned)),
+        ConstExprEnum::ConstExprIdent(ident) => *consts_unsigned.get(ident).unwrap_or_else(|| {
+            panic!("identifier: {ident} is unknown. Known consts: {consts_unsigned:?}")
+        }),
+        ConstExprEnum::True | ConstExprEnum::False | ConstExprEnum::NumSigned(_, _) => {
+            panic!("Not a signed const expr: {expr:?}")
+        }
+    }
+}
+pub(crate) fn resolve_const_expr_signed(
+    ConstExpr(expr, _): &ConstExpr,
+    consts_signed: &HashMap<String, i64>,
+) -> i64 {
+    match expr {
+        ConstExprEnum::NumSigned(n, _) => *n,
+        ConstExprEnum::ExternalValue { party, identifier } => *consts_signed
+            .get(&format!("{party}::{identifier}"))
+            .unwrap(),
+        ConstExprEnum::Max(args) => {
+            let mut result = 0;
+            for arg in args {
+                result = max(result, resolve_const_expr_signed(arg, consts_signed));
+            }
+            result
+        }
+        ConstExprEnum::Min(args) => {
+            let mut result = i64::MAX;
+            for arg in args {
+                result = min(result, resolve_const_expr_signed(arg, consts_signed));
+            }
+            result
+        }
+        ConstExprEnum::Add(lhs, rhs) => resolve_const_expr_signed(lhs, consts_signed)
+            .wrapping_add(resolve_const_expr_signed(rhs, consts_signed)),
+        ConstExprEnum::Sub(lhs, rhs) => resolve_const_expr_signed(lhs, consts_signed)
+            .wrapping_sub(resolve_const_expr_signed(rhs, consts_signed)),
+        ConstExprEnum::ConstExprIdent(ident) => *consts_signed
+            .get(ident)
+            .expect("Identifier existence checked during type cheking"),
+        ConstExprEnum::True | ConstExprEnum::False | ConstExprEnum::NumUnsigned(_, _) => {
+            panic!("Not an unsigned const expr: {expr:?}")
+        }
     }
 }
 
@@ -401,6 +469,10 @@ impl TypedStmt {
                                 Type::ArrayConst(elem_ty, size) => {
                                     (elem_ty, *circuit.const_sizes().get(size).unwrap())
                                 }
+                                Type::ArrayConstExpr(elem_ty, size) => (
+                                    elem_ty,
+                                    resolve_const_expr_usize(size, circuit.const_sizes()),
+                                ),
                                 ty => {
                                     panic!("Found a non-array value in an array access expr: {ty}")
                                 }
@@ -585,7 +657,9 @@ impl TypedStmt {
             }
             StmtEnum::ForEachLoop(pattern, array, body) => {
                 let elem_in_bits = match &array.ty {
-                    Type::Array(elem_ty, _) | Type::ArrayConst(elem_ty, _) => {
+                    Type::Array(elem_ty, _)
+                    | Type::ArrayConst(elem_ty, _)
+                    | Type::ArrayConstExpr(elem_ty, _) => {
                         elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes())
                     }
                     _ => panic!("Found a non-array value in an array access expr"),
@@ -616,6 +690,10 @@ impl TypedStmt {
                         elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
                         *circuit.const_sizes().get(size).unwrap(),
                     ),
+                    Type::ArrayConstExpr(elem_ty, size) => (
+                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                        resolve_const_expr_usize(size, circuit.const_sizes()),
+                    ),
                     _ => panic!("Found a non-array value in an array access expr"),
                 };
                 let (elem_bits_b, num_elems_b) = match &b.ty {
@@ -626,6 +704,10 @@ impl TypedStmt {
                     Type::ArrayConst(elem_ty, size) => (
                         elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
                         *circuit.const_sizes().get(size).unwrap(),
+                    ),
+                    Type::ArrayConstExpr(elem_ty, size) => (
+                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                        resolve_const_expr_usize(size, circuit.const_sizes()),
                     ),
                     _ => panic!("Found a non-array value in an array access expr"),
                 };
@@ -793,6 +875,9 @@ impl TypedExpr {
                 let num_elems = match &array.ty {
                     Type::Array(_, size) => *size,
                     Type::ArrayConst(_, size) => *circuit.const_sizes().get(size).unwrap(),
+                    Type::ArrayConstExpr(_, size) => {
+                        resolve_const_expr_usize(size, circuit.const_sizes())
+                    }
                     _ => panic!("Found a non-array value in an array access expr"),
                 };
                 let elem_bits = ty.size_in_bits_for_defs(prg, circuit.const_sizes());
@@ -1488,6 +1573,10 @@ impl Type {
             Type::Array(elem, size) => elem.size_in_bits_for_defs(prg, const_sizes) * size,
             Type::ArrayConst(elem, size) => {
                 elem.size_in_bits_for_defs(prg, const_sizes) * const_sizes.get(size).unwrap()
+            }
+            Type::ArrayConstExpr(elem, size_expr) => {
+                elem.size_in_bits_for_defs(prg, const_sizes)
+                    * resolve_const_expr_usize(size_expr, const_sizes)
             }
             Type::Tuple(values) => {
                 let mut size = 0;

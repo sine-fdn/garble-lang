@@ -1,6 +1,7 @@
 //! The untyped Abstract Syntax Tree (AST).
 
-use std::collections::HashMap;
+use std::hash::Hash;
+use std::{collections::HashMap, fmt::Display};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -36,9 +37,31 @@ pub struct ConstDef {
 }
 
 /// A constant value, either a literal, a namespaced symbol or an aggregate.
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ConstExpr(pub ConstExprEnum, pub MetaInfo);
+
+impl Display for ConstExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+// Impl hash consistent with PartialEq which ignores metainfo
+impl Hash for ConstExpr {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+impl PartialEq for ConstExpr {
+    fn eq(&self, other: &Self) -> bool {
+        // Ignore MetaInfo for equality to enable typ-checking of custom_join
+        self.0 == other.0
+    }
+}
+
+impl Eq for ConstExpr {}
 
 /// The different kinds of constant expressions.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -59,10 +82,59 @@ pub enum ConstExprEnum {
         /// The variable name of the value.
         identifier: String,
     },
+    /// Identifier of another const expr
+    ConstExprIdent(String),
     /// The maximum of several constant expressions.
     Max(Vec<ConstExpr>),
     /// The minimum of several constant expressions.
     Min(Vec<ConstExpr>),
+    /// The sum of several constant expressions.
+    Add(Box<ConstExpr>, Box<ConstExpr>),
+    /// The first constant expression minus the second one.
+    Sub(Box<ConstExpr>, Box<ConstExpr>),
+}
+
+impl Display for ConstExprEnum {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConstExprEnum::True => f.write_str("true"),
+            ConstExprEnum::False => f.write_str("false"),
+            ConstExprEnum::NumUnsigned(n, unsigned_num_type) => {
+                if let UnsignedNumType::Unspecified = unsigned_num_type {
+                    write!(f, "{n}")
+                } else {
+                    write!(f, "{n}{unsigned_num_type}")
+                }
+            }
+            ConstExprEnum::NumSigned(n, signed_num_type) => {
+                if let SignedNumType::Unspecified = signed_num_type {
+                    write!(f, "{n}")
+                } else {
+                    write!(f, "{n}{signed_num_type}")
+                }
+            }
+            ConstExprEnum::ExternalValue { party, identifier } => {
+                write!(f, "{party}::{identifier}")
+            }
+            ConstExprEnum::ConstExprIdent(ident) => f.write_str(ident),
+            ConstExprEnum::Max(const_exprs) | ConstExprEnum::Min(const_exprs) => {
+                if let ConstExprEnum::Max(_) = self {
+                    f.write_str("max(")?;
+                } else {
+                    f.write_str("min(")?;
+                }
+                let args: Vec<_> = const_exprs.iter().map(|arg| arg.to_string()).collect();
+                let args: String = args.join(", ");
+                write!(f, "{args})")
+            }
+            ConstExprEnum::Add(l, r) => {
+                write!(f, "{l} + {r}")
+            }
+            ConstExprEnum::Sub(l, r) => {
+                write!(f, "{l} - {r}")
+            }
+        }
+    }
 }
 
 /// A top level struct type definition.
@@ -185,6 +257,8 @@ pub enum Type {
     Array(Box<Type>, usize),
     /// Array type of a fixed size, with the size specified by a constant.
     ArrayConst(Box<Type>, String),
+    /// Array type of a fixed size, with the size specified by a constant expression.
+    ArrayConstExpr(Box<Type>, ConstExpr),
     /// Tuple type containing fields of the specified types.
     Tuple(Vec<Type>),
     /// A struct or an enum, depending on the top level definitions (used only before typechecking).
@@ -226,6 +300,13 @@ impl std::fmt::Display for Type {
                 ty.fmt(f)?;
                 f.write_str("; ")?;
                 size.fmt(f)?;
+                f.write_str("]")
+            }
+            Type::ArrayConstExpr(ty, size_expr) => {
+                f.write_str("[")?;
+                ty.fmt(f)?;
+                f.write_str("; ")?;
+                size_expr.fmt(f)?;
                 f.write_str("]")
             }
             Type::Tuple(fields) => {

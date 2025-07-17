@@ -2,7 +2,7 @@
 name = "garble_lang"
 version = "0.7.0"
 edition = "2021"
-rust-version = "1.60.0" # todo update this
+rust-version = "1.82.0"
 description = "Turing-Incomplete Programming Language for Multi-Party Computation with Garbled Circuits"
 repository = "https://github.com/sine-fdn/garble/"
 license = "MIT"

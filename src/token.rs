@@ -304,7 +304,7 @@ impl std::fmt::Display for SignedNumType {
 }
 
 /// The location of a token in the source code, from start `(line, column)` to end `(line, column)`.
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Default, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct MetaInfo {
     /// The line and column of the start of the token.

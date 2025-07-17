@@ -1,7 +1,10 @@
-use std::collections::HashMap;
+use std::{cmp::{max, min}, collections::HashMap};
 
 use garble_lang::{
-    compile, compile_with_constants, literal::Literal, token::UnsignedNumType, Error,
+    compile, compile_with_constants,
+    literal::Literal,
+    token::{SignedNumType, UnsignedNumType},
+    Error,
 };
 
 fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
@@ -1319,6 +1322,70 @@ pub fn main(i: usize) -> i32 {
 }
 
 #[test]
+fn compile_array_const_expr_access() -> Result<(), Error> {
+    let prg = "
+
+pub fn main(i: usize, arr: [i32; const { 2 + 3 } ]) -> i32 {
+    arr[i]
+}";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    for i in 0..5 {
+        let mut eval = compiled.evaluator();
+        eval.set_usize(i);
+        let num_lit = |n| Literal::NumSigned(n, SignedNumType::I32);
+        eval.set_literal(Literal::Array((0..5).map(num_lit).collect()))
+            .unwrap();
+        let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+        assert_eq!(
+            i32::try_from(output).map_err(|e| pretty_print(e, prg))?,
+            i as i32
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn compile_array_const_expr_assign() -> Result<(), Error> {
+    let prg = "
+
+pub fn main(i: usize, mut arr: [i32; const { 2 + 3 } ]) -> i32 {
+    arr[i] = 0;
+    arr[i]
+}";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    for i in 0..5 {
+        let mut eval = compiled.evaluator();
+        eval.set_usize(i);
+        let num_lit = |n| Literal::NumSigned(n, SignedNumType::I32);
+        eval.set_literal(Literal::Array((0..5).map(num_lit).collect()))
+            .unwrap();
+        let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+        assert_eq!(i32::try_from(output).map_err(|e| pretty_print(e, prg))?, 0);
+    }
+    Ok(())
+}
+
+#[ignore = "depends on https://github.com/sine-fdn/garble-lang/issues/219"]
+#[test]
+fn compile_array_const_expr_assign_array() -> Result<(), Error> {
+    let prg = "
+
+pub fn main(i: i32) -> [i32; const { 2 + 3 } ] {
+    let arr: [i32; const { 2 + 3 } ] = [i, i, i, i, i];
+    arr
+}";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    for i in 0..5 {
+        let mut eval = compiled.evaluator();
+        eval.set_i32(i);
+        let output = eval.run().map_err(|e| pretty_print(e, prg))?.into_literal()?;
+        let expected = Literal::ArrayRepeat(Box::new(Literal::NumSigned(i as i64, SignedNumType::I32)), 5);
+        assert_eq!(output, expected);
+    }
+    Ok(())
+}
+
+#[test]
 fn compile_main_with_array_io() -> Result<(), Error> {
     let prg = "
 pub fn main(nums: [u8; 5], init: u16) -> [u8; 5] {
@@ -2002,6 +2069,44 @@ pub fn main(x: u16) -> u16 {
     assert_eq!(
         u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
         257
+    );
+    Ok(())
+}
+
+#[test]
+fn compile_const_complex_expr() -> Result<(), Error> {
+    let prg = "
+const MY_CONST: usize = min(PARTY_0::MY_CONST, PARTY_1::MY_CONST) + 5usize;
+const DEPENDENT_CONST: usize = max(MY_CONST, PARTY_1::MY_CONST - 2usize) + 6usize;
+
+pub fn main(x: u16) -> u16 {
+    let array = [2; DEPENDENT_CONST];
+    x + array[1] + DEPENDENT_CONST as u16
+}
+";
+    let consts = HashMap::from_iter(vec![
+        (
+            "PARTY_0".to_string(),
+            HashMap::from_iter(vec![(
+                "MY_CONST".to_string(),
+                Literal::NumUnsigned(3, UnsignedNumType::Usize),
+            )]),
+        ),
+        (
+            "PARTY_1".to_string(),
+            HashMap::from_iter(vec![(
+                "MY_CONST".to_string(),
+                Literal::NumUnsigned(2, UnsignedNumType::Usize),
+            )]),
+        ),
+    ]);
+    let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    eval.set_u16(255);
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        255 + 2 + max(min(3, 2) + 5, 2 - 2) + 6
     );
     Ok(())
 }
