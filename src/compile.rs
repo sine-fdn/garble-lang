@@ -163,7 +163,16 @@ impl TypedProgram {
                     }
                     result
                 }
-                expr => panic!("Not an unsigned const expr: {expr:?}"),
+                ConstExprEnum::Add(lhs, rhs) => {
+                    resolve_const_expr_unsigned(&lhs, consts_unsigned)
+                        .wrapping_add(resolve_const_expr_unsigned(&rhs, consts_unsigned))
+                }
+                ConstExprEnum::Sub(lhs, rhs) => resolve_const_expr_unsigned(&lhs, consts_unsigned)
+                    .wrapping_sub(resolve_const_expr_unsigned(&rhs, consts_unsigned)),
+                ConstExprEnum::ConstExprIdent(_) => todo!("how to handle ConstExprIdent"),
+                ConstExprEnum::True | ConstExprEnum::False | ConstExprEnum::NumSigned(_, _) => {
+                    panic!("Not a signed const expr: {expr:?}")
+                }
             }
         }
         fn resolve_const_expr_signed(
@@ -189,7 +198,14 @@ impl TypedProgram {
                     }
                     result
                 }
-                expr => panic!("Not an unsigned const expr: {expr:?}"),
+                ConstExprEnum::Add(lhs, rhs) => resolve_const_expr_signed(&lhs, consts_signed)
+                    .wrapping_add(resolve_const_expr_signed(&rhs, consts_signed)),
+                ConstExprEnum::Sub(lhs, rhs) => resolve_const_expr_signed(&lhs, consts_signed)
+                    .wrapping_sub(resolve_const_expr_signed(&rhs, consts_signed)),
+                ConstExprEnum::ConstExprIdent(_) => todo!("how to handle ConstExprIdent"),
+                ConstExprEnum::True | ConstExprEnum::False | ConstExprEnum::NumUnsigned(_, _) => {
+                    panic!("Not an unsigned const expr: {expr:?}")
+                }
             }
         }
         for (const_name, const_def) in self.const_defs.iter() {
@@ -308,7 +324,14 @@ impl TypedProgram {
                     let bits = env.get(&format!("{party}::{identifier}")).unwrap();
                     env.let_in_current_scope(const_name.clone(), bits);
                 }
-                ConstExprEnum::Max(_) | ConstExprEnum::Min(_) => {
+                ConstExprEnum::ConstExprIdent(identifier) => {
+                    let bits = env.get(identifier).unwrap();
+                    env.let_in_current_scope(const_name.clone(), bits);
+                }
+                ConstExprEnum::Max(_)
+                | ConstExprEnum::Min(_)
+                | ConstExprEnum::Add(_, _)
+                | ConstExprEnum::Sub(_, _) => {
                     if let Type::Unsigned(_) = const_def.ty {
                         let result =
                             resolve_const_expr_unsigned(&const_def.value, &consts_unsigned);
@@ -1171,6 +1194,115 @@ impl TypedExpr {
             }
             ExprEnum::Block(stmts) => compile_block(stmts, prg, env, circuit),
             ExprEnum::FnCall(identifier, args) => {
+                if identifier == "custom_join" {
+                    {
+                        // StmtEnum::JoinLoop(pattern, join_ty, (a, b), body) => {
+                        let a = &args[0];
+                        let b = &args[1];
+                        let join_ty = if let Type::ArrayConst(el_t, _) = &a.ty {
+                            if let Type::Tuple(elems) = &**el_t {
+                                elems[0].clone()
+                            } else {
+                                panic!("Not a tuple {:?}", &a.ty);
+                            }
+                        } else {
+                            panic!("Not an array {:?}", &a.ty);
+                        };
+                        let (elem_bits_a, num_elems_a) = match &a.ty {
+                            Type::Array(elem_ty, size) => (
+                                elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                                *size,
+                            ),
+                            Type::ArrayConst(elem_ty, size) => (
+                                elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                                *circuit.const_sizes().get(size).unwrap(),
+                            ),
+                            _ => panic!("Found a non-array value in an array access expr"),
+                        };
+                        let (elem_bits_b, num_elems_b) = match &b.ty {
+                            Type::Array(elem_ty, size) => (
+                                elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                                *size,
+                            ),
+                            Type::ArrayConst(elem_ty, size) => (
+                                elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                                *circuit.const_sizes().get(size).unwrap(),
+                            ),
+                            _ => panic!("Found a non-array value in an array access expr"),
+                        };
+                        let max_elem_bits = max(elem_bits_a, elem_bits_b);
+                        let num_elems = (num_elems_a + num_elems_b).next_power_of_two();
+                        let join_ty_size =
+                            join_ty.size_in_bits_for_defs(prg, circuit.const_sizes());
+                        let a = a.compile(prg, env, circuit);
+                        let b = b.compile(prg, env, circuit);
+                        dbg!(a.len());
+                        dbg!(b.len());
+                        let mut bitonic = vec![];
+                        let num_empty_elems = num_elems - num_elems_a - num_elems_b;
+                        for _ in 0..num_empty_elems {
+                            bitonic.push(vec![0; max_elem_bits + 1]);
+                        }
+                        for i in 0..num_elems_a {
+                            let mut v = a[i * elem_bits_a..(i + 1) * elem_bits_a].to_vec();
+                            v.resize(max_elem_bits, 0);
+                            v.insert(join_ty_size, 0);
+                            bitonic.push(v);
+                        }
+                        for i in (0..num_elems_b).rev() {
+                            let mut v = b[i * elem_bits_b..(i + 1) * elem_bits_b].to_vec();
+                            v.resize(max_elem_bits, 0);
+                            v.insert(join_ty_size, 1);
+                            bitonic.push(v);
+                        }
+                        let mut offset = num_elems / 2;
+                        while offset > 0 {
+                            let mut result = vec![];
+                            for _ in 0..num_elems {
+                                result.push(vec![]);
+                            }
+                            let rounds = num_elems / 2 / offset;
+                            for r in 0..rounds {
+                                for i in 0..offset {
+                                    let i = i + r * offset * 2;
+                                    let x = &bitonic[i];
+                                    let y = &bitonic[i + offset];
+                                    let (min, max) = circuit.push_sorter(join_ty_size, x, y);
+                                    result[i] = min;
+                                    result[i + offset] = max;
+                                }
+                            }
+                            offset /= 2;
+                            bitonic = result;
+                        }
+                        dbg!(bitonic.len());
+                        let mut joined = vec![]; // Todo with capacity
+                        for slice in bitonic.windows(2).skip(num_empty_elems) {
+                            let mut binding: Vec<GateIndex> = vec![];
+                            let (mut a, mut b) =
+                                circuit.push_sorter(join_ty_size + 1, &slice[0], &slice[1]);
+                            a.remove(join_ty_size);
+                            a.truncate(elem_bits_a);
+                            b.remove(join_ty_size);
+                            b.truncate(elem_bits_b);
+                            binding.extend(&a);
+                            binding.extend(&b);
+                            let join_a = &a[..join_ty_size];
+                            let join_b = &b[..join_ty_size];
+                            let mut join_eq = 1;
+                            for i in 0..join_ty_size {
+                                let eq = circuit.push_eq(join_a[i], join_b[i]);
+                                join_eq = circuit.push_and(join_eq, eq);
+                            }
+
+                            joined.push(join_eq);
+                            joined.extend(binding);
+                            // TODO do we need panic handling like in the join loop? I think not
+                        }
+                        dbg!(joined.len());
+                        return joined;
+                    }
+                }
                 let fn_def = prg.fn_defs.get(identifier).unwrap();
                 let mut bindings = Vec::with_capacity(fn_def.params.len());
                 for (param, arg) in fn_def.params.iter().zip(args) {
@@ -1488,6 +1620,9 @@ impl Type {
             Type::Array(elem, size) => elem.size_in_bits_for_defs(prg, const_sizes) * size,
             Type::ArrayConst(elem, size) => {
                 elem.size_in_bits_for_defs(prg, const_sizes) * const_sizes.get(size).unwrap()
+            }
+            Type::ArrayConstExpr(elem, size_expr) => {
+                todo!("resolve size_expr")
             }
             Type::Tuple(values) => {
                 let mut size = 0;

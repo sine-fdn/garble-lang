@@ -334,6 +334,9 @@ impl Literal {
                 }
                 Ok(Literal::Array(elems))
             }
+            Type::ArrayConstExpr(ty, size_expr) => {
+                todo!()
+            }
             Type::Tuple(field_types) => {
                 let mut fields = vec![];
                 let mut i = 0;
