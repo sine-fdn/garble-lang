@@ -7,8 +7,8 @@ use std::{
 
 use crate::{
     ast::{
-        Accessor, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, Op, Pattern, PatternEnum,
-        StmtEnum, StructDef, Type, UnaryOp, VariantExprEnum,
+        Accessor, BuiltInFnCall, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, Op, Pattern,
+        PatternEnum, StmtEnum, StructDef, Type, UnaryOp, VariantExprEnum,
     },
     circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, USIZE_BITS},
     env::Env,
@@ -674,26 +674,7 @@ impl TypedStmt {
                     v.insert(join_ty_size, 1);
                     bitonic.push(v);
                 }
-                let mut offset = num_elems / 2;
-                while offset > 0 {
-                    let mut result = vec![];
-                    for _ in 0..num_elems {
-                        result.push(vec![]);
-                    }
-                    let rounds = num_elems / 2 / offset;
-                    for r in 0..rounds {
-                        for i in 0..offset {
-                            let i = i + r * offset * 2;
-                            let x = &bitonic[i];
-                            let y = &bitonic[i + offset];
-                            let (min, max) = circuit.push_sorter(join_ty_size, x, y);
-                            result[i] = min;
-                            result[i + offset] = max;
-                        }
-                    }
-                    offset /= 2;
-                    bitonic = result;
-                }
+                circuit.push_bitonic_merger(join_ty_size, true, &mut bitonic);
                 for slice in bitonic.windows(2).skip(num_empty_elems) {
                     let mut binding = vec![];
                     let (mut a, mut b) =
@@ -1212,6 +1193,99 @@ impl TypedExpr {
                 let body = compile_block(&fn_def.body, prg, env, circuit);
                 env.pop();
                 body
+            }
+            ExprEnum::InBuiltFnCall(BuiltInFnCall::BitonicJoin {
+                join_ty,
+                has_assoc_data,
+                args,
+            }) => {
+                let a = &args[0];
+                let b = &args[1];
+                let unwrap_arr_elem_ty_and_size = |ty: &Type| match ty {
+                    Type::Array(elem_ty, size) => (
+                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                        *size,
+                    ),
+                    Type::ArrayConst(elem_ty, size) => (
+                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
+                        *circuit.const_sizes().get(size).unwrap(),
+                    ),
+                    Type::ArrayConstExpr(elem_ty, size) => {
+                        let elem_bits = elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes());
+                        let size = resolve_const_expr_usize(size, circuit.const_sizes());
+                        (elem_bits, size)
+                    }
+                    _ => panic!("Found a non-array value in an array access expr"),
+                };
+                let (elem_bits_a, num_elems_a) = unwrap_arr_elem_ty_and_size(&a.ty);
+                let (elem_bits_b, num_elems_b) = unwrap_arr_elem_ty_and_size(&b.ty);
+                let max_elem_bits = max(elem_bits_a, elem_bits_b);
+                let num_elems = (num_elems_a + num_elems_b).next_power_of_two();
+                let join_ty_size = join_ty.size_in_bits_for_defs(prg, circuit.const_sizes());
+                let a = a.compile(prg, env, circuit);
+                let b = b.compile(prg, env, circuit);
+                let mut bitonic = vec![];
+                let num_empty_elems = num_elems - num_elems_a - num_elems_b;
+                for _ in 0..num_empty_elems {
+                    bitonic.push(vec![0; max_elem_bits + 1]);
+                }
+                for i in 0..num_elems_a {
+                    let mut v = a[i * elem_bits_a..(i + 1) * elem_bits_a].to_vec();
+                    v.resize(max_elem_bits, 0);
+                    // We insert a tag bit after the the join_ty to distinguish between elements from
+                    // a and b. Here it is 0
+                    v.insert(join_ty_size, 0);
+                    bitonic.push(v);
+                }
+                for i in (0..num_elems_b).rev() {
+                    let mut v = b[i * elem_bits_b..(i + 1) * elem_bits_b].to_vec();
+                    v.resize(max_elem_bits, 0);
+                    // Here the tag bit is 1
+                    v.insert(join_ty_size, 1);
+                    bitonic.push(v);
+                }
+                // Include the tag bit in the sorting of the merger
+                circuit.push_bitonic_merger(join_ty_size + 1, true, &mut bitonic);
+                let mut joined = Vec::with_capacity(num_elems_a + num_elems_b - 1);
+                for slice in bitonic.windows(2).skip(num_empty_elems) {
+                    // Insert a dummy false element at the first position,
+                    // we will set this to the bool indicating whether the element is part of
+                    // the join
+                    let mut binding: Vec<GateIndex> = vec![0];
+                    // Unfortunately, there currently is no `windows_mut`, so we clone
+                    let mut a = slice[0].clone();
+                    let mut b = slice[1].clone();
+                    // Remove the tag bit
+                    let tag_a = a.remove(join_ty_size);
+                    // and the padding
+                    a.truncate(elem_bits_a);
+                    let tag_b = b.remove(join_ty_size);
+                    b.truncate(elem_bits_b);
+                    binding.extend(&a);
+                    // we only need to include the other element if we have assoc data
+                    // in which case the return of bitonic_sort is (bool, tuple_a, tuple_b)
+                    if *has_assoc_data {
+                        binding.extend(&b);
+                    }
+                    let join_a = &a[..join_ty_size];
+                    let join_b = &b[..join_ty_size];
+                    let mut join_eq = circuit.push_eq_circuit(join_a, join_b);
+                    // Ensure that the join only includes elements which are actually present in both datasets
+                    // i.e. the tag is different. Guards against duplicates in one of the datasets
+                    let tags_differ = circuit.push_xor(tag_a, tag_b);
+                    join_eq = circuit.push_and(join_eq, tags_differ);
+
+                    // If an element is not part of the join (join_eq = false), we insert an all 0 dummy element
+                    for g in binding.iter_mut().skip(1) {
+                        *g = circuit.push_mux(join_eq, *g, 0);
+                    }
+                    binding[0] = join_eq;
+                    joined.push(binding);
+                }
+                // Sort the output on the join_eq bool so the positions of the joined elements doesn't leak
+                // data about the input datasets
+                circuit.push_bitonic_sorter(1, &mut joined);
+                joined.concat()
             }
             ExprEnum::If(condition, case_true, case_false) => {
                 let condition = condition.compile(prg, env, circuit);

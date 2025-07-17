@@ -5,9 +5,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::{
-        self, Accessor, ConstDef, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, Mutability,
-        Op, ParamDef, Pattern, PatternEnum, Stmt, StmtEnum, StructDef, Type, UnaryOp, Variant,
-        VariantExprEnum,
+        self, Accessor, BuiltInFnCall, ConstDef, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum,
+        Mutability, Op, ParamDef, Pattern, PatternEnum, Stmt, StmtEnum, StructDef, Type, UnaryOp,
+        Variant, VariantExprEnum,
     },
     env::Env,
     token::{MetaInfo, SignedNumType, UnsignedNumType},
@@ -1189,6 +1189,7 @@ impl UntypedExpr {
                                 };
                                 errors.push(Some(TypeError::new(e, meta)));
                             }
+
                             for (expected, actual) in fn_arg_types.into_iter().zip(&mut arg_exprs) {
                                 if let Err(e) = check_type(actual, &expected) {
                                     errors.extend(e);
@@ -1220,6 +1221,98 @@ impl UntypedExpr {
                         return Err(errors);
                     }
                 }
+            }
+            ExprEnum::InBuiltFnCall(BuiltInFnCall::BitonicJoin {
+                join_ty: _,
+                has_assoc_data: _,
+                args,
+            }) => {
+                let mut errors = vec![];
+                let args: Vec<_> = args
+                    .iter()
+                    .filter_map(|arg| match arg.type_check(top_level_defs, env, fns, defs) {
+                        Ok(typed) => Some(typed),
+                        Err(errs) => {
+                            errors.extend(errs);
+                            None
+                        }
+                    })
+                    .collect();
+                if !errors.is_empty() {
+                    return Err(errors);
+                }
+                let [a, b] = &args[..] else {
+                    let e = TypeErrorEnum::WrongNumberOfArgs {
+                        expected: 2,
+                        actual: args.len(),
+                    };
+                    errors.push(Some(TypeError::new(e, meta)));
+                    return Err(errors);
+                };
+                let el_a = expect_array_type(&a.ty, a.meta)?;
+                let el_b = expect_array_type(&b.ty, b.meta)?;
+                let (join_ty, arr_ty, has_assoc_data) = match (&el_a, &el_b) {
+                    (Type::Tuple(fields_a), Type::Tuple(fields_b)) => {
+                        let Some(first_a) = fields_a.first() else {
+                            let e = TypeErrorEnum::TupleAccessOutOfBounds(1);
+                            errors.push(Some(TypeError::new(e, a.meta)));
+                            return Err(errors);
+                        };
+                        let Some(first_b) = fields_b.first() else {
+                            let e = TypeErrorEnum::TupleAccessOutOfBounds(1);
+                            errors.push(Some(TypeError::new(e, b.meta)));
+                            return Err(errors);
+                        };
+                        if first_a != first_b {
+                            let e = TypeErrorEnum::UnexpectedType {
+                                expected: first_a.clone(),
+                                actual: first_b.clone(),
+                            };
+                            errors.push(Some(TypeError::new(e, b.meta)));
+                            return Err(errors);
+                        }
+                        (
+                            first_a.clone(),
+                            Type::Tuple(vec![Type::Bool, el_a, el_b]),
+                            true,
+                        )
+                    }
+                    (not_tuple, Type::Tuple(_)) => {
+                        let e = TypeErrorEnum::ExpectedTupleType(not_tuple.clone());
+                        errors.push(Some(TypeError::new(e, a.meta)));
+                        return Err(errors);
+                    }
+                    (Type::Tuple(_), not_tuple) => {
+                        let e = TypeErrorEnum::ExpectedTupleType(not_tuple.clone());
+                        errors.push(Some(TypeError::new(e, b.meta)));
+                        return Err(errors);
+                    }
+                    (el_a, el_b) => {
+                        if el_a != el_b {
+                            let e = TypeErrorEnum::UnexpectedType {
+                                expected: el_a.clone(),
+                                actual: el_b.clone(),
+                            };
+                            errors.push(Some(TypeError::new(e, b.meta)));
+                            return Err(errors);
+                        }
+                        (
+                            el_a.clone(),
+                            Type::Tuple(vec![Type::Bool, el_a.clone()]),
+                            false,
+                        )
+                    }
+                };
+                let ret_size = bitonic_join_array_size(&a.ty, &b.ty, meta)?;
+                let ret_ty = Type::ArrayConstExpr(Box::new(arr_ty), ret_size);
+                (
+                    ExprEnum::InBuiltFnCall(BuiltInFnCall::BitonicJoin {
+                        join_ty,
+                        has_assoc_data,
+                        args,
+                    }),
+                    ret_ty,
+                )
             }
             ExprEnum::If(condition, case_true, case_false) => {
                 let condition = condition.type_check(top_level_defs, env, fns, defs);
@@ -1734,6 +1827,41 @@ impl UntypedPattern {
             Err(vec![None])
         }
     }
+}
+
+/// Creates the type of a `bitonic_join` inbuilt call depending on the input arguments to the call.
+fn bitonic_join_array_size(a: &Type, b: &Type, meta: MetaInfo) -> Result<ConstExpr, TypeErrors> {
+    let to_const_expr = |ty: &Type| {
+        let const_expr_enum = match ty {
+            Type::Array(_, size) => {
+                ConstExprEnum::NumUnsigned(*size as u64, UnsignedNumType::Usize)
+            }
+            Type::ArrayConst(_, size) => ConstExprEnum::ConstExprIdent(size.clone()),
+            Type::ArrayConstExpr(_, size) => size.0.clone(),
+            _ => {
+                return Err(vec![Some(TypeError::new(
+                    TypeErrorEnum::ExpectedArrayType(ty.clone()),
+                    meta,
+                ))]);
+            }
+        };
+        Ok(Box::new(ConstExpr(const_expr_enum, MetaInfo::default())))
+    };
+
+    // (a.size + b.size) - 1
+    Ok(ConstExpr(
+        ConstExprEnum::Sub(
+            Box::new(ConstExpr(
+                ConstExprEnum::Add(to_const_expr(a)?, to_const_expr(b)?),
+                MetaInfo::default(),
+            )),
+            Box::new(ConstExpr(
+                ConstExprEnum::NumUnsigned(1, UnsignedNumType::Usize),
+                MetaInfo::default(),
+            )),
+        ),
+        MetaInfo::default(),
+    ))
 }
 
 // Implements the algorithm described at

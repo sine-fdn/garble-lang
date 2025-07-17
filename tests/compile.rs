@@ -2275,6 +2275,251 @@ pub fn main(rows1: [([u8; 3], u16); 4], rows2: [([u8; 3], u16, u16); 3]) -> u16 
 }
 
 #[test]
+fn compile_bitonic_join_inbuilt() -> Result<(), Error> {
+    let prg = "
+pub fn main(rows1: [[u8; 3]; 5], rows2: [[u8; 3]; 3]) -> [(bool, [u8; 3]); const { 5usize + 3usize - 1usize } ] {
+    bitonic_join(rows1, rows2)
+}
+";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+
+    let mut eval = compiled.evaluator();
+    let id_aaa = Literal::Array(vec![
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+    ]);
+    let id_bar = Literal::Array(vec![
+        Literal::NumUnsigned(98, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(114, UnsignedNumType::U8),
+    ]);
+    let id_baz = Literal::Array(vec![
+        Literal::NumUnsigned(98, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(122, UnsignedNumType::U8),
+    ]);
+    let id_foo = Literal::Array(vec![
+        Literal::NumUnsigned(102, UnsignedNumType::U8),
+        Literal::NumUnsigned(111, UnsignedNumType::U8),
+        Literal::NumUnsigned(111, UnsignedNumType::U8),
+    ]);
+    let id_qux = Literal::Array(vec![
+        Literal::NumUnsigned(113, UnsignedNumType::U8),
+        Literal::NumUnsigned(117, UnsignedNumType::U8),
+        Literal::NumUnsigned(120, UnsignedNumType::U8),
+    ]);
+    eval.set_literal(Literal::Array(vec![
+        id_aaa.clone(),
+        // have a duplicate which should not be part of the resulting join
+        id_aaa.clone(),
+        id_bar.clone(),
+        id_baz.clone(),
+        id_qux.clone(),
+    ]))
+    .unwrap();
+    eval.set_literal(Literal::Array(vec![
+        id_baz.clone(),
+        id_foo.clone(),
+        id_qux.clone(),
+    ]))
+    .unwrap();
+    let output = eval
+        .run()
+        .map_err(|e| pretty_print(e, prg))?
+        .into_literal()?;
+    let dummy_vals = vec![
+        Literal::Tuple(vec![
+            Literal::False,
+            Literal::Array(vec![Literal::NumUnsigned(0, UnsignedNumType::U8); 3])
+        ]);
+        5
+    ];
+    let join_vals = vec![
+        Literal::Tuple(vec![Literal::True, id_baz.clone()]),
+        Literal::Tuple(vec![Literal::True, id_qux.clone()]),
+    ];
+    let expected = Literal::Array([dummy_vals, join_vals].concat());
+    assert_eq!(output, expected);
+    Ok(())
+}
+
+#[test]
+fn compile_bitonic_join_with_consts() -> Result<(), Error> {
+    let prg = "
+const ROWS_0: usize = PARTY_0::ROWS;
+const ROWS_1: usize = PARTY_1::ROWS;
+
+pub fn main(rows1: [[u8; 3]; ROWS_0], rows2: [[u8; 3]; ROWS_1]) -> [(bool, [u8; 3]); const { ROWS_0 + ROWS_1 - 1usize } ] {
+    bitonic_join(rows1, rows2)
+}
+";
+    let consts = HashMap::from_iter(vec![
+        (
+            "PARTY_0".to_string(),
+            HashMap::from_iter(vec![(
+                "ROWS".to_string(),
+                Literal::NumUnsigned(5, UnsignedNumType::Usize),
+            )]),
+        ),
+        (
+            "PARTY_1".to_string(),
+            HashMap::from_iter(vec![(
+                "ROWS".to_string(),
+                Literal::NumUnsigned(3, UnsignedNumType::Usize),
+            )]),
+        ),
+    ]);
+    let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
+
+    let mut eval = compiled.evaluator();
+    let id_aaa = Literal::Array(vec![
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+    ]);
+    let id_bar = Literal::Array(vec![
+        Literal::NumUnsigned(98, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(114, UnsignedNumType::U8),
+    ]);
+    let id_baz = Literal::Array(vec![
+        Literal::NumUnsigned(98, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(122, UnsignedNumType::U8),
+    ]);
+    let id_foo = Literal::Array(vec![
+        Literal::NumUnsigned(102, UnsignedNumType::U8),
+        Literal::NumUnsigned(111, UnsignedNumType::U8),
+        Literal::NumUnsigned(111, UnsignedNumType::U8),
+    ]);
+    let id_qux = Literal::Array(vec![
+        Literal::NumUnsigned(113, UnsignedNumType::U8),
+        Literal::NumUnsigned(117, UnsignedNumType::U8),
+        Literal::NumUnsigned(120, UnsignedNumType::U8),
+    ]);
+    eval.set_literal(Literal::Array(vec![
+        id_aaa.clone(),
+        // have a duplicate which should not be part of the resulting join
+        id_aaa.clone(),
+        id_bar.clone(),
+        id_baz.clone(),
+        id_qux.clone(),
+    ]))
+    .unwrap();
+    eval.set_literal(Literal::Array(vec![
+        id_baz.clone(),
+        id_foo.clone(),
+        id_qux.clone(),
+    ]))
+    .unwrap();
+    let output = eval
+        .run()
+        .map_err(|e| pretty_print(e, prg))?
+        .into_literal()?;
+    let dummy_vals = vec![
+        Literal::Tuple(vec![
+            Literal::False,
+            Literal::Array(vec![Literal::NumUnsigned(0, UnsignedNumType::U8); 3])
+        ]);
+        5
+    ];
+    let join_vals = vec![
+        Literal::Tuple(vec![Literal::True, id_baz.clone()]),
+        Literal::Tuple(vec![Literal::True, id_qux.clone()]),
+    ];
+    let expected = Literal::Array([dummy_vals, join_vals].concat());
+    assert_eq!(output, expected);
+    Ok(())
+}
+
+#[test]
+fn compile_loop_over_bitonic_join() -> Result<(), Error> {
+    let prg = "
+pub fn main(rows1: [([u8; 3], u16); 4], rows2: [([u8; 3], u16, u16); 3]) -> u16 {
+    let mut result = 0u16;
+    for row in bitonic_join(rows1, rows2) {
+        let (in_join, (_, field1), (_, field2, field3)) = row;
+        if in_join {
+            result = result + field1 + field2 + field3;
+        }
+    }
+    result
+}
+";
+    let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    let mut eval = compiled.evaluator();
+    let id_aaa = Literal::Array(vec![
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+    ]);
+    let id_bar = Literal::Array(vec![
+        Literal::NumUnsigned(98, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(114, UnsignedNumType::U8),
+    ]);
+    let id_baz = Literal::Array(vec![
+        Literal::NumUnsigned(98, UnsignedNumType::U8),
+        Literal::NumUnsigned(97, UnsignedNumType::U8),
+        Literal::NumUnsigned(122, UnsignedNumType::U8),
+    ]);
+    let id_foo = Literal::Array(vec![
+        Literal::NumUnsigned(102, UnsignedNumType::U8),
+        Literal::NumUnsigned(111, UnsignedNumType::U8),
+        Literal::NumUnsigned(111, UnsignedNumType::U8),
+    ]);
+    let id_qux = Literal::Array(vec![
+        Literal::NumUnsigned(113, UnsignedNumType::U8),
+        Literal::NumUnsigned(117, UnsignedNumType::U8),
+        Literal::NumUnsigned(120, UnsignedNumType::U8),
+    ]);
+    eval.set_literal(Literal::Array(vec![
+        Literal::Tuple(vec![
+            id_aaa.clone(),
+            Literal::NumUnsigned(0, UnsignedNumType::U16),
+        ]),
+        Literal::Tuple(vec![
+            id_bar.clone(),
+            Literal::NumUnsigned(1, UnsignedNumType::U16),
+        ]),
+        Literal::Tuple(vec![
+            id_baz.clone(),
+            Literal::NumUnsigned(2, UnsignedNumType::U16),
+        ]),
+        Literal::Tuple(vec![
+            id_qux.clone(),
+            Literal::NumUnsigned(3, UnsignedNumType::U16),
+        ]),
+    ]))
+    .unwrap();
+    eval.set_literal(Literal::Array(vec![
+        Literal::Tuple(vec![
+            id_baz.clone(),
+            Literal::NumUnsigned(4, UnsignedNumType::U16),
+            Literal::NumUnsigned(5, UnsignedNumType::U16),
+        ]),
+        Literal::Tuple(vec![
+            id_foo.clone(),
+            Literal::NumUnsigned(6, UnsignedNumType::U16),
+            Literal::NumUnsigned(7, UnsignedNumType::U16),
+        ]),
+        Literal::Tuple(vec![
+            id_qux.clone(),
+            Literal::NumUnsigned(8, UnsignedNumType::U16),
+            Literal::NumUnsigned(9, UnsignedNumType::U16),
+        ]),
+    ]))
+    .unwrap();
+    let output = eval.run().map_err(|e| pretty_print(e, prg))?;
+    assert_eq!(
+        u16::try_from(output).map_err(|e| pretty_print(e, prg))?,
+        2 + 3 + 4 + 5 + 8 + 9
+    );
+    Ok(())
+}
+
+#[test]
 fn compile_multiple_join_loops() -> Result<(), Error> {
     for joined in 0..4 {
         for only_a in 0..4 {
