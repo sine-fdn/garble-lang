@@ -17,7 +17,14 @@ use crate::{
 
 /// An error found during type-checking, with its location in the source code.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TypeError(pub TypeErrorEnum, pub MetaInfo);
+pub struct TypeError(pub Box<TypeErrorEnum>, pub Box<MetaInfo>);
+
+impl TypeError {
+    /// Construct a new TypeError.
+    pub fn new(kind: TypeErrorEnum, meta_info: MetaInfo) -> Self {
+        Self(Box::new(kind), Box::new(meta_info))
+    }
+}
 
 impl PartialOrd for TypeError {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -275,7 +282,7 @@ impl Type {
                     Type::Enum(name.clone())
                 } else {
                     let e = TypeErrorEnum::UnknownStructOrEnum(name.clone());
-                    return Err(vec![Some(TypeError(e, *meta))]);
+                    return Err(vec![Some(TypeError::new(e, *meta))]);
                 }
             }
             Type::Struct(name) => Type::Struct(name.clone()),
@@ -374,7 +381,7 @@ impl UntypedProgram {
                                     expected: const_def.ty.clone(),
                                     actual: Type::Bool,
                                 };
-                                errors.extend(vec![Some(TypeError(e, meta))]);
+                                errors.extend(vec![Some(TypeError::new(e, meta))]);
                             }
                         }
                         ConstExprEnum::NumUnsigned(_, ty) => {
@@ -384,7 +391,7 @@ impl UntypedProgram {
                                     expected: const_def.ty.clone(),
                                     actual: ty,
                                 };
-                                errors.extend(vec![Some(TypeError(e, meta))]);
+                                errors.extend(vec![Some(TypeError::new(e, meta))]);
                             }
                         }
                         ConstExprEnum::NumSigned(_, ty) => {
@@ -394,7 +401,7 @@ impl UntypedProgram {
                                     expected: const_def.ty.clone(),
                                     actual: ty,
                                 };
-                                errors.extend(vec![Some(TypeError(e, meta))]);
+                                errors.extend(vec![Some(TypeError::new(e, meta))]);
                             }
                         }
                         ConstExprEnum::ExternalValue { party, identifier } => {
@@ -458,7 +465,7 @@ impl UntypedProgram {
             if fn_def.is_pub {
                 if fn_def.params.is_empty() {
                     let e = TypeErrorEnum::PubFnWithoutParams(fn_name.clone());
-                    errors.push(Some(TypeError(e, fn_def.meta)));
+                    errors.push(Some(TypeError::new(e, fn_def.meta)));
                 } else {
                     let typed_fn =
                         fn_def.type_check(&top_level_defs, &mut checked_fn_defs, &untyped_defs);
@@ -472,7 +479,7 @@ impl UntypedProgram {
         for (fn_name, fn_def) in self.fn_defs.iter() {
             if !fn_def.is_pub && !checked_fn_defs.typed.contains_key(fn_name.as_str()) {
                 let e = TypeErrorEnum::UnusedFn(fn_name.to_string());
-                errors.push(Some(TypeError(e, fn_def.meta)));
+                errors.push(Some(TypeError::new(e, fn_def.meta)));
             }
         }
         let mut fn_defs = HashMap::new();
@@ -506,7 +513,7 @@ impl UntypedFnDef {
     ) -> Result<TypedFnDef, TypeErrors> {
         if fns.currently_being_checked.contains(&self.identifier) {
             let e = TypeErrorEnum::RecursiveFnDef(self.identifier.clone());
-            return Err(vec![Some(TypeError(e, self.meta))]);
+            return Err(vec![Some(TypeError::new(e, self.meta))]);
         } else {
             fns.currently_being_checked.insert(self.identifier.clone());
         }
@@ -518,7 +525,7 @@ impl UntypedFnDef {
         for param in self.params.iter() {
             if param_identifiers.contains(&param.name) {
                 let e = TypeErrorEnum::DuplicateFnParam(param.name.clone());
-                errors.push(Some(TypeError(e, self.meta)));
+                errors.push(Some(TypeError::new(e, self.meta)));
             } else {
                 param_identifiers.insert(param.name.clone());
             }
@@ -557,7 +564,7 @@ impl UntypedFnDef {
                             expected: ret_ty.clone(),
                             actual: Type::Tuple(vec![]),
                         };
-                        errors.push(Some(TypeError(e, self.meta)));
+                        errors.push(Some(TypeError::new(e, self.meta)));
                     }
                     if errors.is_empty() {
                         Ok(TypedFnDef {
@@ -744,7 +751,7 @@ impl UntypedStmt {
                                         let e = TypeErrorEnum::TupleAccessOutOfBounds(
                                             value_types.len(),
                                         );
-                                        return Err(vec![Some(TypeError(e, *meta))]);
+                                        return Err(vec![Some(TypeError::new(e, *meta))]);
                                     }
                                 }
                                 Accessor::StructAccess { field, .. } => {
@@ -762,11 +769,11 @@ impl UntypedStmt {
                                                 name.clone(),
                                                 field.clone(),
                                             );
-                                            return Err(vec![Some(TypeError(e, *meta))]);
+                                            return Err(vec![Some(TypeError::new(e, *meta))]);
                                         }
                                     } else {
                                         let e = TypeErrorEnum::UnknownStruct(name.clone());
-                                        return Err(vec![Some(TypeError(e, *meta))]);
+                                        return Err(vec![Some(TypeError::new(e, *meta))]);
                                     }
                                 }
                             };
@@ -784,11 +791,11 @@ impl UntypedStmt {
                         // just ignore the statement here
                         Err(vec![None])
                     }
-                    Some((_, Mutability::Immutable)) => Err(vec![Some(TypeError(
+                    Some((_, Mutability::Immutable)) => Err(vec![Some(TypeError::new(
                         TypeErrorEnum::IdentifierNotDeclaredAsMutable(identifier.clone()),
                         meta,
                     ))]),
-                    None => Err(vec![Some(TypeError(
+                    None => Err(vec![Some(TypeError::new(
                         TypeErrorEnum::UnknownIdentifier(identifier.clone()),
                         meta,
                     ))]),
@@ -802,13 +809,13 @@ impl UntypedStmt {
                             expected: 2,
                             actual: args.len(),
                         };
-                        return Err(vec![Some(TypeError(e, meta))]);
+                        return Err(vec![Some(TypeError::new(e, meta))]);
                     }
                     let a = args[0].type_check(top_level_defs, env, fns, defs)?;
                     let (ty_a, meta_a) = match &a.ty {
                         Type::Array(_, _) | Type::ArrayConst(_, _) => (a.ty.clone(), a.meta),
                         ty => {
-                            errors.push(Some(TypeError(
+                            errors.push(Some(TypeError::new(
                                 TypeErrorEnum::ExpectedArrayType(ty.clone()),
                                 a.meta,
                             )));
@@ -819,7 +826,7 @@ impl UntypedStmt {
                     let (ty_b, meta_b) = match &b.ty {
                         Type::Array(_, _) | Type::ArrayConst(_, _) => (b.ty.clone(), b.meta),
                         ty => {
-                            errors.push(Some(TypeError(
+                            errors.push(Some(TypeError::new(
                                 TypeErrorEnum::ExpectedArrayType(ty.clone()),
                                 b.meta,
                             )));
@@ -834,7 +841,7 @@ impl UntypedStmt {
                     let tuple_a = expect_tuple_type(&elem_ty_a, meta_a)?;
                     let tuple_b = expect_tuple_type(&elem_ty_b, meta_b)?;
                     if tuple_a.is_empty() || tuple_b.is_empty() || tuple_a[0] != tuple_b[0] {
-                        return Err(vec![Some(TypeError(
+                        return Err(vec![Some(TypeError::new(
                             TypeErrorEnum::TypeMismatch(elem_ty_a, elem_ty_b),
                             meta,
                         ))]);
@@ -904,7 +911,7 @@ impl UntypedExpr {
                 None => match defs.consts.get(identifier.as_str()) {
                     Some(&ty) => (ExprEnum::Identifier(identifier.clone()), ty.clone()),
                     None => {
-                        return Err(vec![Some(TypeError(
+                        return Err(vec![Some(TypeError::new(
                             TypeErrorEnum::UnknownIdentifier(identifier.clone()),
                             meta,
                         ))]);
@@ -973,17 +980,17 @@ impl UntypedExpr {
                             expected: Type::Unsigned(UnsignedNumType::Usize),
                             actual: ty.clone(),
                         };
-                        return Err(vec![Some(TypeError(e, meta))]);
+                        return Err(vec![Some(TypeError::new(e, meta))]);
                     }
                     None => {
-                        return Err(vec![Some(TypeError(
+                        return Err(vec![Some(TypeError::new(
                             TypeErrorEnum::UnknownIdentifier(size.clone()),
                             meta,
                         ))]);
                     }
                 },
                 Some(_) => {
-                    return Err(vec![Some(TypeError(
+                    return Err(vec![Some(TypeError::new(
                         TypeErrorEnum::ArraySizeNotConst(size.clone()),
                         meta,
                     ))]);
@@ -1029,7 +1036,7 @@ impl UntypedExpr {
                     (ExprEnum::TupleAccess(Box::new(tuple), *index), ty)
                 } else {
                     let e = TypeErrorEnum::TupleAccessOutOfBounds(value_types.len());
-                    return Err(vec![Some(TypeError(e, tuple.meta))]);
+                    return Err(vec![Some(TypeError::new(e, tuple.meta))]);
                 }
             }
             ExprEnum::UnaryOp(UnaryOp::Neg, x) => {
@@ -1059,7 +1066,7 @@ impl UntypedExpr {
                         match ty {
                             Type::Bool => {}
                             ty => {
-                                return Err(vec![Some(TypeError(
+                                return Err(vec![Some(TypeError::new(
                                     TypeErrorEnum::UnexpectedType {
                                         expected: Type::Bool,
                                         actual: ty.clone(),
@@ -1143,7 +1150,7 @@ impl UntypedExpr {
                                     expected: fn_arg_types.len(),
                                     actual: arg_types.len(),
                                 };
-                                errors.push(Some(TypeError(e, meta)));
+                                errors.push(Some(TypeError::new(e, meta)));
                             }
                             for (expected, actual) in fn_arg_types.into_iter().zip(&mut arg_exprs) {
                                 if let Err(e) = check_type(actual, &expected) {
@@ -1167,12 +1174,12 @@ impl UntypedExpr {
                     }
                     (None, _) => {
                         let e = TypeErrorEnum::UnknownIdentifier(identifier.clone());
-                        errors.push(Some(TypeError(e, meta)));
+                        errors.push(Some(TypeError::new(e, meta)));
                         return Err(errors);
                     }
                     (_, Some(_)) => {
                         let e = TypeErrorEnum::NoTopLevelFn(identifier.clone());
-                        errors.push(Some(TypeError(e, meta)));
+                        errors.push(Some(TypeError::new(e, meta)));
                         return Err(errors);
                     }
                 }
@@ -1217,7 +1224,7 @@ impl UntypedExpr {
             ExprEnum::Range(from, to, num_ty) => {
                 if from >= to || (to - from) > u32::MAX as u64 {
                     let e = TypeErrorEnum::InvalidRange(*from, *to);
-                    return Err(vec![Some(TypeError(e, meta))]);
+                    return Err(vec![Some(TypeError::new(e, meta))]);
                 }
                 let ty = Type::Array(Box::new(Type::Unsigned(*num_ty)), (to - from) as usize);
                 (ExprEnum::Range(*from, *to, *num_ty), ty)
@@ -1240,7 +1247,7 @@ impl UntypedExpr {
                                         expected: types.len(),
                                         actual: values.len(),
                                     };
-                                    return Err(vec![Some(TypeError(e, meta))]);
+                                    return Err(vec![Some(TypeError::new(e, meta))]);
                                 }
                                 let mut errors = vec![];
                                 let mut exprs = Vec::with_capacity(values.len());
@@ -1270,11 +1277,11 @@ impl UntypedExpr {
                             }
                             (VariantExprEnum::Unit, Some(_)) => {
                                 let e = TypeErrorEnum::ExpectedTupleVariantFoundUnitVariant;
-                                return Err(vec![Some(TypeError(e, meta))]);
+                                return Err(vec![Some(TypeError::new(e, meta))]);
                             }
                             (VariantExprEnum::Tuple(_), None) => {
                                 let e = TypeErrorEnum::ExpectedUnitVariantFoundTupleVariant;
-                                return Err(vec![Some(TypeError(e, meta))]);
+                                return Err(vec![Some(TypeError::new(e, meta))]);
                             }
                         }
                     } else {
@@ -1282,12 +1289,12 @@ impl UntypedExpr {
                             identifier.clone(),
                             variant_name.to_string(),
                         );
-                        return Err(vec![Some(TypeError(e, meta))]);
+                        return Err(vec![Some(TypeError::new(e, meta))]);
                     }
                 } else {
                     let e =
                         TypeErrorEnum::UnknownEnum(identifier.clone(), variant_name.to_string());
-                    return Err(vec![Some(TypeError(e, meta))]);
+                    return Err(vec![Some(TypeError::new(e, meta))]);
                 }
             }
             ExprEnum::Match(expr, clauses) => {
@@ -1303,7 +1310,7 @@ impl UntypedExpr {
                     | Type::Enum(_) => {}
                     Type::Fn(_, _) | Type::Array(_, _) | Type::ArrayConst(_, _) => {
                         let e = TypeErrorEnum::TypeDoesNotSupportPatternMatching(ty.clone());
-                        return Err(vec![Some(TypeError(e, meta))]);
+                        return Err(vec![Some(TypeError::new(e, meta))]);
                     }
                     Type::UntypedTopLevelDefinition(_, _) => unreachable!(
                         "Untyped top level types should have been typechecked at this point"
@@ -1364,7 +1371,7 @@ impl UntypedExpr {
                                     expected: ret_ty.clone(),
                                     actual: expr.ty.clone(),
                                 };
-                                errors.push(Some(TypeError(e, expr.meta)));
+                                errors.push(Some(TypeError::new(e, expr.meta)));
                             }
                         }
                     }
@@ -1400,7 +1407,7 @@ impl UntypedExpr {
                         } else {
                             let e =
                                 TypeErrorEnum::UnknownStructField(name.clone(), field_name.clone());
-                            errors.push(Some(TypeError(e, meta)));
+                            errors.push(Some(TypeError::new(e, meta)));
                         }
                     }
                     if struct_def.len() > fields.len() {
@@ -1410,7 +1417,7 @@ impl UntypedExpr {
                                     name.clone(),
                                     expected_field_name.to_string(),
                                 );
-                                errors.push(Some(TypeError(e, meta)));
+                                errors.push(Some(TypeError::new(e, meta)));
                             }
                         }
                     }
@@ -1424,7 +1431,7 @@ impl UntypedExpr {
                     }
                 } else {
                     let e = TypeErrorEnum::UnknownStruct(name.clone());
-                    return Err(vec![Some(TypeError(e, meta))]);
+                    return Err(vec![Some(TypeError::new(e, meta))]);
                 }
             }
             ExprEnum::StructAccess(struct_expr, field) => {
@@ -1438,11 +1445,11 @@ impl UntypedExpr {
                         )
                     } else {
                         let e = TypeErrorEnum::UnknownStructField(name.clone(), field.clone());
-                        return Err(vec![Some(TypeError(e, meta))]);
+                        return Err(vec![Some(TypeError::new(e, meta))]);
                     }
                 } else {
                     let e = TypeErrorEnum::UnknownStruct(name.clone());
-                    return Err(vec![Some(TypeError(e, meta))]);
+                    return Err(vec![Some(TypeError::new(e, meta))]);
                 }
             }
         };
@@ -1472,7 +1479,7 @@ impl UntypedPattern {
                         expected: Type::Bool,
                         actual: ty.clone(),
                     };
-                    return Err(vec![Some(TypeError(e, meta))]);
+                    return Err(vec![Some(TypeError::new(e, meta))]);
                 }
                 None => {
                     return Err(vec![None]);
@@ -1485,7 +1492,7 @@ impl UntypedPattern {
                         expected: Type::Bool,
                         actual: ty.clone(),
                     };
-                    return Err(vec![Some(TypeError(e, meta))]);
+                    return Err(vec![Some(TypeError::new(e, meta))]);
                 }
                 None => {
                     return Err(vec![None]);
@@ -1531,7 +1538,7 @@ impl UntypedPattern {
                             expected: field_types.len(),
                             actual: fields.len(),
                         };
-                        return Err(vec![Some(TypeError(e, meta))]);
+                        return Err(vec![Some(TypeError::new(e, meta))]);
                     }
                     let mut errors = vec![];
                     let mut typed_fields = Vec::with_capacity(fields.len());
@@ -1568,7 +1575,7 @@ impl UntypedPattern {
                             expected: ty.clone(),
                             actual: Type::Struct(struct_name.clone()),
                         };
-                        return Err(vec![Some(TypeError(e, meta))]);
+                        return Err(vec![Some(TypeError::new(e, meta))]);
                     }
                 }
                 if let Some((_, struct_def)) = defs.structs.get(struct_name.as_str()) {
@@ -1588,7 +1595,7 @@ impl UntypedPattern {
                                 struct_name.clone(),
                                 field_name.clone(),
                             );
-                            errors.push(Some(TypeError(e, meta)));
+                            errors.push(Some(TypeError::new(e, meta)));
                         }
                     }
                     if !ignore_remaining_fields && struct_def.len() > fields.len() {
@@ -1598,7 +1605,7 @@ impl UntypedPattern {
                                     struct_name.clone(),
                                     expected_field_name.to_string(),
                                 );
-                                errors.push(Some(TypeError(e, meta)));
+                                errors.push(Some(TypeError::new(e, meta)));
                             }
                         }
                     }
@@ -1609,7 +1616,7 @@ impl UntypedPattern {
                     }
                 } else {
                     let e = TypeErrorEnum::UnknownStruct(struct_name.clone());
-                    return Err(vec![Some(TypeError(e, meta))]);
+                    return Err(vec![Some(TypeError::new(e, meta))]);
                 }
             }
             PatternEnum::EnumUnit(enum_name, variant_name)
@@ -1622,7 +1629,7 @@ impl UntypedPattern {
                                 expected: Type::Enum(enum_name.clone()),
                                 actual: ty.clone(),
                             };
-                            return Err(vec![Some(TypeError(e, meta))]);
+                            return Err(vec![Some(TypeError::new(e, meta))]);
                         }
                     }
                 }
@@ -1638,7 +1645,7 @@ impl UntypedPattern {
                                         expected: field_types.len(),
                                         actual: fields.len(),
                                     };
-                                    return Err(vec![Some(TypeError(e, meta))]);
+                                    return Err(vec![Some(TypeError::new(e, meta))]);
                                 }
                                 let mut errors = vec![];
                                 let mut typed_fields = Vec::with_capacity(fields.len());
@@ -1660,11 +1667,11 @@ impl UntypedPattern {
                             }
                             (PatternEnum::EnumUnit(_, _), Some(_)) => {
                                 let e = TypeErrorEnum::ExpectedTupleVariantFoundUnitVariant;
-                                return Err(vec![Some(TypeError(e, meta))]);
+                                return Err(vec![Some(TypeError::new(e, meta))]);
                             }
                             (PatternEnum::EnumTuple(_, _, _), None) => {
                                 let e = TypeErrorEnum::ExpectedUnitVariantFoundTupleVariant;
-                                return Err(vec![Some(TypeError(e, meta))]);
+                                return Err(vec![Some(TypeError::new(e, meta))]);
                             }
                             _ => unreachable!(),
                         }
@@ -1673,11 +1680,11 @@ impl UntypedPattern {
                             enum_name.clone(),
                             variant_name.to_string(),
                         );
-                        return Err(vec![Some(TypeError(e, meta))]);
+                        return Err(vec![Some(TypeError::new(e, meta))]);
                     }
                 } else {
                     let e = TypeErrorEnum::UnknownEnum(enum_name.clone(), variant_name.to_string());
-                    return Err(vec![Some(TypeError(e, meta))]);
+                    return Err(vec![Some(TypeError::new(e, meta))]);
                 }
             }
         };
@@ -1707,7 +1714,7 @@ fn check_exhaustiveness(
     let witnesses = usefulness(patterns, wildcard_pattern, defs);
     if !witnesses.is_empty() {
         let e = TypeErrorEnum::PatternsAreNotExhaustive(witnesses);
-        Err(TypeError(e, meta))
+        Err(TypeError::new(e, meta))
     } else {
         Ok(())
     }
@@ -2121,7 +2128,7 @@ fn usefulness(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> Vec<
 fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<Type, TypeErrors> {
     match ty {
         Type::Array(elem, _) | Type::ArrayConst(elem, _) => Ok(*elem.clone()),
-        _ => Err(vec![Some(TypeError(
+        _ => Err(vec![Some(TypeError::new(
             TypeErrorEnum::ExpectedArrayType(ty.clone()),
             meta,
         ))]),
@@ -2131,7 +2138,7 @@ fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<Type, TypeErrors> {
 fn expect_struct_type(ty: &Type, meta: MetaInfo) -> Result<String, TypeErrors> {
     match ty {
         Type::Struct(name) => Ok(name.clone()),
-        _ => Err(vec![Some(TypeError(
+        _ => Err(vec![Some(TypeError::new(
             TypeErrorEnum::ExpectedStructType(ty.clone()),
             meta,
         ))]),
@@ -2141,7 +2148,7 @@ fn expect_struct_type(ty: &Type, meta: MetaInfo) -> Result<String, TypeErrors> {
 fn expect_tuple_type(ty: &Type, meta: MetaInfo) -> Result<Vec<Type>, TypeErrors> {
     match ty {
         Type::Tuple(types) => Ok(types.clone()),
-        _ => Err(vec![Some(TypeError(
+        _ => Err(vec![Some(TypeError::new(
             TypeErrorEnum::ExpectedTupleType(ty.clone()),
             meta,
         ))]),
@@ -2151,7 +2158,7 @@ fn expect_tuple_type(ty: &Type, meta: MetaInfo) -> Result<Vec<Type>, TypeErrors>
 fn expect_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeErrors> {
     match ty {
         Type::Unsigned(_) | Type::Signed(_) => Ok(()),
-        _ => Err(vec![Some(TypeError(
+        _ => Err(vec![Some(TypeError::new(
             TypeErrorEnum::ExpectedNumberType(ty.clone()),
             meta,
         ))]),
@@ -2161,7 +2168,7 @@ fn expect_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeErrors> {
 fn expect_signed_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeErrors> {
     match ty {
         Type::Signed(_) => Ok(()),
-        _ => Err(vec![Some(TypeError(
+        _ => Err(vec![Some(TypeError::new(
             TypeErrorEnum::ExpectedSignedNumberType(ty.clone()),
             meta,
         ))]),
@@ -2175,7 +2182,7 @@ fn expect_bool_or_num_type(ty: &Type, meta: MetaInfo) -> Result<(), TypeErrors> 
     if let Ok(()) = expect_num_type(ty, meta) {
         return Ok(());
     }
-    Err(vec![Some(TypeError(
+    Err(vec![Some(TypeError::new(
         TypeErrorEnum::ExpectedBoolOrNumberType(ty.clone()),
         meta,
     ))])
@@ -2192,7 +2199,7 @@ pub(crate) fn check_or_constrain_unsigned(
             expected: Type::Unsigned(expected),
             actual: expr.ty.clone(),
         };
-        return Err(vec![Some(TypeError(e, expr.meta))]);
+        return Err(vec![Some(TypeError::new(e, expr.meta))]);
     }
     if let Some(max) = UnsignedNumType::max(&expected) {
         if let ExprEnum::NumUnsigned(n, _) = expr.inner {
@@ -2201,7 +2208,7 @@ pub(crate) fn check_or_constrain_unsigned(
                     expected: Type::Unsigned(expected),
                     actual: expr.ty.clone(),
                 };
-                return Err(vec![Some(TypeError(e, expr.meta))]);
+                return Err(vec![Some(TypeError::new(e, expr.meta))]);
             }
         }
     }
@@ -2221,7 +2228,7 @@ pub(crate) fn check_or_constrain_signed(
             expected: Type::Signed(expected),
             actual: expr.ty.clone(),
         };
-        return Err(vec![Some(TypeError(e, expr.meta))]);
+        return Err(vec![Some(TypeError::new(e, expr.meta))]);
     }
     if let Some(min) = SignedNumType::min(&expected) {
         if let ExprEnum::NumSigned(n, _) = expr.inner {
@@ -2230,7 +2237,7 @@ pub(crate) fn check_or_constrain_signed(
                     expected: Type::Signed(expected),
                     actual: expr.ty.clone(),
                 };
-                return Err(vec![Some(TypeError(e, expr.meta))]);
+                return Err(vec![Some(TypeError::new(e, expr.meta))]);
             }
         }
     }
@@ -2241,7 +2248,7 @@ pub(crate) fn check_or_constrain_signed(
                     expected: Type::Signed(expected),
                     actual: expr.ty.clone(),
                 };
-                return Err(vec![Some(TypeError(e, expr.meta))]);
+                return Err(vec![Some(TypeError::new(e, expr.meta))]);
             }
         } else if let ExprEnum::NumSigned(n, _) = expr.inner {
             if n > max {
@@ -2249,7 +2256,7 @@ pub(crate) fn check_or_constrain_signed(
                     expected: Type::Signed(expected),
                     actual: expr.ty.clone(),
                 };
-                return Err(vec![Some(TypeError(e, expr.meta))]);
+                return Err(vec![Some(TypeError::new(e, expr.meta))]);
             }
         }
     }
@@ -2384,7 +2391,7 @@ pub(crate) fn check_type(expr: &mut TypedExpr, expected: &Type) -> Result<(), Ty
             expected,
             actual: expr.ty.clone(),
         };
-        Err(vec![Some(TypeError(e, expr.meta))])
+        Err(vec![Some(TypeError::new(e, expr.meta))])
     }
 }
 
@@ -2417,7 +2424,7 @@ fn unify(e1: &mut TypedExpr, e2: &mut TypedExpr, m: MetaInfo) -> Result<Type, Ty
         }
         _ => {
             let e = TypeErrorEnum::TypeMismatch(e1.ty.clone(), e2.ty.clone());
-            return Err(vec![Some(TypeError(e, m))]);
+            return Err(vec![Some(TypeError::new(e, m))]);
         }
     };
     e1.ty = ty.clone();

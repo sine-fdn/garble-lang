@@ -23,7 +23,7 @@ pub fn main(x: u16) -> u16 {
     assert!(e
         .unwrap_err()
         .iter()
-        .any(|TypeError(e, _)| matches!(e, TypeErrorEnum::UnknownIdentifier(_))));
+        .any(|TypeError(e, _)| matches!(**e, TypeErrorEnum::UnknownIdentifier(_))));
     Ok(())
 }
 
@@ -252,7 +252,7 @@ pub fn main(x: bool) -> [bool; 3] {
 fn assert_single_type_error(e: Result<TypedProgram, Vec<TypeError>>) -> TypeErrorEnum {
     if let Err(mut e) = e {
         if e.len() == 1 {
-            e.pop().unwrap().0
+            *e.pop().unwrap().0
         } else {
             panic!("Expected a single type error, but found {e:?}");
         }

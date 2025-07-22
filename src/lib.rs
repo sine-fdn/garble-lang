@@ -186,7 +186,10 @@ impl GarbleProgram {
         };
         let ty = resolve_const_type(&param.ty, &self.const_sizes);
         if !literal.is_of_type(&self.program, &ty) {
-            return Err(EvalError::InvalidLiteralType(literal, ty));
+            return Err(EvalError::InvalidLiteralType(
+                Box::new(literal),
+                Box::new(ty),
+            ));
         }
         Ok(GarbleArgument(literal, &self.program, &self.const_sizes))
     }
@@ -250,7 +253,7 @@ pub enum Error {
     /// Errors occurring during compile time.
     CompileTimeError(CompileTimeError),
     /// Errors occurring during the run-time evaluation of the circuit.
-    EvalError(EvalError),
+    EvalError(Box<EvalError>),
     /// Errors occurring during the conversion of the circuit to bristol fashion.
     ConvertError(ConverterError),
 }
@@ -287,7 +290,7 @@ impl<E: Into<CompileTimeError>> From<E> for Error {
 
 impl From<EvalError> for Error {
     fn from(e: EvalError) -> Self {
-        Self::EvalError(e)
+        Self::EvalError(Box::new(e))
     }
 }
 
@@ -336,7 +339,7 @@ impl Error {
             Error::CompileTimeError(e) => e.prettify(prg),
             Error::EvalError(e) => e.prettify(prg),
             Error::ConvertError(e) => {
-                format!("Could not convert between a Circuit in Garble and the Bristol format due to {:?}", e)
+                format!("Could not convert between a Circuit in Garble and the Bristol format due to {e:?}")
             }
         }
     }
@@ -377,7 +380,7 @@ impl CompileTimeError {
             }
             CompileTimeError::TypeError(errs) => {
                 for TypeError(e, meta) in errs {
-                    errs_for_display.push(("Type error", format!("{e}"), Some(*meta)));
+                    errs_for_display.push(("Type error", format!("{e}"), Some(**meta)));
                 }
             }
             CompileTimeError::CompilerError(errs) => {
@@ -403,7 +406,7 @@ impl CompileTimeError {
                 )
                 .unwrap();
             } else {
-                writeln!(msg, "\n{}:", err_type).unwrap();
+                writeln!(msg, "\n{err_type}:").unwrap();
             }
             writeln!(msg, "{err}:").unwrap();
             if let Some(meta) = meta {
