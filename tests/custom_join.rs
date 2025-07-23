@@ -6,7 +6,7 @@ fn parse_custom_join() -> Result<(), ()> {
 const ROWS_0: usize = PARTY_0::DB_SIZE;
 const ROWS_1: usize = PARTY_1::DB_SIZE;
 
-pub fn main(rows0: [(u32); ROWS_0], rows1: [(u32); ROWS_1]) -> [(bool, (u32)); const { ROWS_0 + ROWS_1 - 1}] {
+pub fn main(rows0: [(u32); ROWS_0], rows1: [(u32); ROWS_1]) -> [(bool, ((u32), (u32))); const { ROWS_0 + ROWS_1 - 1}] {
     custom_join(rows0, rows1)
 }
 ";
@@ -24,7 +24,7 @@ pub fn main(rows0: [(u32); ROWS_0], rows1: [(u32); ROWS_1]) -> [(bool, (u32)); c
             "PARTY_1".into(),
             [(
                 "DB_SIZE".into(),
-                Literal::NumUnsigned(1, UnsignedNumType::Usize),
+                Literal::NumUnsigned(2, UnsignedNumType::Usize),
             )]
             .into_iter()
             .collect(),
@@ -38,14 +38,16 @@ pub fn main(rows0: [(u32); ROWS_0], rows1: [(u32); ROWS_1]) -> [(bool, (u32)); c
 
     let mut eval = prg.evaluator();
 
-    eval.set_literal(Literal::Array(vec![Literal::Tuple(vec![
-        Literal::NumUnsigned(0, UnsignedNumType::U32),
-    ])]))
+    eval.set_literal(Literal::Array(vec![
+        // Literal::Tuple(vec![Literal::NumUnsigned(0, UnsignedNumType::U32)]),
+        Literal::Tuple(vec![Literal::NumUnsigned(1, UnsignedNumType::U32)]),
+    ]))
     .expect("Setting input for P0");
 
-    eval.set_literal(Literal::Array(vec![Literal::Tuple(vec![
-        Literal::NumUnsigned(0, UnsignedNumType::U32),
-    ])]))
+    eval.set_literal(Literal::Array(vec![
+        Literal::Tuple(vec![Literal::NumUnsigned(1, UnsignedNumType::U32)]),
+        Literal::Tuple(vec![Literal::NumUnsigned(3, UnsignedNumType::U32)]),
+    ]))
     .expect("Setting input for P1");
 
     let out = eval.run().expect("running eval");

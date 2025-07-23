@@ -1252,7 +1252,10 @@ impl UntypedExpr {
                                             Type::ArrayConstExpr(
                                                 Box::new(Type::Tuple(vec![
                                                     Type::Bool,
-                                                    (&**ty).clone(),
+                                                    Type::Tuple(vec![
+                                                        (&**ty).clone(),
+                                                        (&**ty).clone(),
+                                                    ]),
                                                 ])),
                                                 ConstExpr(
                                                     ConstExprEnum::Sub(

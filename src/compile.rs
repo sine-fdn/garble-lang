@@ -140,74 +140,7 @@ impl TypedProgram {
             errs.sort();
             return Err(errs);
         }
-        fn resolve_const_expr_unsigned(
-            ConstExpr(expr, _): &ConstExpr,
-            consts_unsigned: &HashMap<String, u64>,
-        ) -> u64 {
-            match expr {
-                ConstExprEnum::NumUnsigned(n, _) => *n,
-                ConstExprEnum::ExternalValue { party, identifier } => *consts_unsigned
-                    .get(&format!("{party}::{identifier}"))
-                    .unwrap(),
-                ConstExprEnum::Max(args) => {
-                    let mut result = 0;
-                    for arg in args {
-                        result = max(result, resolve_const_expr_unsigned(arg, consts_unsigned));
-                    }
-                    result
-                }
-                ConstExprEnum::Min(args) => {
-                    let mut result = u64::MAX;
-                    for arg in args {
-                        result = min(result, resolve_const_expr_unsigned(arg, consts_unsigned));
-                    }
-                    result
-                }
-                ConstExprEnum::Add(lhs, rhs) => {
-                    resolve_const_expr_unsigned(&lhs, consts_unsigned)
-                        .wrapping_add(resolve_const_expr_unsigned(&rhs, consts_unsigned))
-                }
-                ConstExprEnum::Sub(lhs, rhs) => resolve_const_expr_unsigned(&lhs, consts_unsigned)
-                    .wrapping_sub(resolve_const_expr_unsigned(&rhs, consts_unsigned)),
-                ConstExprEnum::ConstExprIdent(_) => todo!("how to handle ConstExprIdent"),
-                ConstExprEnum::True | ConstExprEnum::False | ConstExprEnum::NumSigned(_, _) => {
-                    panic!("Not a signed const expr: {expr:?}")
-                }
-            }
-        }
-        fn resolve_const_expr_signed(
-            ConstExpr(expr, _): &ConstExpr,
-            consts_signed: &HashMap<String, i64>,
-        ) -> i64 {
-            match expr {
-                ConstExprEnum::NumSigned(n, _) => *n,
-                ConstExprEnum::ExternalValue { party, identifier } => *consts_signed
-                    .get(&format!("{party}::{identifier}"))
-                    .unwrap(),
-                ConstExprEnum::Max(args) => {
-                    let mut result = 0;
-                    for arg in args {
-                        result = max(result, resolve_const_expr_signed(arg, consts_signed));
-                    }
-                    result
-                }
-                ConstExprEnum::Min(args) => {
-                    let mut result = i64::MAX;
-                    for arg in args {
-                        result = min(result, resolve_const_expr_signed(arg, consts_signed));
-                    }
-                    result
-                }
-                ConstExprEnum::Add(lhs, rhs) => resolve_const_expr_signed(&lhs, consts_signed)
-                    .wrapping_add(resolve_const_expr_signed(&rhs, consts_signed)),
-                ConstExprEnum::Sub(lhs, rhs) => resolve_const_expr_signed(&lhs, consts_signed)
-                    .wrapping_sub(resolve_const_expr_signed(&rhs, consts_signed)),
-                ConstExprEnum::ConstExprIdent(_) => todo!("how to handle ConstExprIdent"),
-                ConstExprEnum::True | ConstExprEnum::False | ConstExprEnum::NumUnsigned(_, _) => {
-                    panic!("Not an unsigned const expr: {expr:?}")
-                }
-            }
-        }
+
         for (const_name, const_def) in self.const_defs.iter() {
             if let Type::Unsigned(UnsignedNumType::Usize) = const_def.ty {
                 if let ConstExpr(ConstExprEnum::ExternalValue { party, identifier }, _) =
@@ -371,6 +304,76 @@ impl TypedProgram {
         }
         let output_gates = compile_block(&fn_def.body, self, &mut env, &mut circuit);
         Ok((circuit.build(output_gates), fn_def, const_sizes))
+    }
+}
+
+pub(crate) fn resolve_const_expr_unsigned(
+    ConstExpr(expr, _): &ConstExpr,
+    consts_unsigned: &HashMap<String, u64>,
+) -> u64 {
+    match expr {
+        ConstExprEnum::NumUnsigned(n, _) => *n,
+        ConstExprEnum::ExternalValue { party, identifier } => *consts_unsigned
+            .get(&format!("{party}::{identifier}"))
+            .unwrap(),
+        ConstExprEnum::Max(args) => {
+            let mut result = 0;
+            for arg in args {
+                result = max(result, resolve_const_expr_unsigned(arg, consts_unsigned));
+            }
+            result
+        }
+        ConstExprEnum::Min(args) => {
+            let mut result = u64::MAX;
+            for arg in args {
+                result = min(result, resolve_const_expr_unsigned(arg, consts_unsigned));
+            }
+            result
+        }
+        ConstExprEnum::Add(lhs, rhs) => resolve_const_expr_unsigned(&lhs, consts_unsigned)
+            .wrapping_add(resolve_const_expr_unsigned(&rhs, consts_unsigned)),
+        ConstExprEnum::Sub(lhs, rhs) => resolve_const_expr_unsigned(&lhs, consts_unsigned)
+            .wrapping_sub(resolve_const_expr_unsigned(&rhs, consts_unsigned)),
+        ConstExprEnum::ConstExprIdent(ident) => {
+            // TODO error handling and not panicking or can we ensure in an earlier step that this never fails?
+            *consts_unsigned.get(ident).unwrap_or_else(|| panic!("Used undefined {ident} in const expr"))
+        },
+        ConstExprEnum::True | ConstExprEnum::False | ConstExprEnum::NumSigned(_, _) => {
+            panic!("Not a signed const expr: {expr:?}")
+        }
+    }
+}
+pub(crate) fn resolve_const_expr_signed(
+    ConstExpr(expr, _): &ConstExpr,
+    consts_signed: &HashMap<String, i64>,
+) -> i64 {
+    match expr {
+        ConstExprEnum::NumSigned(n, _) => *n,
+        ConstExprEnum::ExternalValue { party, identifier } => *consts_signed
+            .get(&format!("{party}::{identifier}"))
+            .unwrap(),
+        ConstExprEnum::Max(args) => {
+            let mut result = 0;
+            for arg in args {
+                result = max(result, resolve_const_expr_signed(arg, consts_signed));
+            }
+            result
+        }
+        ConstExprEnum::Min(args) => {
+            let mut result = i64::MAX;
+            for arg in args {
+                result = min(result, resolve_const_expr_signed(arg, consts_signed));
+            }
+            result
+        }
+        ConstExprEnum::Add(lhs, rhs) => resolve_const_expr_signed(&lhs, consts_signed)
+            .wrapping_add(resolve_const_expr_signed(&rhs, consts_signed)),
+        ConstExprEnum::Sub(lhs, rhs) => resolve_const_expr_signed(&lhs, consts_signed)
+            .wrapping_sub(resolve_const_expr_signed(&rhs, consts_signed)),
+        ConstExprEnum::ConstExprIdent(_) => todo!("how to handle ConstExprIdent"),
+        ConstExprEnum::True | ConstExprEnum::False | ConstExprEnum::NumUnsigned(_, _) => {
+            panic!("Not an unsigned const expr: {expr:?}")
+        }
     }
 }
 
@@ -1293,6 +1296,11 @@ impl TypedExpr {
                             for i in 0..join_ty_size {
                                 let eq = circuit.push_eq(join_a[i], join_b[i]);
                                 join_eq = circuit.push_and(join_eq, eq);
+                            }
+
+                            for g in binding.iter_mut() {
+                                // TODO can I just use gateindex 0 for a constant false?
+                                *g = circuit.push_mux(join_eq, *g, 0);
                             }
 
                             joined.push(join_eq);
