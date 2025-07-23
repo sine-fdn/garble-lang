@@ -268,6 +268,10 @@ impl Type {
                 let elem = elem.as_concrete_type(types)?;
                 Type::ArrayConst(Box::new(elem), size.clone())
             }
+            Type::ArrayConstExpr(elem, size_expr) => {
+                let elem = elem.as_concrete_type(types)?;
+                Type::ArrayConstExpr(Box::new(elem), size_expr.clone())
+            }
             Type::Tuple(fields) => {
                 let mut concrete_fields = Vec::with_capacity(fields.len());
                 for field in fields.iter() {
@@ -344,8 +348,47 @@ impl TypedFns {
     pub(crate) fn new() -> Self {
         Self {
             currently_being_checked: HashSet::new(),
-            typed: HashMap::new(),
+            typed: Self::inbuilt(),
         }
+    }
+
+    fn inbuilt() -> HashMap<String, Result<TypedFnDef, TypeErrors>> {
+        let identifier: String = "custom_join".into();
+        let custom_join = TypedFnDef {
+            is_pub: false,
+            identifier: identifier.clone(),
+            ty: Type::ArrayConst(
+                Box::new(Type::Tuple(vec![
+                    Type::Bool,
+                    Type::Unsigned(UnsignedNumType::U32),
+                ])),
+                "CUSTOM_JOIN_OUT_SIZE".into(),
+            ),
+            params: vec![
+                ParamDef {
+                    mutability: Mutability::Immutable,
+                    name: "a".into(),
+                    ty: Type::ArrayConst(
+                        Box::new(Type::Tuple(vec![Type::Unsigned(UnsignedNumType::U32)])),
+                        "GARBLE_UNCONSTRAINED_CONST".into(),
+                    ),
+                },
+                ParamDef {
+                    mutability: Mutability::Immutable,
+                    name: "b".into(),
+                    ty: Type::ArrayConst(
+                        Box::new(Type::Tuple(vec![Type::Unsigned(UnsignedNumType::U32)])),
+                        "GARBLE_UNCONSTRAINED_CONST".into(),
+                    ),
+                },
+            ],
+            body: vec![],
+            meta: MetaInfo {
+                start: (0, 0),
+                end: (0, 0),
+            },
+        };
+        [(identifier, Ok(custom_join))].into_iter().collect()
     }
 }
 
@@ -370,6 +413,7 @@ impl UntypedProgram {
                     value: &ConstExpr,
                     const_def: &ConstDef,
                     errors: &mut Vec<Option<TypeError>>,
+                    const_defs: &HashMap<String, ConstDef>,
                     const_deps: &mut HashMap<String, HashMap<String, (Type, MetaInfo)>>,
                 ) {
                     let ConstExpr(value, meta) = value;
@@ -410,14 +454,39 @@ impl UntypedProgram {
                                 .or_default()
                                 .insert(identifier.clone(), (const_def.ty.clone(), meta));
                         }
+                        ConstExprEnum::ConstExprIdent(ident) => match const_defs.get(ident) {
+                            Some(def) => {
+                                if const_def.ty != def.ty {
+                                    let e = TypeErrorEnum::UnexpectedType {
+                                        expected: const_def.ty.clone(),
+                                        actual: def.ty.clone(),
+                                    };
+                                    errors.extend(vec![Some(TypeError::new(e, meta))]);
+                                }
+                            }
+                            None => {
+                                let e = TypeErrorEnum::UnknownIdentifier(ident.clone());
+                                errors.extend(vec![Some(TypeError::new(e, meta))]);
+                            }
+                        },
                         ConstExprEnum::Max(args) | ConstExprEnum::Min(args) => {
                             for arg in args {
-                                check_const_expr(arg, const_def, errors, const_deps);
+                                check_const_expr(arg, const_def, errors, const_defs, const_deps);
                             }
+                        }
+                        ConstExprEnum::Add(lhs, rhs) | ConstExprEnum::Sub(lhs, rhs) => {
+                            check_const_expr(lhs, const_def, errors, const_defs, const_deps);
+                            check_const_expr(rhs, const_def, errors, const_defs, const_deps);
                         }
                     }
                 }
-                check_const_expr(&const_def.value, const_def, &mut errors, &mut const_deps);
+                check_const_expr(
+                    &const_def.value,
+                    const_def,
+                    &mut errors,
+                    &const_defs,
+                    &mut const_deps,
+                );
                 const_defs.insert(const_name.clone(), const_def.clone());
                 const_types.insert(const_name.clone(), const_def.ty.clone());
             }
@@ -1126,14 +1195,15 @@ impl UntypedExpr {
                 }
                 match (fns.typed.get(identifier), env.get(identifier)) {
                     (Some(Ok(fn_def)), None) => {
-                        let ret_ty = fn_def.ty.clone();
+                        let mut ret_ty = fn_def.ty.clone();
+                        let mut arg_types = Vec::with_capacity(args.len());
+                        let mut arg_meta = Vec::with_capacity(args.len());
+                        let mut arg_exprs: Vec<Expr<Type>> = Vec::with_capacity(args.len());
                         let mut fn_arg_types = Vec::with_capacity(fn_def.params.len());
                         for param_def in fn_def.params.iter() {
                             fn_arg_types.push(param_def.ty.clone());
                         }
-                        let mut arg_types = Vec::with_capacity(args.len());
-                        let mut arg_meta = Vec::with_capacity(args.len());
-                        let mut arg_exprs = Vec::with_capacity(args.len());
+
                         for arg in args.iter() {
                             match arg.type_check(top_level_defs, env, fns, defs) {
                                 Ok(arg) => {
@@ -1144,6 +1214,7 @@ impl UntypedExpr {
                                 Err(e) => errors.extend(e),
                             }
                         }
+
                         if errors.is_empty() {
                             if fn_arg_types.len() != arg_types.len() {
                                 let e = TypeErrorEnum::WrongNumberOfArgs {
@@ -1152,6 +1223,79 @@ impl UntypedExpr {
                                 };
                                 errors.push(Some(TypeError::new(e, meta)));
                             }
+
+                            if identifier == "custom_join" {
+                                let mut arg_consts = vec![];
+                                for (expected_arg_t, actual_arg_t) in
+                                    fn_arg_types.iter_mut().zip(&arg_types)
+                                {
+                                    match (expected_arg_t, actual_arg_t) {
+                                        (
+                                            Type::ArrayConst(_, expected_size),
+                                            Type::ArrayConst(_, actual_size),
+                                        ) => {
+                                            if expected_size == "GARBLE_UNCONSTRAINED_CONST" {
+                                                *expected_size = actual_size.clone();
+                                                arg_consts.push(actual_size.clone());
+                                            }
+                                        }
+                                        _ => todo!(),
+                                    }
+                                }
+                                ret_ty = {
+                                    if let Type::ArrayConst(ty, size0) = &arg_types[0] {
+                                        if let Type::ArrayConst(_, size1) = &arg_types[1] {
+                                            let meta = MetaInfo {
+                                                start: (0, 0),
+                                                end: (0, 0),
+                                            };
+                                            Type::ArrayConstExpr(
+                                                Box::new(Type::Tuple(vec![
+                                                    Type::Bool,
+                                                    Type::Tuple(vec![
+                                                        (&**ty).clone(),
+                                                        (&**ty).clone(),
+                                                    ]),
+                                                ])),
+                                                ConstExpr(
+                                                    ConstExprEnum::Sub(
+                                                        Box::new(ConstExpr(
+                                                            ConstExprEnum::Add(
+                                                                Box::new(ConstExpr(
+                                                                    ConstExprEnum::ConstExprIdent(
+                                                                        size0.clone(),
+                                                                    ),
+                                                                    meta,
+                                                                )),
+                                                                Box::new(ConstExpr(
+                                                                    ConstExprEnum::ConstExprIdent(
+                                                                        size1.clone(),
+                                                                    ),
+                                                                    meta,
+                                                                )),
+                                                            ),
+                                                            meta,
+                                                        )),
+                                                        Box::new(ConstExpr(
+                                                            ConstExprEnum::NumUnsigned(
+                                                                1,
+                                                                UnsignedNumType::Unspecified,
+                                                            ),
+                                                            meta,
+                                                        )),
+                                                    ),
+                                                    meta,
+                                                ),
+                                            )
+                                        } else {
+                                            todo!()
+                                        }
+                                    } else {
+                                        todo!();
+                                    }
+                                };
+                            }
+
                             for (expected, actual) in fn_arg_types.into_iter().zip(&mut arg_exprs) {
                                 if let Err(e) = check_type(actual, &expected) {
                                     errors.extend(e);
@@ -1308,7 +1452,10 @@ impl UntypedExpr {
                     | Type::Tuple(_)
                     | Type::Struct(_)
                     | Type::Enum(_) => {}
-                    Type::Fn(_, _) | Type::Array(_, _) | Type::ArrayConst(_, _) => {
+                    Type::Fn(_, _)
+                    | Type::Array(_, _)
+                    | Type::ArrayConst(_, _)
+                    | Type::ArrayConstExpr(_, _) => {
                         let e = TypeErrorEnum::TypeDoesNotSupportPatternMatching(ty.clone());
                         return Err(vec![Some(TypeError::new(e, meta))]);
                     }
@@ -2012,6 +2159,7 @@ fn split_ctor(patterns: &[PatternStack], q: &[TypedPattern], defs: &Defs) -> Vec
         }
         Type::Array(elem_ty, size) => vec![Ctor::Array(elem_ty.clone(), *size)],
         Type::ArrayConst(elem_ty, size) => vec![Ctor::ArrayConst(elem_ty.clone(), size.clone())],
+        Type::ArrayConstExpr(elem_ty, size_expr) => todo!("What to do here?"),
         Type::Fn(_, _) => {
             panic!("Type {ty:?} does not support pattern matching")
         }
