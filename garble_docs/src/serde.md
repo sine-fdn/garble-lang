@@ -50,3 +50,7 @@ Here are some example Garble literals and how they would be serialized as JSON:
 | `FooBar::Foo`                    | `{"Enum":["FooBar","Foo","Unit"]}`                       |
 | `FooBar::Bar(true, false)`       | `{"Enum":["FooBar","Bar",{"Tuple":["True","False"]}]}`   |
 | `2u8..10u8`                      | `{"Range":[2,10,"U8"]}`                                  |
+
+
+## Json-Schema
+If you enable the `json_schema` feature (which also enables `serde`) the `Literal` type will implement the [`JsonSchema`](https://docs.rs/schemars/latest/schemars/trait.JsonSchema.html) trait. This enables its inclusion in APIs documented using OpenAPI documentation generators like [aide](https://docs.rs/schemars/latest/schemars/trait.JsonSchema.html) or the [dropshot](https://docs.rs/dropshot/latest/dropshot/) framework.

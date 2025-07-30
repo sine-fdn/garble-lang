@@ -1,5 +1,7 @@
 //! Tokens produced by [`crate::scan::scan`].
 
+#[cfg(feature = "json_schema")]
+use schemars::JsonSchema;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -205,6 +207,7 @@ impl std::fmt::Display for TokenEnum {
 /// A suffix indicating the explicit unsigned number type of the literal.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "json_schema", derive(JsonSchema))]
 pub enum UnsignedNumType {
     /// Unsigned integer type used to index arrays, length depends on the host platform.
     Usize,
@@ -250,6 +253,7 @@ impl std::fmt::Display for UnsignedNumType {
 /// A suffix indicating the explicit signed number type of the literal.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "json_schema", derive(JsonSchema))]
 pub enum SignedNumType {
     /// 8-bit signed integer type.
     I8,

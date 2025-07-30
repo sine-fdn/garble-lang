@@ -9,6 +9,8 @@ use std::{
     fmt::Display,
 };
 
+#[cfg(feature = "json_schema")]
+use schemars::JsonSchema;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -81,6 +83,7 @@ use crate::{
 /// | `2u8..10u8`                      | `{"Range":[2,10,"U8"]}`                                  |
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "json_schema", derive(JsonSchema))]
 pub enum Literal {
     /// Literal `true`.
     True,
@@ -107,6 +110,7 @@ pub enum Literal {
 /// A variant literal (either of unit type or containing fields), used by [`Literal::Enum`].
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "json_schema", derive(JsonSchema))]
 pub enum VariantLiteral {
     /// A unit variant, containing no fields.
     Unit,

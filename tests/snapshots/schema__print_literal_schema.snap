@@ -1,0 +1,526 @@
+---
+source: tests/schema.rs
+assertion_line: 14
+expression: schema
+---
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Literal",
+  "description": "",
+  "oneOf": [
+    {
+      "description": "",
+      "type": "string",
+      "const": "True"
+    },
+    {
+      "description": "",
+      "type": "string",
+      "const": "False"
+    },
+    {
+      "description": "",
+      "type": "object",
+      "properties": {
+        "NumUnsigned": {
+          "type": "array",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            {
+              "$ref": "#/$defs/UnsignedNumType"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "NumUnsigned"
+      ]
+    },
+    {
+      "description": "",
+      "type": "object",
+      "properties": {
+        "NumSigned": {
+          "type": "array",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "integer",
+              "format": "int64"
+            },
+            {
+              "$ref": "#/$defs/SignedNumType"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "NumSigned"
+      ]
+    },
+    {
+      "description": "",
+      "type": "object",
+      "properties": {
+        "ArrayRepeat": {
+          "type": "array",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/Literal"
+            },
+            {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ArrayRepeat"
+      ]
+    },
+    {
+      "description": "",
+      "type": "object",
+      "properties": {
+        "Array": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Literal"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "Array"
+      ]
+    },
+    {
+      "description": "",
+      "type": "object",
+      "properties": {
+        "Tuple": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Literal"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "Tuple"
+      ]
+    },
+    {
+      "description": "",
+      "type": "object",
+      "properties": {
+        "Struct": {
+          "type": "array",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/Literal"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "Struct"
+      ]
+    },
+    {
+      "description": "",
+      "type": "object",
+      "properties": {
+        "Enum": {
+          "type": "array",
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/VariantLiteral"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "Enum"
+      ]
+    },
+    {
+      "description": "",
+      "type": "object",
+      "properties": {
+        "Range": {
+          "type": "array",
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            {
+              "$ref": "#/$defs/UnsignedNumType"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "Range"
+      ]
+    }
+  ],
+  "$defs": {
+    "Literal": {
+      "description": "",
+      "oneOf": [
+        {
+          "description": "",
+          "type": "string",
+          "const": "True"
+        },
+        {
+          "description": "",
+          "type": "string",
+          "const": "False"
+        },
+        {
+          "description": "",
+          "type": "object",
+          "properties": {
+            "NumUnsigned": {
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                {
+                  "$ref": "#/$defs/UnsignedNumType"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "NumUnsigned"
+          ]
+        },
+        {
+          "description": "",
+          "type": "object",
+          "properties": {
+            "NumSigned": {
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                {
+                  "$ref": "#/$defs/SignedNumType"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "NumSigned"
+          ]
+        },
+        {
+          "description": "",
+          "type": "object",
+          "properties": {
+            "ArrayRepeat": {
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "$ref": "#/$defs/Literal"
+                },
+                {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "ArrayRepeat"
+          ]
+        },
+        {
+          "description": "",
+          "type": "object",
+          "properties": {
+            "Array": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Literal"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Array"
+          ]
+        },
+        {
+          "description": "",
+          "type": "object",
+          "properties": {
+            "Tuple": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Literal"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Tuple"
+          ]
+        },
+        {
+          "description": "",
+          "type": "object",
+          "properties": {
+            "Struct": {
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "prefixItems": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/$defs/Literal"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Struct"
+          ]
+        },
+        {
+          "description": "",
+          "type": "object",
+          "properties": {
+            "Enum": {
+              "type": "array",
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/VariantLiteral"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Enum"
+          ]
+        },
+        {
+          "description": "",
+          "type": "object",
+          "properties": {
+            "Range": {
+              "type": "array",
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                {
+                  "$ref": "#/$defs/UnsignedNumType"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Range"
+          ]
+        }
+      ]
+    },
+    "SignedNumType": {
+      "description": "",
+      "oneOf": [
+        {
+          "description": "",
+          "type": "string",
+          "const": "I8"
+        },
+        {
+          "description": "",
+          "type": "string",
+          "const": "I16"
+        },
+        {
+          "description": "",
+          "type": "string",
+          "const": "I32"
+        },
+        {
+          "description": "",
+          "type": "string",
+          "const": "I64"
+        },
+        {
+          "description": "",
+          "type": "string",
+          "const": "Unspecified"
+        }
+      ]
+    },
+    "UnsignedNumType": {
+      "description": "",
+      "oneOf": [
+        {
+          "description": "",
+          "type": "string",
+          "const": "Usize"
+        },
+        {
+          "description": "",
+          "type": "string",
+          "const": "U8"
+        },
+        {
+          "description": "",
+          "type": "string",
+          "const": "U16"
+        },
+        {
+          "description": "",
+          "type": "string",
+          "const": "U32"
+        },
+        {
+          "description": "",
+          "type": "string",
+          "const": "U64"
+        },
+        {
+          "description": "",
+          "type": "string",
+          "const": "Unspecified"
+        }
+      ]
+    },
+    "VariantLiteral": {
+      "description": "",
+      "oneOf": [
+        {
+          "description": "",
+          "type": "string",
+          "const": "Unit"
+        },
+        {
+          "description": "",
+          "type": "object",
+          "properties": {
+            "Tuple": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Literal"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Tuple"
+          ]
+        }
+      ]
+    }
+  }
+}
