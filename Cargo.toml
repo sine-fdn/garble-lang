@@ -2,7 +2,7 @@
 name = "garble_lang"
 version = "0.7.0"
 edition = "2021"
-rust-version = "1.60.0"
+rust-version = "1.60.0" # todo update this
 description = "Turing-Incomplete Programming Language for Multi-Party Computation with Garbled Circuits"
 repository = "https://github.com/sine-fdn/garble/"
 license = "MIT"
@@ -24,10 +24,14 @@ required-features = ["bin"]
 clap = { version = "4.5.41", features = ["derive"], optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 plotters = { version = "0.3.7", optional = true }
+schemars = { version = "0.9", optional = true }
+
 
 [features]
-bin = ["clap"]
-plot = ["plotters"]
+bin = ["dep:clap"]
+plot = ["dep:plotters"]
+json_schema = ["dep:schemars", "serde"]
+serde = ["dep:serde"]
 
 [dev-dependencies]
 quickcheck = "1"
@@ -35,3 +39,4 @@ quickcheck_macros = "1"
 serde_json = "1.0.141"
 serde = { version = "1.0", features = ["derive"] }
 tempfile = "3"
+insta = { version = "1.43.1", features = ["json", "redactions"] }
