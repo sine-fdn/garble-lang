@@ -1,4 +1,7 @@
-use std::{cmp::{max, min}, collections::HashMap};
+use std::{
+    cmp::{max, min},
+    collections::HashMap,
+};
 
 use garble_lang::{
     compile, compile_with_constants,
@@ -1378,8 +1381,14 @@ pub fn main(i: i32) -> [i32; const { 2 + 3 } ] {
     for i in 0..5 {
         let mut eval = compiled.evaluator();
         eval.set_i32(i);
-        let output = eval.run().map_err(|e| pretty_print(e, prg))?.into_literal()?;
-        let expected = Literal::ArrayRepeat(Box::new(Literal::NumSigned(i as i64, SignedNumType::I32)), 5);
+        let output = eval
+            .run()
+            .map_err(|e| pretty_print(e, prg))?
+            .into_literal()?;
+        let expected = Literal::ArrayRepeat(
+            Box::new(Literal::NumSigned(i as i64, SignedNumType::I32)),
+            5,
+        );
         assert_eq!(output, expected);
     }
     Ok(())
