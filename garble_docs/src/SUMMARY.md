@@ -9,6 +9,7 @@
   - [If/Else and Pattern Matching](./guide/control_flow.md)
   - [For Loops and For-Join Loops](./guide/loops.md)
   - [Const Parameters](./guide/const.md)
+  - [Compiler Built-In Functions](./guide/in-built-functions.md)
 - [Circuits and Termination](./computational_model.md)
 - [MPC Engine Integration](./integration.md)
 - [(De-)Serializing Garble Values](./serde.md)

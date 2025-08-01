@@ -4,9 +4,9 @@ use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        Accessor, ConstDef, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, FnDef,
-        BuiltInFnCall, Op, ParamDef, Pattern, PatternEnum, Program, Stmt, StmtEnum, StructDef,
-        Type, UnaryOp, Variant, VariantExprEnum,
+        Accessor, BuiltInFnCall, ConstDef, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum,
+        FnDef, Op, ParamDef, Pattern, PatternEnum, Program, Stmt, StmtEnum, StructDef, Type,
+        UnaryOp, Variant, VariantExprEnum,
     },
     scan::Tokens,
     token::{MetaInfo, SignedNumType, Token, TokenEnum, UnsignedNumType},
