@@ -5,7 +5,7 @@ use std::{collections::HashMap, fmt::Debug};
 use crate::{
     ast::Type,
     circuit::{Circuit, EvalPanic, USIZE_BITS},
-    compile::{signed_to_bits, unsigned_to_bits},
+    compile::{resolve_const_expr_usize, signed_to_bits, unsigned_to_bits},
     literal::Literal,
     token::{SignedNumType, UnsignedNumType},
     CompileTimeError, TypedFnDef, TypedProgram,
@@ -240,6 +240,10 @@ pub(crate) fn resolve_const_type(ty: &Type, const_sizes: &HashMap<String, usize>
         Type::ArrayConst(elem_ty, size) => Type::Array(
             Box::new(resolve_const_type(elem_ty, const_sizes)),
             *const_sizes.get(size).unwrap(),
+        ),
+        Type::ArrayConstExpr(elem_ty, size) => Type::Array(
+            Box::new(resolve_const_type(elem_ty, const_sizes)),
+            resolve_const_expr_usize(size, const_sizes),
         ),
         Type::Tuple(elems) => Type::Tuple(
             elems

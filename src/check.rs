@@ -268,6 +268,10 @@ impl Type {
                 let elem = elem.as_concrete_type(types)?;
                 Type::ArrayConst(Box::new(elem), size.clone())
             }
+            Type::ArrayConstExpr(elem, size_expr) => {
+                let elem = elem.as_concrete_type(types)?;
+                Type::ArrayConstExpr(Box::new(elem), size_expr.clone())
+            }
             Type::Tuple(fields) => {
                 let mut concrete_fields = Vec::with_capacity(fields.len());
                 for field in fields.iter() {
@@ -335,6 +339,7 @@ impl<'a> Defs<'a> {
     }
 }
 
+#[derive(Default)]
 pub(crate) struct TypedFns {
     currently_being_checked: HashSet<String>,
     typed: HashMap<String, Result<TypedFnDef, TypeErrors>>,
@@ -365,11 +370,16 @@ impl UntypedProgram {
         let mut const_types = HashMap::with_capacity(self.const_defs.len());
         let mut const_defs = HashMap::with_capacity(self.const_defs.len());
         {
-            for (const_name, const_def) in self.const_defs.iter() {
+            let mut sorted_const_defs: Vec<_> = self.const_defs.iter().collect();
+            // Sort by the meta information of the const defs so we iterate them in the order that
+            // they occur in the source code
+            sorted_const_defs.sort_by_key(|(_name, const_def)| const_def.meta);
+            for (const_name, const_def) in sorted_const_defs {
                 fn check_const_expr(
                     value: &ConstExpr,
                     const_def: &ConstDef,
                     errors: &mut Vec<Option<TypeError>>,
+                    const_defs: &HashMap<String, ConstDef>,
                     const_deps: &mut HashMap<String, HashMap<String, (Type, MetaInfo)>>,
                 ) {
                     let ConstExpr(value, meta) = value;
@@ -410,14 +420,39 @@ impl UntypedProgram {
                                 .or_default()
                                 .insert(identifier.clone(), (const_def.ty.clone(), meta));
                         }
+                        ConstExprEnum::ConstExprIdent(ident) => match const_defs.get(ident) {
+                            Some(def) => {
+                                if const_def.ty != def.ty {
+                                    let e = TypeErrorEnum::UnexpectedType {
+                                        expected: const_def.ty.clone(),
+                                        actual: def.ty.clone(),
+                                    };
+                                    errors.extend(vec![Some(TypeError::new(e, meta))]);
+                                }
+                            }
+                            None => {
+                                let e = TypeErrorEnum::UnknownIdentifier(ident.clone());
+                                errors.extend(vec![Some(TypeError::new(e, meta))]);
+                            }
+                        },
                         ConstExprEnum::Max(args) | ConstExprEnum::Min(args) => {
                             for arg in args {
-                                check_const_expr(arg, const_def, errors, const_deps);
+                                check_const_expr(arg, const_def, errors, const_defs, const_deps);
                             }
+                        }
+                        ConstExprEnum::Add(lhs, rhs) | ConstExprEnum::Sub(lhs, rhs) => {
+                            check_const_expr(lhs, const_def, errors, const_defs, const_deps);
+                            check_const_expr(rhs, const_def, errors, const_defs, const_deps);
                         }
                     }
                 }
-                check_const_expr(&const_def.value, const_def, &mut errors, &mut const_deps);
+                check_const_expr(
+                    &const_def.value,
+                    const_def,
+                    &mut errors,
+                    &const_defs,
+                    &mut const_deps,
+                );
                 const_defs.insert(const_name.clone(), const_def.clone());
                 const_types.insert(const_name.clone(), const_def.ty.clone());
             }
@@ -1127,13 +1162,14 @@ impl UntypedExpr {
                 match (fns.typed.get(identifier), env.get(identifier)) {
                     (Some(Ok(fn_def)), None) => {
                         let ret_ty = fn_def.ty.clone();
+                        let mut arg_types = Vec::with_capacity(args.len());
+                        let mut arg_meta = Vec::with_capacity(args.len());
+                        let mut arg_exprs: Vec<Expr<Type>> = Vec::with_capacity(args.len());
                         let mut fn_arg_types = Vec::with_capacity(fn_def.params.len());
                         for param_def in fn_def.params.iter() {
                             fn_arg_types.push(param_def.ty.clone());
                         }
-                        let mut arg_types = Vec::with_capacity(args.len());
-                        let mut arg_meta = Vec::with_capacity(args.len());
-                        let mut arg_exprs = Vec::with_capacity(args.len());
+
                         for arg in args.iter() {
                             match arg.type_check(top_level_defs, env, fns, defs) {
                                 Ok(arg) => {
@@ -1144,6 +1180,7 @@ impl UntypedExpr {
                                 Err(e) => errors.extend(e),
                             }
                         }
+
                         if errors.is_empty() {
                             if fn_arg_types.len() != arg_types.len() {
                                 let e = TypeErrorEnum::WrongNumberOfArgs {
@@ -1308,7 +1345,10 @@ impl UntypedExpr {
                     | Type::Tuple(_)
                     | Type::Struct(_)
                     | Type::Enum(_) => {}
-                    Type::Fn(_, _) | Type::Array(_, _) | Type::ArrayConst(_, _) => {
+                    Type::Fn(_, _)
+                    | Type::Array(_, _)
+                    | Type::ArrayConst(_, _)
+                    | Type::ArrayConstExpr(_, _) => {
                         let e = TypeErrorEnum::TypeDoesNotSupportPatternMatching(ty.clone());
                         return Err(vec![Some(TypeError::new(e, meta))]);
                     }
@@ -1731,6 +1771,9 @@ enum Ctor {
     Variant(String, String, Option<Vec<Type>>),
     Array(Box<Type>, usize),
     ArrayConst(Box<Type>, String),
+    // TODO is the handling of ArrayConstExpr correct? I've not looked
+    // in-depth into the algorithm implemented here (robinhundt 31.07.25)
+    ArrayConstExpr(Box<Type>, ConstExpr),
 }
 
 type PatternStack = Vec<TypedPattern>;
@@ -1799,10 +1842,12 @@ fn specialize(ctor: &Ctor, pattern: &[TypedPattern]) -> Vec<PatternStack> {
             }
             _ => vec![],
         },
-        Ctor::Array(_, _) | Ctor::ArrayConst(_, _) => match head_enum {
-            PatternEnum::Identifier(_) => vec![tail.collect()],
-            _ => vec![],
-        },
+        Ctor::Array(_, _) | Ctor::ArrayConst(_, _) | Ctor::ArrayConstExpr(_, _) => {
+            match head_enum {
+                PatternEnum::Identifier(_) => vec![tail.collect()],
+                _ => vec![],
+            }
+        }
         Ctor::Struct(struct_name, field_types) => match head_enum {
             PatternEnum::Identifier(_) => {
                 let mut fields = Vec::with_capacity(field_types.len());
@@ -2012,6 +2057,9 @@ fn split_ctor(patterns: &[PatternStack], q: &[TypedPattern], defs: &Defs) -> Vec
         }
         Type::Array(elem_ty, size) => vec![Ctor::Array(elem_ty.clone(), *size)],
         Type::ArrayConst(elem_ty, size) => vec![Ctor::ArrayConst(elem_ty.clone(), size.clone())],
+        Type::ArrayConstExpr(elem_ty, size_expr) => {
+            vec![Ctor::ArrayConstExpr(elem_ty.clone(), size_expr.clone())]
+        }
         Type::Fn(_, _) => {
             panic!("Type {ty:?} does not support pattern matching")
         }
@@ -2116,6 +2164,14 @@ fn usefulness(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> Vec<
                                 meta,
                             ),
                         ),
+                        Ctor::ArrayConstExpr(elem_ty, size) => witness.insert(
+                            0,
+                            Pattern::typed(
+                                PatternEnum::Identifier("_".to_string()),
+                                Type::ArrayConstExpr(elem_ty.clone(), size.clone()),
+                                meta,
+                            ),
+                        ),
                     }
                     witnesses.push(witness);
                 }
@@ -2127,7 +2183,10 @@ fn usefulness(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> Vec<
 
 fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<Type, TypeErrors> {
     match ty {
-        Type::Array(elem, _) | Type::ArrayConst(elem, _) => Ok(*elem.clone()),
+        // TODO Have I overlooked any unintended side-effects of including ArrayConstExpr here? (robinhundt 32.07.25)
+        Type::Array(elem, _) | Type::ArrayConst(elem, _) | Type::ArrayConstExpr(elem, _) => {
+            Ok(*elem.clone())
+        }
         _ => Err(vec![Some(TypeError::new(
             TypeErrorEnum::ExpectedArrayType(ty.clone()),
             meta,

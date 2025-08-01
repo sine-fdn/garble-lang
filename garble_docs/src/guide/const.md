@@ -39,6 +39,31 @@ pub fn main(x: u16) -> u16 {
 
 > Garble currently does not support type inference in const declarations, which is why you always have to use type suffixes even for simple number literals, e.g. use `2u16` instead of `2`.
 
+## Addition and Subtraction
+
+Similar to `min()` and `max()` const declarations can use addition and substraction to calculate more complex constants. Arithmetic operations on constants are defined to wrap in case of an overflow.
+
+```rust
+const MY_CONST: usize = min(PARTY_0::MY_CONST, PARTY_1::MY_CONST) + 5usize;
+const DEPENDENT_CONST: usize = max(MY_CONST, PARTY_1::MY_CONST - 2usize) + 6usize;
+
+pub fn main(x: u16) -> u16 {
+    let array = [2; DEPENDENT_CONST];
+    x + array[1] + DEPENDENT_CONST as u16
+}
+```
+
+## Arrays with a `const` expression size
+
+An arrays size can be can be an inline constant expression instead of a fixed size or named constant. These types of arrays are currently
+limited in functionality and serve mostly as the return type of compiler built-in generic functions.
+
+```rust
+pub fn main(i: usize, arr: [i32; const { 2 + 3 } ]) -> i32 {
+    arr[i]
+}
+```
+
 ## A Dynamic Number of Parties
 
 Using `const` declarations is especially useful for writing Garble programs that work for any number of parties. Simply use a single array as the argument of the main function, Garble will then assume that each array element is provided by a different party:
