@@ -94,7 +94,7 @@ impl TypedProgram {
         &self,
         fn_name: &str,
         consts: HashMap<String, HashMap<String, Literal>>,
-    ) -> Result<CompiledProgram, Vec<CompilerError>> {
+    ) -> Result<CompiledProgram<'_>, Vec<CompilerError>> {
         let mut env = Env::new();
         let mut const_sizes = HashMap::new();
         let mut consts_unsigned = HashMap::new();
@@ -1194,7 +1194,7 @@ impl TypedExpr {
                 env.pop();
                 body
             }
-            ExprEnum::InBuiltFnCall(BuiltInFnCall::BitonicJoin {
+            ExprEnum::InBuiltFnCall(BuiltInFnCall::Join {
                 join_ty,
                 has_assoc_data,
                 args,

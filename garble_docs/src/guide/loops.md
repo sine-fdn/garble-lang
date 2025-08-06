@@ -32,14 +32,14 @@ Arrays in Garble always have a fixed size, Garble does not support data structur
 
 ## For-Join Loops
 
-Garble has special support for joining together two sorted arrays of tuples, by comparing their first field for equality, which can be useful to combine two data sources coming from different parties similar to a JOIN in SQL. Syntactically, for-join loops are a special case of for loops, using a built-in `join` function instead of an array:
+Garble has special support for joining together two sorted arrays of tuples, by comparing their first field for equality, which can be useful to combine two data sources coming from different parties similar to a JOIN in SQL. Syntactically, for-join loops are a special case of for loops, using a built-in `join_iter` function instead of an array:
 
 ```rust
 let rows1 = [(0u8, 10u16), (1u8, 11u16), (2u8, 12u16)];
 let rows2 = [(0u8, 5u32, 5u32), (2u8, 6u32, 6u32)];
 // The arrays rows1 and rows2 will be joined based on their first field, which is of type u8.
 // The tuple (1u8, 11u16) from rows1 is discarded because it cannot be joined with rows2.
-for joined in join(rows1, rows2) {
+for joined in join_iter(rows1, rows2) {
     let ((id1, x), (id2, y, z)) = joined;
     // ...
 }
@@ -70,7 +70,7 @@ Just like normal for loops, for-join loops support destructuring:
 ```rust
 pub fn main(rows1: [(u8, u16); 3], rows2: [(u8, u16); 3]) -> u16 {
     let mut result = 0u16;
-    for ((_, a), (_, b)) in join(rows1, rows2) {
+    for ((_, a), (_, b)) in join_iter(rows1, rows2) {
         result += a + b;
     }
     result

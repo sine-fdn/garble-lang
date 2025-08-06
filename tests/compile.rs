@@ -2195,7 +2195,7 @@ fn compile_join_loop() -> Result<(), Error> {
     let prg = "
 pub fn main(rows1: [([u8; 3], u16); 4], rows2: [([u8; 3], u16, u16); 3]) -> u16 {
     let mut result = 0u16;
-    for row in join(rows1, rows2) {
+    for row in join_iter(rows1, rows2) {
         let ((_, field1), (_, field2, field3)) = row;
         result = result + field1 + field2 + field3;
     }
@@ -2275,10 +2275,10 @@ pub fn main(rows1: [([u8; 3], u16); 4], rows2: [([u8; 3], u16, u16); 3]) -> u16 
 }
 
 #[test]
-fn compile_bitonic_join_inbuilt() -> Result<(), Error> {
+fn compile_join_inbuilt() -> Result<(), Error> {
     let prg = "
 pub fn main(rows1: [[u8; 3]; 5], rows2: [[u8; 3]; 3]) -> [(bool, [u8; 3]); const { 5usize + 3usize - 1usize } ] {
-    bitonic_join(rows1, rows2)
+    join(rows1, rows2)
 }
 ";
     let compiled = compile(prg).map_err(|e| pretty_print(e, prg))?;
@@ -2345,13 +2345,13 @@ pub fn main(rows1: [[u8; 3]; 5], rows2: [[u8; 3]; 3]) -> [(bool, [u8; 3]); const
 }
 
 #[test]
-fn compile_bitonic_join_with_consts() -> Result<(), Error> {
+fn compile_join_with_consts() -> Result<(), Error> {
     let prg = "
 const ROWS_0: usize = PARTY_0::ROWS;
 const ROWS_1: usize = PARTY_1::ROWS;
 
 pub fn main(rows1: [[u8; 3]; ROWS_0], rows2: [[u8; 3]; ROWS_1]) -> [(bool, [u8; 3]); const { ROWS_0 + ROWS_1 - 1usize } ] {
-    bitonic_join(rows1, rows2)
+    join(rows1, rows2)
 }
 ";
     let consts = HashMap::from_iter(vec![
@@ -2434,11 +2434,11 @@ pub fn main(rows1: [[u8; 3]; ROWS_0], rows2: [[u8; 3]; ROWS_1]) -> [(bool, [u8; 
 }
 
 #[test]
-fn compile_loop_over_bitonic_join() -> Result<(), Error> {
+fn compile_loop_over_join() -> Result<(), Error> {
     let prg = "
 pub fn main(rows1: [([u8; 3], u16); 4], rows2: [([u8; 3], u16, u16); 3]) -> u16 {
     let mut result = 0u16;
-    for row in bitonic_join(rows1, rows2) {
+    for row in join(rows1, rows2) {
         let (in_join, (_, field1), (_, field2, field3)) = row;
         if in_join {
             result = result + field1 + field2 + field3;
@@ -2531,7 +2531,7 @@ fn compile_multiple_join_loops() -> Result<(), Error> {
                     "
 pub fn main(rows1: [(u8, u16); {a}], rows2: [(u8, u16, u16); {b}]) -> u16 {{
     let mut result = 0u16;
-    for row in join(rows1, rows2) {{
+    for row in join_iter(rows1, rows2) {{
         let ((_, field1), (_, field2, field3)) = row;
         result = result + field1 + field2 + field3;
     }}
@@ -2638,7 +2638,7 @@ fn compile_join_loop_destructuring() -> Result<(), Error> {
     let prg = "
 pub fn main(rows1: [(u8, u16); 3], rows2: [(u8, u16); 3]) -> u16 {
     let mut result = 0u16;
-    for ((_, a), (_, b)) in join(rows1, rows2) {
+    for ((_, a), (_, b)) in join_iter(rows1, rows2) {
         result += a + b;
     }
     result

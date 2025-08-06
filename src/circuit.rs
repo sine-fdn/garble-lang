@@ -1278,7 +1278,7 @@ impl CircuitBuilder {
     pub fn push_bitonic_merger(
         &mut self,
         bits: usize,
-        // Whether the ouput will be sorted in ascending or descending order
+        // Whether the output will be sorted in ascending or descending order
         ascending: bool,
         bitonic: &mut [Vec<GateIndex>],
     ) {

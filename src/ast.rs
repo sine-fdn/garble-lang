@@ -59,7 +59,7 @@ impl Hash for ConstExpr {
 
 impl PartialEq for ConstExpr {
     fn eq(&self, other: &Self) -> bool {
-        // Ignore MetaInfo for equality to enable typ-checking of custom_join
+        // Ignore MetaInfo for equality to enable typ-checking of join
         self.0 == other.0
     }
 }
@@ -432,7 +432,7 @@ impl Expr<Type> {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum BuiltInFnCall<T> {
     /// In-built bitonic sorting-based join function.
-    BitonicJoin {
+    Join {
         /// The type of the element that is joined on.
         join_ty: T,
         /// False if we do a simple set intersection and true if we join
@@ -454,7 +454,7 @@ impl BuiltInFnCall<()> {
     ) -> Result<Self, Vec<UntypedExpr>> {
         let has_assoc_data = false;
         match ident {
-            "bitonic_join" => Ok(Self::BitonicJoin {
+            "join" => Ok(Self::Join {
                 join_ty: (),
                 has_assoc_data,
                 args,

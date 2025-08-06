@@ -837,7 +837,7 @@ impl UntypedStmt {
                 }
             }
             ast::StmtEnum::ForEachLoop(pattern, binding, body) => match &binding.inner {
-                ExprEnum::FnCall(identifier, args) if identifier == "join" => {
+                ExprEnum::FnCall(identifier, args) if identifier == "join_iter" => {
                     let mut errors = vec![];
                     if args.len() != 2 {
                         let e = TypeErrorEnum::WrongNumberOfArgs {
@@ -1222,7 +1222,7 @@ impl UntypedExpr {
                     }
                 }
             }
-            ExprEnum::InBuiltFnCall(BuiltInFnCall::BitonicJoin {
+            ExprEnum::InBuiltFnCall(BuiltInFnCall::Join {
                 join_ty: _,
                 has_assoc_data: _,
                 args,
@@ -1303,10 +1303,10 @@ impl UntypedExpr {
                         )
                     }
                 };
-                let ret_size = bitonic_join_array_size(&a.ty, &b.ty, meta)?;
+                let ret_size = join_array_size(&a.ty, &b.ty, meta)?;
                 let ret_ty = Type::ArrayConstExpr(Box::new(arr_ty), ret_size);
                 (
-                    ExprEnum::InBuiltFnCall(BuiltInFnCall::BitonicJoin {
+                    ExprEnum::InBuiltFnCall(BuiltInFnCall::Join {
                         join_ty,
                         has_assoc_data,
                         args,
@@ -1829,8 +1829,8 @@ impl UntypedPattern {
     }
 }
 
-/// Creates the type of a `bitonic_join` inbuilt call depending on the input arguments to the call.
-fn bitonic_join_array_size(a: &Type, b: &Type, meta: MetaInfo) -> Result<ConstExpr, TypeErrors> {
+/// Creates the type of a `join` inbuilt call depending on the input arguments to the call.
+fn join_array_size(a: &Type, b: &Type, meta: MetaInfo) -> Result<ConstExpr, TypeErrors> {
     let to_const_expr = |ty: &Type| {
         let const_expr_enum = match ty {
             Type::Array(_, size) => {

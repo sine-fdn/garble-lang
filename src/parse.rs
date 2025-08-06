@@ -1589,7 +1589,7 @@ impl Parser {
                 }
                 _ => {
                     self.push_error_for_next(ParseErrorEnum::InvalidArraySize);
-                    return Err(());
+                    Err(())
                 }
             }
         } else {
