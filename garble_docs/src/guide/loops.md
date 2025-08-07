@@ -48,7 +48,7 @@ for joined in join_iter(rows1, rows2) {
 Garble automatically joins the arrays in a for-join loop using a [bitonic sorting network](https://en.wikipedia.org/wiki/Bitonic_sorter), more concretely implementing the paper [Private Set Intersection:
 Are Garbled Circuits Better than Custom Protocols?](https://www.ndss-symposium.org/wp-content/uploads/2017/09/06_4.pdf) without the shuffle step, which has a circuit complexity of `O((m + n) * log(m + n))` instead of `O(m * n)` which would result from joining the arrays using nested loops.
 
-> It is your responsibility to ensure that the **arrays that are joined in the loop must be sorted in ascending order!** Otherwise elements might be discarded or invalid data returned.
+> It is your responsibility to ensure that the **arrays that are joined in the loop must be sorted in strictly ascending order!** Otherwise elements might be discarded or invalid data returned.
 
 For-join loops always join two arrays based on the first field. If you would like to compare more than one field for equality, the easiest way is to transform the sorted array so that the relevant fields are grouped together in a tuple and thus form the first field. Such a transformation will be completely optimized away by the Garble compiler, such as in the following example, which groups together the first two fields, compiled to a circuit with 0 gates:
 

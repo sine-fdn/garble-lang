@@ -5,7 +5,7 @@ Garble has compiler built-in functions that are currently not expressible in Gar
 ## Join Function
 The `join` built-in function can be used if a computation should return the actual results of the join (as opposed to looping over the joined elements with [For-Join loop](./loops.md)).
 
-> It is your responsibility to ensure that the **arrays that are joined must be sorted in ascending order!** Otherwise elements might be discarded or invalid data returned.
+> It is your responsibility to ensure that the **arrays that are joined must be sorted in ascending order!** Otherwise elements might be discarded or invalid data returned. If you are joining with associated data, the joined on values **must be unique**, otherwise the join output will miss elements of the join.
 
 The return type depends on element type of the joined arrays. If it is **not** a tuple type, the `join` function is equivalent to a private set intersection. The result will be an array whose element type is `(bool, T)` where the `bool` indicates if the following element is contained in the intersection or not. If it is `false`, the element will be a dummy element constructed from setting each bit for this type to `0`.
 
