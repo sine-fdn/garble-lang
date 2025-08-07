@@ -187,6 +187,58 @@ impl Parser {
         Err(self.errors)
     }
 
+    fn parse_const_expr(expr: UntypedExpr) -> Result<ConstExpr, Vec<(ParseErrorEnum, MetaInfo)>> {
+        match expr.inner {
+            ExprEnum::True => Ok(ConstExpr(ConstExprEnum::True, expr.meta)),
+            ExprEnum::False => Ok(ConstExpr(ConstExprEnum::False, expr.meta)),
+            ExprEnum::NumUnsigned(n, ty) => {
+                Ok(ConstExpr(ConstExprEnum::NumUnsigned(n, ty), expr.meta))
+            }
+            ExprEnum::NumSigned(n, ty) => Ok(ConstExpr(ConstExprEnum::NumSigned(n, ty), expr.meta)),
+            ExprEnum::EnumLiteral(party, identifier, VariantExprEnum::Unit) => Ok(ConstExpr(
+                ConstExprEnum::ExternalValue { party, identifier },
+                expr.meta,
+            )),
+            ExprEnum::Identifier(identifier) => Ok(ConstExpr(
+                ConstExprEnum::ConstExprIdent(identifier),
+                expr.meta,
+            )),
+            ExprEnum::Op(Op::Add, l, r) => {
+                let l = Box::new(Self::parse_const_expr(*l)?);
+                let r = Box::new(Self::parse_const_expr(*r)?);
+                Ok(ConstExpr(ConstExprEnum::Add(l, r), expr.meta))
+            }
+            ExprEnum::Op(Op::Sub, l, r) => {
+                let l = Box::new(Self::parse_const_expr(*l)?);
+                let r = Box::new(Self::parse_const_expr(*r)?);
+                Ok(ConstExpr(ConstExprEnum::Sub(l, r), expr.meta))
+            }
+            ExprEnum::FnCall(f, args) if f == "max" || f == "min" => {
+                let mut const_exprs = vec![];
+                let mut arg_errs = vec![];
+                for arg in args {
+                    match Self::parse_const_expr(arg) {
+                        Ok(value) => {
+                            const_exprs.push(value);
+                        }
+                        Err(errs) => {
+                            arg_errs.extend(errs);
+                        }
+                    }
+                }
+                if !arg_errs.is_empty() {
+                    return Err(arg_errs);
+                }
+                if f == "max" {
+                    Ok(ConstExpr(ConstExprEnum::Max(const_exprs), expr.meta))
+                } else {
+                    Ok(ConstExpr(ConstExprEnum::Min(const_exprs), expr.meta))
+                }
+            }
+            _ => Err(vec![(ParseErrorEnum::InvalidConstExpr, expr.meta)]),
+        }
+    }
+
     fn parse_const_def(&mut self, start: MetaInfo) -> Result<(String, ConstDef), ()> {
         // const keyword was already consumed by the top-level parser
         let (identifier, _) = self.expect_identifier()?;
@@ -197,52 +249,11 @@ impl Parser {
 
         self.expect(&TokenEnum::Eq)?;
 
-        let Ok(expr) = self.parse_primary() else {
+        let Ok(expr) = self.parse_expr() else {
             self.push_error(ParseErrorEnum::InvalidTopLevelDef, start);
             return Err(());
         };
-        fn parse_const_expr(
-            expr: UntypedExpr,
-        ) -> Result<ConstExpr, Vec<(ParseErrorEnum, MetaInfo)>> {
-            match expr.inner {
-                ExprEnum::True => Ok(ConstExpr(ConstExprEnum::True, expr.meta)),
-                ExprEnum::False => Ok(ConstExpr(ConstExprEnum::False, expr.meta)),
-                ExprEnum::NumUnsigned(n, ty) => {
-                    Ok(ConstExpr(ConstExprEnum::NumUnsigned(n, ty), expr.meta))
-                }
-                ExprEnum::NumSigned(n, ty) => {
-                    Ok(ConstExpr(ConstExprEnum::NumSigned(n, ty), expr.meta))
-                }
-                ExprEnum::EnumLiteral(party, identifier, VariantExprEnum::Unit) => Ok(ConstExpr(
-                    ConstExprEnum::ExternalValue { party, identifier },
-                    expr.meta,
-                )),
-                ExprEnum::FnCall(f, args) if f == "max" || f == "min" => {
-                    let mut const_exprs = vec![];
-                    let mut arg_errs = vec![];
-                    for arg in args {
-                        match parse_const_expr(arg) {
-                            Ok(value) => {
-                                const_exprs.push(value);
-                            }
-                            Err(errs) => {
-                                arg_errs.extend(errs);
-                            }
-                        }
-                    }
-                    if !arg_errs.is_empty() {
-                        return Err(arg_errs);
-                    }
-                    if f == "max" {
-                        Ok(ConstExpr(ConstExprEnum::Max(const_exprs), expr.meta))
-                    } else {
-                        Ok(ConstExpr(ConstExprEnum::Min(const_exprs), expr.meta))
-                    }
-                }
-                _ => Err(vec![(ParseErrorEnum::InvalidConstExpr, expr.meta)]),
-            }
-        }
-        match parse_const_expr(expr) {
+        match Self::parse_const_expr(expr) {
             Ok(value) => {
                 let end = self.expect(&TokenEnum::Semicolon)?;
                 let meta = join_meta(start, end);
@@ -1549,6 +1560,24 @@ impl Parser {
                     let meta_end = self.expect(&TokenEnum::RightBracket)?;
                     let meta = join_meta(meta, meta_end);
                     Ok((Type::ArrayConst(Box::new(ty), n), meta))
+                }
+                Some(Token(TokenEnum::KeywordConst, _)) => {
+                    self.advance();
+                    self.expect(&TokenEnum::LeftBrace)?;
+                    let expr = self.parse_expr()?;
+                    let const_expr = match Self::parse_const_expr(expr) {
+                        Ok(value) => value,
+                        Err(errs) => {
+                            for (e, meta) in errs {
+                                self.push_error(e, meta);
+                            }
+                            return Err(());
+                        }
+                    };
+                    self.expect(&TokenEnum::RightBrace)?;
+                    let meta_end = self.expect(&TokenEnum::RightBracket)?;
+                    let meta = join_meta(meta, meta_end);
+                    Ok((Type::ArrayConstExpr(Box::new(ty), const_expr), meta))
                 }
                 _ => {
                     self.push_error_for_next(ParseErrorEnum::InvalidArraySize);
