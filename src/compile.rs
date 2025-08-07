@@ -338,7 +338,7 @@ macro_rules! make_resolve_const_function {
                 }
                 ConstExprEnum::Add(lhs, rhs) => {
                     // TODO it is probably more sensible to return an error instead of wrapping.
-                    // This would require changing this and calling functions to be fallible 
+                    // This would require changing this and calling functions to be fallible
                     // issue #227 (robinhundt 07.08.25)
                     $fn_ident(lhs, consts_unsigned).wrapping_add($fn_ident(rhs, consts_unsigned))
                 }
