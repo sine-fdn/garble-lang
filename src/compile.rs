@@ -311,113 +311,54 @@ impl TypedProgram {
     }
 }
 
-// TODO there is a lot of code duplication between this and the next two functions (robinhundt 31.07.25)
-pub(crate) fn resolve_const_expr_usize(
-    ConstExpr(expr, _): &ConstExpr,
-    consts_unsigned: &HashMap<String, usize>,
-) -> usize {
-    match expr {
-        ConstExprEnum::NumUnsigned(n, _) => *n as usize,
-        ConstExprEnum::ExternalValue { party, identifier } => *consts_unsigned
-            .get(&format!("{party}::{identifier}"))
-            .unwrap(),
-        ConstExprEnum::Max(args) => {
-            let mut result = 0;
-            for arg in args {
-                result = max(result, resolve_const_expr_usize(arg, consts_unsigned));
+macro_rules! make_resolve_const_function {
+    ($fn_ident:ident, $const_ty:ty) => {
+        pub(crate) fn $fn_ident(
+            ConstExpr(expr, _): &ConstExpr,
+            consts_unsigned: &HashMap<String, $const_ty>,
+        ) -> $const_ty {
+            match expr {
+                ConstExprEnum::NumUnsigned(n, _) => *n as $const_ty,
+                ConstExprEnum::ExternalValue { party, identifier } => *consts_unsigned
+                    .get(&format!("{party}::{identifier}"))
+                    .unwrap(),
+                ConstExprEnum::Max(args) => {
+                    let mut result = 0;
+                    for arg in args {
+                        result = max(result, $fn_ident(arg, consts_unsigned));
+                    }
+                    result
+                }
+                ConstExprEnum::Min(args) => {
+                    let mut result = <$const_ty>::MAX;
+                    for arg in args {
+                        result = min(result, $fn_ident(arg, consts_unsigned));
+                    }
+                    result
+                }
+                ConstExprEnum::Add(lhs, rhs) => {
+                    // TODO it is probably more sensible to return an error instead of wrapping.
+                    // This would require changing this and calling functions to be fallible 
+                    // issue #227 (robinhundt 07.08.25)
+                    $fn_ident(lhs, consts_unsigned).wrapping_add($fn_ident(rhs, consts_unsigned))
+                }
+                ConstExprEnum::Sub(lhs, rhs) => {
+                    $fn_ident(lhs, consts_unsigned).wrapping_sub($fn_ident(rhs, consts_unsigned))
+                }
+                ConstExprEnum::ConstExprIdent(ident) => *consts_unsigned
+                    .get(ident)
+                    .expect("Identifier existence checked during type cheking"),
+                ConstExprEnum::True | ConstExprEnum::False | ConstExprEnum::NumSigned(_, _) => {
+                    panic!("Not a signed const expr: {expr:?}")
+                }
             }
-            result
         }
-        ConstExprEnum::Min(args) => {
-            let mut result = usize::MAX;
-            for arg in args {
-                result = min(result, resolve_const_expr_usize(arg, consts_unsigned));
-            }
-            result
-        }
-        ConstExprEnum::Add(lhs, rhs) => resolve_const_expr_usize(lhs, consts_unsigned)
-            .wrapping_add(resolve_const_expr_usize(rhs, consts_unsigned)),
-        ConstExprEnum::Sub(lhs, rhs) => resolve_const_expr_usize(lhs, consts_unsigned)
-            .wrapping_sub(resolve_const_expr_usize(rhs, consts_unsigned)),
-        ConstExprEnum::ConstExprIdent(ident) => *consts_unsigned
-            .get(ident)
-            .expect("Identifier existence checked during type cheking"),
-        ConstExprEnum::True | ConstExprEnum::False | ConstExprEnum::NumSigned(_, _) => {
-            panic!("Not a signed const expr: {expr:?}")
-        }
-    }
+    };
 }
 
-pub(crate) fn resolve_const_expr_unsigned(
-    ConstExpr(expr, _): &ConstExpr,
-    consts_unsigned: &HashMap<String, u64>,
-) -> u64 {
-    match expr {
-        ConstExprEnum::NumUnsigned(n, _) => *n,
-        ConstExprEnum::ExternalValue { party, identifier } => *consts_unsigned
-            .get(&format!("{party}::{identifier}"))
-            .unwrap(),
-        ConstExprEnum::Max(args) => {
-            let mut result = 0;
-            for arg in args {
-                result = max(result, resolve_const_expr_unsigned(arg, consts_unsigned));
-            }
-            result
-        }
-        ConstExprEnum::Min(args) => {
-            let mut result = u64::MAX;
-            for arg in args {
-                result = min(result, resolve_const_expr_unsigned(arg, consts_unsigned));
-            }
-            result
-        }
-        ConstExprEnum::Add(lhs, rhs) => resolve_const_expr_unsigned(lhs, consts_unsigned)
-            .wrapping_add(resolve_const_expr_unsigned(rhs, consts_unsigned)),
-        ConstExprEnum::Sub(lhs, rhs) => resolve_const_expr_unsigned(lhs, consts_unsigned)
-            .wrapping_sub(resolve_const_expr_unsigned(rhs, consts_unsigned)),
-        ConstExprEnum::ConstExprIdent(ident) => *consts_unsigned.get(ident).unwrap_or_else(|| {
-            panic!("identifier: {ident} is unknown. Known consts: {consts_unsigned:?}")
-        }),
-        ConstExprEnum::True | ConstExprEnum::False | ConstExprEnum::NumSigned(_, _) => {
-            panic!("Not a signed const expr: {expr:?}")
-        }
-    }
-}
-pub(crate) fn resolve_const_expr_signed(
-    ConstExpr(expr, _): &ConstExpr,
-    consts_signed: &HashMap<String, i64>,
-) -> i64 {
-    match expr {
-        ConstExprEnum::NumSigned(n, _) => *n,
-        ConstExprEnum::ExternalValue { party, identifier } => *consts_signed
-            .get(&format!("{party}::{identifier}"))
-            .unwrap(),
-        ConstExprEnum::Max(args) => {
-            let mut result = 0;
-            for arg in args {
-                result = max(result, resolve_const_expr_signed(arg, consts_signed));
-            }
-            result
-        }
-        ConstExprEnum::Min(args) => {
-            let mut result = i64::MAX;
-            for arg in args {
-                result = min(result, resolve_const_expr_signed(arg, consts_signed));
-            }
-            result
-        }
-        ConstExprEnum::Add(lhs, rhs) => resolve_const_expr_signed(lhs, consts_signed)
-            .wrapping_add(resolve_const_expr_signed(rhs, consts_signed)),
-        ConstExprEnum::Sub(lhs, rhs) => resolve_const_expr_signed(lhs, consts_signed)
-            .wrapping_sub(resolve_const_expr_signed(rhs, consts_signed)),
-        ConstExprEnum::ConstExprIdent(ident) => *consts_signed
-            .get(ident)
-            .expect("Identifier existence checked during type cheking"),
-        ConstExprEnum::True | ConstExprEnum::False | ConstExprEnum::NumUnsigned(_, _) => {
-            panic!("Not an unsigned const expr: {expr:?}")
-        }
-    }
-}
+make_resolve_const_function!(resolve_const_expr_usize, usize);
+make_resolve_const_function!(resolve_const_expr_unsigned, u64);
+make_resolve_const_function!(resolve_const_expr_signed, i64);
 
 fn compile_block(
     stmts: &[TypedStmt],

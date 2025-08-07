@@ -2183,7 +2183,7 @@ fn usefulness(patterns: Vec<PatternStack>, q: PatternStack, defs: &Defs) -> Vec<
 
 fn expect_array_type(ty: &Type, meta: MetaInfo) -> Result<Type, TypeErrors> {
     match ty {
-        // TODO Have I overlooked any unintended side-effects of including ArrayConstExpr here? (robinhundt 32.07.25)
+        // TODO Have I overlooked any unintended side-effects of including ArrayConstExpr here? (robinhundt 31.07.25)
         Type::Array(elem, _) | Type::ArrayConst(elem, _) | Type::ArrayConstExpr(elem, _) => {
             Ok(*elem.clone())
         }
