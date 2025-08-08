@@ -1222,7 +1222,7 @@ impl UntypedExpr {
                     }
                 }
             }
-            ExprEnum::InBuiltFnCall(BuiltInFnCall::Join {
+            ExprEnum::BuiltInFnCall(BuiltInFnCall::Join {
                 join_ty: _,
                 has_assoc_data: _,
                 args,
@@ -1306,7 +1306,7 @@ impl UntypedExpr {
                 let ret_size = join_array_size(&a.ty, &b.ty, meta)?;
                 let ret_ty = Type::ArrayConstExpr(Box::new(arr_ty), ret_size);
                 (
-                    ExprEnum::InBuiltFnCall(BuiltInFnCall::Join {
+                    ExprEnum::BuiltInFnCall(BuiltInFnCall::Join {
                         join_ty,
                         has_assoc_data,
                         args,

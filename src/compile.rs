@@ -1194,7 +1194,7 @@ impl TypedExpr {
                 env.pop();
                 body
             }
-            ExprEnum::InBuiltFnCall(BuiltInFnCall::Join {
+            ExprEnum::BuiltInFnCall(BuiltInFnCall::Join {
                 join_ty,
                 has_assoc_data,
                 args,

@@ -1237,7 +1237,7 @@ impl Parser {
                             let meta = join_meta(meta, end);
                             match BuiltInFnCall::try_from_ident_args(identifier, args) {
                                 Ok(in_built) => {
-                                    Expr::untyped(ExprEnum::InBuiltFnCall(in_built), meta)
+                                    Expr::untyped(ExprEnum::BuiltInFnCall(in_built), meta)
                                 }
                                 Err(args) => Expr::untyped(
                                     ExprEnum::FnCall(identifier.to_string(), args),

@@ -507,7 +507,7 @@ pub enum ExprEnum<T> {
     /// Call of the specified function with a list of arguments.
     FnCall(String, Vec<Expr<T>>),
     /// A call to an in-built, potentially generic function.
-    InBuiltFnCall(BuiltInFnCall<T>),
+    BuiltInFnCall(BuiltInFnCall<T>),
     /// If-else expression for the specified condition, if-expr and else-expr.
     If(Box<Expr<T>>, Box<Expr<T>>, Box<Expr<T>>),
     /// Explicit cast of an expression to the specified type.
