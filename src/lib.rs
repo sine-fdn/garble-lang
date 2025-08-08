@@ -92,6 +92,7 @@ pub mod convert;
 pub mod env;
 pub mod eval;
 pub mod literal;
+pub mod macros;
 pub mod parse;
 pub mod scan;
 pub mod token;

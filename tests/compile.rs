@@ -3,11 +3,7 @@ use std::{
     collections::HashMap,
 };
 
-use garble_lang::{
-    compile, compile_with_constants,
-    literal::Literal,
-    Error,
-};
+use garble_lang::{compile, compile_with_constants, garble_consts, literal::Literal, Error};
 
 fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {
     let e: Error = e.into();
@@ -1939,13 +1935,9 @@ pub fn main(x: u16) -> u16 {
     x + MY_CONST
 }
 ";
-    let consts = HashMap::from_iter(vec![(
-        "PARTY_0".to_string(),
-        HashMap::from_iter(vec![(
-            "MY_CONST".to_string(),
-            2u16.into()
-        )]),
-    )]);
+    let consts = garble_consts!(
+        "PARTY_0" => { "MY_CONST" => 2u16 }
+    );
     let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
     let mut eval = compiled.evaluator();
     eval.set_u16(255);
@@ -1986,13 +1978,9 @@ pub fn main(x: u16) -> u16 {
     x + array[1]
 }
 ";
-    let consts = HashMap::from_iter(vec![(
-        "PARTY_0".to_string(),
-        HashMap::from_iter(vec![(
-            "MY_CONST".to_string(),
-            2usize.into()
-        )]),
-    )]);
+    let consts = garble_consts!(
+        "PARTY_0" => { "MY_CONST" => 2usize }
+    );
     let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
     let mut eval = compiled.evaluator();
     eval.set_u16(255);
@@ -2013,22 +2001,10 @@ pub fn main(x: u16) -> u16 {
     x + array[1]
 }
 ";
-    let consts = HashMap::from_iter(vec![
-        (
-            "PARTY_0".to_string(),
-            HashMap::from_iter(vec![(
-                "MY_CONST".to_string(),
-                1usize.into()
-            )]),
-        ),
-        (
-            "PARTY_1".to_string(),
-            HashMap::from_iter(vec![(
-                "MY_CONST".to_string(),
-                2usize.into()
-            )]),
-        ),
-    ]);
+    let consts = garble_consts!(
+        "PARTY_0" => { "MY_CONST" => 1usize },
+        "PARTY_1" => { "MY_CONST" => 2usize }
+    );
     let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
     let mut eval = compiled.evaluator();
     eval.set_u16(255);
@@ -2049,22 +2025,10 @@ pub fn main(x: u16) -> u16 {
     x + array[1]
 }
 ";
-    let consts = HashMap::from_iter(vec![
-        (
-            "PARTY_0".to_string(),
-            HashMap::from_iter(vec![(
-                "MY_CONST".to_string(),
-                3usize.into()
-            )]),
-        ),
-        (
-            "PARTY_1".to_string(),
-            HashMap::from_iter(vec![(
-                "MY_CONST".to_string(),
-                2usize.into()
-            )]),
-        ),
-    ]);
+    let consts = garble_consts!(
+        "PARTY_0" => { "MY_CONST" => 3usize },
+        "PARTY_1" => { "MY_CONST" => 2usize }
+    );
     let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
     let mut eval = compiled.evaluator();
     eval.set_u16(255);
@@ -2087,22 +2051,10 @@ pub fn main(x: u16) -> u16 {
     x + array[1] + DEPENDENT_CONST as u16
 }
 ";
-    let consts = HashMap::from_iter(vec![
-        (
-            "PARTY_0".to_string(),
-            HashMap::from_iter(vec![(
-                "MY_CONST".to_string(),
-                3usize.into()
-            )]),
-        ),
-        (
-            "PARTY_1".to_string(),
-            HashMap::from_iter(vec![(
-                "MY_CONST".to_string(),
-                2usize.into()
-            )]),
-        ),
-    ]);
+    let consts = garble_consts!(
+        "PARTY_0" => { "MY_CONST" => 3usize },
+        "PARTY_1" => { "MY_CONST" => 2usize }
+    );
     let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
     let mut eval = compiled.evaluator();
     eval.set_u16(255);
@@ -2122,22 +2074,10 @@ pub fn main(array: [u16; MY_CONST], _: u8) -> u16 {
     array[1]
 }
 ";
-    let consts = HashMap::from_iter(vec![
-        (
-            "PARTY_0".to_string(),
-            HashMap::from_iter(vec![(
-                "MY_CONST".to_string(),
-                1usize.into()
-            )]),
-        ),
-        (
-            "PARTY_1".to_string(),
-            HashMap::from_iter(vec![(
-                "MY_CONST".to_string(),
-                2usize.into()
-            )]),
-        ),
-    ]);
+    let consts = garble_consts!(
+        "PARTY_0" => { "MY_CONST" => 1usize },
+        "PARTY_1" => { "MY_CONST" => 2usize }
+    );
     let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
     let mut eval = compiled.evaluator();
     eval.parse_literal("[7, 8]").unwrap();
@@ -2159,22 +2099,10 @@ pub fn main(array: [u16; MY_CONST], _: u8) -> u16 {
     result
 }
 ";
-    let consts = HashMap::from_iter(vec![
-        (
-            "PARTY_0".to_string(),
-            HashMap::from_iter(vec![(
-                "MY_CONST".to_string(),
-                1usize.into()
-            )]),
-        ),
-        (
-            "PARTY_1".to_string(),
-            HashMap::from_iter(vec![(
-                "MY_CONST".to_string(),
-                2usize.into()
-            )]),
-        ),
-    ]);
+    let consts = garble_consts!(
+        "PARTY_0" => { "MY_CONST" => 1usize },
+        "PARTY_1" => { "MY_CONST" => 2usize }
+    );
     let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
     let mut eval = compiled.evaluator();
     eval.parse_literal("[7, 8]").unwrap();
@@ -2279,22 +2207,10 @@ pub fn main(rows1: [[u8; 3]; ROWS_0], rows2: [[u8; 3]; ROWS_1]) -> [(bool, [u8; 
     join(rows1, rows2)
 }
 ";
-    let consts = HashMap::from_iter(vec![
-        (
-            "PARTY_0".to_string(),
-            HashMap::from_iter(vec![(
-                "ROWS".to_string(),
-                5usize.into()
-            )]),
-        ),
-        (
-            "PARTY_1".to_string(),
-            HashMap::from_iter(vec![(
-                "ROWS".to_string(),
-                3usize.into()
-            )]),
-        ),
-    ]);
+    let consts = garble_consts!(
+        "PARTY_0" => { "ROWS" => 5usize },
+        "PARTY_1" => { "ROWS" => 3usize }
+    );
     let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
 
     let mut eval = compiled.evaluator();
@@ -2581,13 +2497,9 @@ pub fn main(array: [u16; PARTIES]) -> u16 {
     result
 }
 ";
-    let consts = HashMap::from_iter(vec![(
-        "PARTIES".to_string(),
-        HashMap::from_iter(vec![(
-            "TOTAL".to_string(),
-            3usize.into()
-        )]),
-    )]);
+    let consts = garble_consts!(
+        "PARTIES" => { "TOTAL" => 3usize }
+    );
     let compiled = compile_with_constants(prg, consts).map_err(|e| pretty_print(e, prg))?;
     let mut eval = compiled.evaluator();
     eval.set_u16(2);
