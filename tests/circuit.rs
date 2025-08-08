@@ -584,7 +584,7 @@ const ROWS_0: usize = PARTY_0::ROWS_0;
 const ROWS_1: usize = PARTY_1::ROWS_1;
 pub fn main(rows0: [([u8; 8], u32); ROWS_0], rows1: [([u8; 8], u32); ROWS_1]) -> u32 {
     let mut result = 0u32;
-    for joined in join(rows0, rows1) {
+    for joined in join_iter(rows0, rows1) {
         let ((_, a), (_, b)) = joined;
         result = result + a + b;
     }

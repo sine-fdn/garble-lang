@@ -1,7 +1,10 @@
 //! The [`Circuit`] representation used by the compiler.
 
 use crate::{compile::wires_as_unsigned, env::Env, token::MetaInfo};
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    mem,
+};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -1013,6 +1016,19 @@ impl CircuitBuilder {
         self.push_xor(xor, 1)
     }
 
+    pub fn push_eq_circuit(&mut self, x: &[GateIndex], y: &[GateIndex]) -> GateIndex {
+        if x.len() != y.len() {
+            // always false
+            return 0;
+        }
+        let mut is_eq = 1;
+        for (&x, &y) in x.iter().zip(y) {
+            let bits_eq = self.push_eq(x, y);
+            is_eq = self.push_and(is_eq, bits_eq)
+        }
+        is_eq
+    }
+
     pub fn push_mux(&mut self, s: GateIndex, x0: GateIndex, x1: GateIndex) -> GateIndex {
         if x0 == x1 {
             return x0;
@@ -1178,6 +1194,21 @@ impl CircuitBuilder {
         (quotient, remainder)
     }
 
+    pub fn push_gt_circuit(&mut self, bits: usize, x: &[GateIndex], y: &[GateIndex]) -> GateIndex {
+        // Sec. 3.2 in https://eprint.iacr.org/2009/411.pdf
+        let mut carry = 0;
+        for i in (0..bits).rev() {
+            let x_xor_c = self.push_xor(x[i], carry);
+            let y_xor_c = self.push_xor(y[i], carry);
+            let not_y_xor_c = self.push_not(y_xor_c);
+            let and = self.push_and(x_xor_c, not_y_xor_c);
+            carry = self.push_xor(and, carry);
+        }
+        carry
+    }
+
+    // TODO use optimized gt (and lt) instead of this, also see issue
+    // https://github.com/sine-fdn/garble-lang/issues/201 (robinhundt 31.07.25)
     pub fn push_comparator_circuit(
         &mut self,
         bits: usize,
@@ -1233,7 +1264,7 @@ impl CircuitBuilder {
         x: &[GateIndex],
         y: &[GateIndex],
     ) -> (Vec<GateIndex>, Vec<GateIndex>) {
-        let (_, gt) = self.push_comparator_circuit(bits, x, false, y, false);
+        let gt = self.push_gt_circuit(bits, x, y);
         let mut min = vec![];
         let mut max = vec![];
         for (x, y) in x.iter().zip(y.iter()) {
@@ -1242,6 +1273,52 @@ impl CircuitBuilder {
             max.push(b);
         }
         (min, max)
+    }
+
+    pub fn push_bitonic_merger(
+        &mut self,
+        bits: usize,
+        // Whether the output will be sorted in ascending or descending order
+        ascending: bool,
+        bitonic: &mut [Vec<GateIndex>],
+    ) {
+        if bitonic.len() <= 1 {
+            return;
+        }
+        let m = bitonic.len().next_power_of_two() / 2; // prev power of two
+        for i in 0..bitonic.len() - m {
+            let x = &bitonic[i];
+            let y = &bitonic[i + m];
+            let (mut min, mut max) = self.push_sorter(bits, x, y);
+            if !ascending {
+                mem::swap(&mut min, &mut max);
+            }
+            bitonic[i] = min;
+            bitonic[i + m] = max;
+        }
+        let (lower, upper) = bitonic.split_at_mut(m);
+        self.push_bitonic_merger(bits, ascending, lower);
+        self.push_bitonic_merger(bits, ascending, upper);
+    }
+
+    pub fn push_bitonic_sorter(&mut self, bits: usize, input: &mut [Vec<GateIndex>]) {
+        fn push_bitonic_sorter_inner(
+            c: &mut CircuitBuilder,
+            bits: usize,
+            ascending: bool,
+            input: &mut [Vec<GateIndex>],
+        ) {
+            let num_elements = input.len();
+            if num_elements <= 1 {
+                return;
+            }
+            // assert_eq!(0, num_elements % 2, "Length: {}", num_elements);
+            let (lower, upper) = input.split_at_mut(input.len() / 2);
+            push_bitonic_sorter_inner(c, bits, !ascending, lower);
+            push_bitonic_sorter_inner(c, bits, ascending, upper);
+            c.push_bitonic_merger(bits, ascending, input);
+        }
+        push_bitonic_sorter_inner(self, bits, true, input);
     }
 }
 
