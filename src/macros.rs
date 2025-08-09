@@ -1,7 +1,7 @@
 //! Provides useful macros.
 
 /// Create constants for [compile_with_constants](`crate::compile_with_constants`).
-/// 
+///
 /// ## Example
 /// ```
 /// use garble_lang::{garble_consts, compile_with_constants};
@@ -17,7 +17,7 @@
 /// let compiled = compile_with_constants(prg, consts)
 ///     .expect("failed compilation");
 /// ```
-/// 
+///
 #[macro_export]
 macro_rules! garble_consts {
     ($($party:expr => { $($const_name:expr => $val:expr),+}),+) => {

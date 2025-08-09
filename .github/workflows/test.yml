@@ -26,4 +26,5 @@ jobs:
           key: ${{ env.cache-name }}-${{ hashFiles('**/Cargo.toml') }}
       - run: cargo build --features="bin"
       - run: cargo test --features="serde" --features="json_schema"
+      - run: cargo fmt --all --check
       - run: cargo clippy -- -Dwarnings
