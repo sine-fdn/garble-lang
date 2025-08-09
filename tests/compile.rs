@@ -2130,7 +2130,7 @@ pub fn main(rows1: [([u8; 3], u16); 5], rows2: [([u8; 3], u16, u16); 3]) -> u16 
     eval.set_literal(
         [
             (b"aaa", 0u16),
-            // duplicate id should not be present in join 
+            // duplicate id should not be present in join
             (b"aaa", 10u16),
             (b"bar", 1u16),
             (b"baz", 2u16),
