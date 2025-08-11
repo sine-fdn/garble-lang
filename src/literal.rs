@@ -677,6 +677,12 @@ impl From<u64> for Literal {
     }
 }
 
+impl From<usize> for Literal {
+    fn from(value: usize) -> Self {
+        Literal::NumUnsigned(value as u64, UnsignedNumType::Usize)
+    }
+}
+
 impl From<i8> for Literal {
     fn from(n: i8) -> Self {
         Literal::NumSigned(n as i64, SignedNumType::I8)
@@ -698,5 +704,52 @@ impl From<i32> for Literal {
 impl From<i64> for Literal {
     fn from(n: i64) -> Self {
         Literal::NumSigned(n, SignedNumType::I64)
+    }
+}
+
+/// Macro to implement From<(A,)> for Literal for different tuple sizes
+macro_rules! impl_from_for_tuple {
+    ($($el:ident),+) => {
+        impl<$($el: Into<Literal>),+> From<($($el),+,)> for Literal {
+            #[allow(non_snake_case)]
+            fn from(($($el),*,): ($($el),*,)) -> Self {
+                Literal::Tuple(vec![$($el.into()),*])
+            }
+        }
+    };
+}
+
+impl_from_for_tuple!(A);
+impl_from_for_tuple!(A, B);
+impl_from_for_tuple!(A, B, C);
+impl_from_for_tuple!(A, B, C, D);
+
+impl<const N: usize, T: Into<Literal>> From<[T; N]> for Literal {
+    fn from(value: [T; N]) -> Self {
+        Literal::Array(value.into_iter().map(Into::into).collect())
+    }
+}
+
+impl<const N: usize, T> From<&[T; N]> for Literal
+where
+    T: Clone + Into<Literal>,
+{
+    fn from(value: &[T; N]) -> Self {
+        Literal::Array(value.iter().cloned().map(Into::into).collect())
+    }
+}
+
+impl<T: Into<Literal>> From<Vec<T>> for Literal {
+    fn from(value: Vec<T>) -> Self {
+        Literal::Array(value.into_iter().map(Into::into).collect())
+    }
+}
+
+impl<T> From<&[T]> for Literal
+where
+    T: Clone + Into<Literal>,
+{
+    fn from(value: &[T]) -> Self {
+        Literal::Array(value.iter().cloned().map(Into::into).collect())
     }
 }
