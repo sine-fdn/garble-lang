@@ -2115,7 +2115,7 @@ pub fn main(array: [u16; MY_CONST], _: u8) -> u16 {
 #[test]
 fn compile_join_loop() -> Result<(), Error> {
     let prg = "
-pub fn main(rows1: [([u8; 3], u16); 4], rows2: [([u8; 3], u16, u16); 3]) -> u16 {
+pub fn main(rows1: [([u8; 3], u16); 5], rows2: [([u8; 3], u16, u16); 3]) -> u16 {
     let mut result = 0u16;
     for row in join_iter(rows1, rows2) {
         let ((_, field1), (_, field2, field3)) = row;
@@ -2130,6 +2130,8 @@ pub fn main(rows1: [([u8; 3], u16); 4], rows2: [([u8; 3], u16, u16); 3]) -> u16 
     eval.set_literal(
         [
             (b"aaa", 0u16),
+            // duplicate id should not be present in join
+            (b"aaa", 10u16),
             (b"bar", 1u16),
             (b"baz", 2u16),
             (b"qux", 3u16),
