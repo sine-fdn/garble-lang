@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use garble_lang::{ast::Type, check, circuit::Circuit, eval::Evaluator, literal::Literal, Error};
+use garble_lang::{
+    ast::Type, check, circuit::Circuit, circuit_type::CircuitType, eval::Evaluator,
+    literal::Literal, Error,
+};
 
 #[test]
 // Tests whether successive compilations always result in exactly the same circuit, rather than different circuits that
@@ -22,7 +25,7 @@ fn credit_scoring_multiple_compilations() -> Result<(), Error> {
             if format!("{compute_score_circuit:?}") != format!("{prev_compilation:?}") {
                 println!(
                     "{} vs {} gates",
-                    compute_score_circuit.gates.len(),
+                    compute_score_circuit.and_gates(),
                     prev_compilation.gates.len()
                 );
                 for (i, (g1, g2)) in compute_score_circuit
@@ -129,12 +132,8 @@ fn credit_scoring_single_run() -> Result<(), Error> {
 
     let (compute_score_circuit, compute_score_fn) = typed_prg.compile("compute_score")?;
     let const_sizes = HashMap::new();
-    let mut eval = Evaluator::new(
-        &typed_prg,
-        compute_score_fn,
-        &compute_score_circuit,
-        &const_sizes,
-    );
+    let circ_type = CircuitType::Ssa(compute_score_circuit);
+    let mut eval = Evaluator::new(&typed_prg, compute_score_fn, &circ_type, &const_sizes);
 
     eval.set_literal(scoring_algorithm)?;
     eval.set_literal(user)?;
