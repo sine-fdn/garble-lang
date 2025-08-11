@@ -48,9 +48,13 @@ let result = prg.parse_output(&output).unwrap();
 assert_eq!(Literal::NumUnsigned(12, U32), result);
 ```
 
-## Garble's Circuit Format
+## Garble's Circuit Formats
 
-Each [`garble_lang::circuit::Circuit`](https://docs.rs/garble_lang/latest/garble_lang/circuit/struct.Circuit.html) consists of 3 parts:
+Garble has two circuit formats. The standard [`garble_lang::circuit::Circuit`](https://docs.rs/garble_lang/latest/garble_lang/circuit/struct.Circuit.html) which mainly consists of a list of ordered gates whose id is implicit by their position in this list. The register-based [`garble_lang::register_circuit::Circuit`](https://docs.rs/garble_lang/latest/garble_lang/register_circuit/struct.Circuit.html) consists of a list of instruction who operate on input and output registers. The latter can enable a more memory-efficient execution as registers are reused by instructions. 
+
+### Standard Circuit
+
+This is the default circuit that is compiled by the various `compile_*` functions. Each [`garble_lang::circuit::Circuit`](https://docs.rs/garble_lang/latest/garble_lang/circuit/struct.Circuit.html) consists of 3 parts:
 
 1. `input_gates`, specifying how many input bits each party must provide
 2. `gates`, XOR/AND/NOT intermediate gates (with input gates or intermediate gates as inputs)
@@ -74,3 +78,28 @@ Input B (Wire 1) ----|-----+----|-----+
 The input gates of different parties cannot be interleaved: Each party must supply all of their inputs before the next party's inputs can start. Consequently, a circuit with 16 input bits from party A, 8 input bits from party B and 1 input bit from party C would be specified as an `input_gates` field of `vec![16, 8, 1]`.
 
 At least 1 input bit must be specified, not just because a circuit without inputs would not be very useful, but also because the first two intermediate gates of every circuit are constant true and constant false, specified as `Gate::Xor(0, 0)` with wire `n` and `Gate::Not(n)` (and thus depend on the first input bit for their specifications).
+
+### Register-based circuit
+
+The register-based [`garble_lang::register_circuit::Circuit`](https://docs.rs/garble_lang/latest/garble_lang/register_circuit/struct.Circuit.html) consists of the following parts:
+
+1. `input_regs`, specifying how many input bits each party must provide
+2. `insts`, a topoligically sorted list of instructions
+3. `max_reg_count`, the maximum number of registers needed to execute the circuit (e.g. `vec![false; circ.max_reg_count]` will allocate sufficient Booleans for plain text evaluation)
+4. `output_regs`, specifying which registers hold output values after all instructions are evaluated
+5. `and_ops`, number of AND operations
+
+Each instruction has an output register and, depending on the operation, one or two input registers. A simple plain text evaluation could look as follows:
+```rust
+let mut registers = vec![false; circ.max_reg_count];
+
+for inst in circ.insts {
+    registers[inst.out] = match inst.op {
+        Op::Xor(Xor(a, b)) => registers[a] ^ registers[b],
+        _ => todo!("other operations")
+    }
+}
+```
+(Note: A plain text `eval` method is available on the `register_circuit::Circuit` type)
+
+Because registers can be reused once their previous value is not needed anymore, the intermediate outputs of a circuit take up less space than with the standard circuit.
