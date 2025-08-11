@@ -73,7 +73,7 @@ pub enum Gate {
 /// very useful, but also because the first two intermediate gates of every circuit are constant
 /// true and constant false, specified as `Gate::Xor(0, 0)` with wire `n` and `Gate::Not(n)` (and
 /// thus depend on the first input bit for their specifications).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Circuit {
     /// The different parties, with `usize` at index `i` as the number of input bits for party `i`.
