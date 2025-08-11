@@ -32,14 +32,14 @@ Arrays in Garble always have a fixed size, Garble does not support data structur
 
 ## For-Join Loops
 
-Garble has special support for joining together two sorted arrays of tuples, by comparing their first field for equality, which can be useful to combine two data sources coming from different parties similar to a JOIN in SQL. Syntactically, for-join loops are a special case of for loops, using a built-in `join` function instead of an array:
+Garble has special support for joining together two sorted arrays of tuples, by comparing their first field for equality, which can be useful to combine two data sources coming from different parties similar to a JOIN in SQL. Syntactically, for-join loops are a special case of for loops, using a built-in `join_iter` function instead of an array:
 
 ```rust
 let rows1 = [(0u8, 10u16), (1u8, 11u16), (2u8, 12u16)];
 let rows2 = [(0u8, 5u32, 5u32), (2u8, 6u32, 6u32)];
 // The arrays rows1 and rows2 will be joined based on their first field, which is of type u8.
 // The tuple (1u8, 11u16) from rows1 is discarded because it cannot be joined with rows2.
-for joined in join(rows1, rows2) {
+for joined in join_iter(rows1, rows2) {
     let ((id1, x), (id2, y, z)) = joined;
     // ...
 }
@@ -48,7 +48,7 @@ for joined in join(rows1, rows2) {
 Garble automatically joins the arrays in a for-join loop using a [bitonic sorting network](https://en.wikipedia.org/wiki/Bitonic_sorter), more concretely implementing the paper [Private Set Intersection:
 Are Garbled Circuits Better than Custom Protocols?](https://www.ndss-symposium.org/wp-content/uploads/2017/09/06_4.pdf) without the shuffle step, which has a circuit complexity of `O((m + n) * log(m + n))` instead of `O(m * n)` which would result from joining the arrays using nested loops.
 
-> It is your responsibility to ensure that the **arrays that are joined in the loop must be sorted in ascending order!** Otherwise elements might be discarded or invalid data returned.
+> It is your responsibility to ensure that the **arrays that are joined in the loop must be sorted in strictly ascending order!** Otherwise elements might be discarded or invalid data returned.
 
 For-join loops always join two arrays based on the first field. If you would like to compare more than one field for equality, the easiest way is to transform the sorted array so that the relevant fields are grouped together in a tuple and thus form the first field. Such a transformation will be completely optimized away by the Garble compiler, such as in the following example, which groups together the first two fields, compiled to a circuit with 0 gates:
 
@@ -70,7 +70,7 @@ Just like normal for loops, for-join loops support destructuring:
 ```rust
 pub fn main(rows1: [(u8, u16); 3], rows2: [(u8, u16); 3]) -> u16 {
     let mut result = 0u16;
-    for ((_, a), (_, b)) in join(rows1, rows2) {
+    for ((_, a), (_, b)) in join_iter(rows1, rows2) {
         result += a + b;
     }
     result

@@ -7,8 +7,8 @@ use std::{
 
 use crate::{
     ast::{
-        Accessor, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, Op, Pattern, PatternEnum,
-        StmtEnum, StructDef, Type, UnaryOp, VariantExprEnum,
+        Accessor, BuiltInFnCall, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, Op, Pattern,
+        PatternEnum, StmtEnum, StructDef, Type, UnaryOp, VariantExprEnum,
     },
     circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, USIZE_BITS},
     env::Env,
@@ -94,7 +94,7 @@ impl TypedProgram {
         &self,
         fn_name: &str,
         consts: HashMap<String, HashMap<String, Literal>>,
-    ) -> Result<CompiledProgram, Vec<CompilerError>> {
+    ) -> Result<CompiledProgram<'_>, Vec<CompilerError>> {
         let mut env = Env::new();
         let mut const_sizes = HashMap::new();
         let mut consts_unsigned = HashMap::new();
@@ -405,21 +405,9 @@ impl TypedStmt {
                     match access {
                         Accessor::ArrayAccess { array_ty, index } => {
                             let array_before_access = collection.clone();
-                            let (elem_ty, num_elems) = match &array_ty {
-                                Type::Array(elem_ty, size) => (elem_ty, *size),
-                                Type::ArrayConst(elem_ty, size) => {
-                                    (elem_ty, *circuit.const_sizes().get(size).unwrap())
-                                }
-                                Type::ArrayConstExpr(elem_ty, size) => (
-                                    elem_ty,
-                                    resolve_const_expr_usize(size, circuit.const_sizes()),
-                                ),
-                                ty => {
-                                    panic!("Found a non-array value in an array access expr: {ty}")
-                                }
-                            };
-                            let elem_bits =
-                                elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes());
+                            let (elem_bits, num_elems) = array_ty
+                                .unwrap_array_size(prg, circuit.const_sizes())
+                                .expect("Found a non-array value in an array access expr: {ty}");
                             let mut index = index.compile(prg, env, circuit);
                             let index_bits = Type::Unsigned(UnsignedNumType::Usize)
                                 .size_in_bits_for_defs(prg, circuit.const_sizes());
@@ -597,14 +585,10 @@ impl TypedStmt {
                 vec![]
             }
             StmtEnum::ForEachLoop(pattern, array, body) => {
-                let elem_in_bits = match &array.ty {
-                    Type::Array(elem_ty, _)
-                    | Type::ArrayConst(elem_ty, _)
-                    | Type::ArrayConstExpr(elem_ty, _) => {
-                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes())
-                    }
-                    _ => panic!("Found a non-array value in an array access expr"),
-                };
+                let (elem_in_bits, _) = array
+                    .ty
+                    .unwrap_array_size(prg, circuit.const_sizes())
+                    .expect("Found a non-array value in an array access expr");
                 env.push();
                 let array = array.compile(prg, env, circuit);
 
@@ -622,114 +606,37 @@ impl TypedStmt {
                 vec![]
             }
             StmtEnum::JoinLoop(pattern, join_ty, (a, b), body) => {
-                let (elem_bits_a, num_elems_a) = match &a.ty {
-                    Type::Array(elem_ty, size) => (
-                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
-                        *size,
-                    ),
-                    Type::ArrayConst(elem_ty, size) => (
-                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
-                        *circuit.const_sizes().get(size).unwrap(),
-                    ),
-                    Type::ArrayConstExpr(elem_ty, size) => (
-                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
-                        resolve_const_expr_usize(size, circuit.const_sizes()),
-                    ),
-                    _ => panic!("Found a non-array value in an array access expr"),
-                };
-                let (elem_bits_b, num_elems_b) = match &b.ty {
-                    Type::Array(elem_ty, size) => (
-                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
-                        *size,
-                    ),
-                    Type::ArrayConst(elem_ty, size) => (
-                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
-                        *circuit.const_sizes().get(size).unwrap(),
-                    ),
-                    Type::ArrayConstExpr(elem_ty, size) => (
-                        elem_ty.size_in_bits_for_defs(prg, circuit.const_sizes()),
-                        resolve_const_expr_usize(size, circuit.const_sizes()),
-                    ),
-                    _ => panic!("Found a non-array value in an array access expr"),
-                };
-                let max_elem_bits = max(elem_bits_a, elem_bits_b);
-                let num_elems = (num_elems_a + num_elems_b).next_power_of_two();
-                let join_ty_size = join_ty.size_in_bits_for_defs(prg, circuit.const_sizes());
-                let a = a.compile(prg, env, circuit);
-                let b = b.compile(prg, env, circuit);
-                let mut bitonic = vec![];
-                let num_empty_elems = num_elems - num_elems_a - num_elems_b;
-                for _ in 0..num_empty_elems {
-                    bitonic.push(vec![0; max_elem_bits + 1]);
-                }
-                for i in 0..num_elems_a {
-                    let mut v = a[i * elem_bits_a..(i + 1) * elem_bits_a].to_vec();
-                    v.resize(max_elem_bits, 0);
-                    v.insert(join_ty_size, 0);
-                    bitonic.push(v);
-                }
-                for i in (0..num_elems_b).rev() {
-                    let mut v = b[i * elem_bits_b..(i + 1) * elem_bits_b].to_vec();
-                    v.resize(max_elem_bits, 0);
-                    v.insert(join_ty_size, 1);
-                    bitonic.push(v);
-                }
-                let mut offset = num_elems / 2;
-                while offset > 0 {
-                    let mut result = vec![];
-                    for _ in 0..num_elems {
-                        result.push(vec![]);
-                    }
-                    let rounds = num_elems / 2 / offset;
-                    for r in 0..rounds {
-                        for i in 0..offset {
-                            let i = i + r * offset * 2;
-                            let x = &bitonic[i];
-                            let y = &bitonic[i + offset];
-                            let (min, max) = circuit.push_sorter(join_ty_size, x, y);
-                            result[i] = min;
-                            result[i + offset] = max;
-                        }
-                    }
-                    offset /= 2;
-                    bitonic = result;
-                }
-                for slice in bitonic.windows(2).skip(num_empty_elems) {
-                    let mut binding = vec![];
-                    let (mut a, mut b) =
-                        circuit.push_sorter(join_ty_size + 1, &slice[0], &slice[1]);
-                    a.remove(join_ty_size);
-                    a.truncate(elem_bits_a);
-                    b.remove(join_ty_size);
-                    b.truncate(elem_bits_b);
-                    binding.extend(&a);
-                    binding.extend(&b);
-                    let join_a = &a[..join_ty_size];
-                    let join_b = &b[..join_ty_size];
-                    let mut join_eq = 1;
-                    for i in 0..join_ty_size {
-                        let eq = circuit.push_eq(join_a[i], join_b[i]);
-                        join_eq = circuit.push_and(join_eq, eq);
-                    }
+                compile_bitonic_merge(
+                    prg,
+                    env,
+                    circuit,
+                    join_ty,
+                    a,
+                    b,
+                    MergeMode::JoinLoop {
+                        process_binding: &mut |env, circuit, join_eq, binding| {
+                            let panic_before_branches = circuit.peek_panic().clone();
 
-                    let panic_before_branches = circuit.peek_panic().clone();
+                            let mut env_if_join = env.clone();
+                            env_if_join.push();
+                            pattern.compile(&binding, prg, &mut env_if_join, circuit);
 
-                    let mut env_if_join = env.clone();
-                    env_if_join.push();
-                    pattern.compile(&binding, prg, &mut env_if_join, circuit);
+                            for stmt in body {
+                                stmt.compile(prg, &mut env_if_join, circuit);
+                            }
+                            env_if_join.pop();
 
-                    for stmt in body {
-                        stmt.compile(prg, &mut env_if_join, circuit);
-                    }
-                    env_if_join.pop();
+                            let panic_if_join =
+                                circuit.replace_panic_with(panic_before_branches.clone());
 
-                    let panic_if_join = circuit.replace_panic_with(panic_before_branches.clone());
-
-                    *env = circuit.mux_envs(join_eq, env_if_join, env.clone());
-                    let muxed_panic =
-                        circuit.mux_panic(join_eq, &panic_if_join, &panic_before_branches);
-                    circuit.replace_panic_with(muxed_panic);
-                }
+                            *env = circuit.mux_envs(join_eq, env_if_join, env.clone());
+                            let muxed_panic =
+                                circuit.mux_panic(join_eq, &panic_if_join, &panic_before_branches);
+                            circuit.replace_panic_with(muxed_panic);
+                            vec![]
+                        },
+                    },
+                );
                 vec![]
             }
         }
@@ -813,14 +720,10 @@ impl TypedExpr {
                 array
             }
             ExprEnum::ArrayAccess(array, index) => {
-                let num_elems = match &array.ty {
-                    Type::Array(_, size) => *size,
-                    Type::ArrayConst(_, size) => *circuit.const_sizes().get(size).unwrap(),
-                    Type::ArrayConstExpr(_, size) => {
-                        resolve_const_expr_usize(size, circuit.const_sizes())
-                    }
-                    _ => panic!("Found a non-array value in an array access expr"),
-                };
+                let (_, num_elems) = array
+                    .ty
+                    .unwrap_array_size(prg, circuit.const_sizes())
+                    .expect("Found a non-array value in an array access expr");
                 let elem_bits = ty.size_in_bits_for_defs(prg, circuit.const_sizes());
                 let mut array = array.compile(prg, env, circuit);
                 let mut index = index.compile(prg, env, circuit);
@@ -1213,6 +1116,36 @@ impl TypedExpr {
                 env.pop();
                 body
             }
+            ExprEnum::BuiltInFnCall(BuiltInFnCall::Join {
+                join_ty,
+                has_assoc_data,
+                args,
+            }) => {
+                let a = &args[0];
+                let b = &args[1];
+                let mut joined = compile_bitonic_merge(
+                    prg,
+                    env,
+                    circuit,
+                    join_ty,
+                    a,
+                    b,
+                    MergeMode::JoinFunc {
+                        include_b: *has_assoc_data,
+                        process_binding: &mut |_, circuit, join_eq, mut binding| {
+                            // If an element is not part of the join (join_eq = false), we insert an all 0 dummy element
+                            for g in binding.iter_mut().skip(1) {
+                                *g = circuit.push_mux(join_eq, *g, 0);
+                            }
+                            binding
+                        },
+                    },
+                );
+                // Sort the output on the join_eq bool so the positions of the joined elements doesn't leak
+                // data about the input datasets
+                circuit.push_bitonic_sorter(1, &mut joined);
+                joined.concat()
+            }
             ExprEnum::If(condition, case_true, case_false) => {
                 let condition = condition.compile(prg, env, circuit);
                 let panic_before_branches = circuit.peek_panic().clone();
@@ -1497,6 +1430,26 @@ impl TypedPattern {
 }
 
 impl Type {
+    /// Returns Some((el_size, array_length)) for array types or None
+    pub(crate) fn unwrap_array_size(
+        &self,
+        prg: &TypedProgram,
+        const_sizes: &HashMap<String, usize>,
+    ) -> Option<(usize, usize)> {
+        Some(match self {
+            Type::Array(elem_ty, size) => (elem_ty.size_in_bits_for_defs(prg, const_sizes), *size),
+            Type::ArrayConst(elem_ty, size) => (
+                elem_ty.size_in_bits_for_defs(prg, const_sizes),
+                *const_sizes.get(size).unwrap(),
+            ),
+            Type::ArrayConstExpr(elem_ty, size) => (
+                elem_ty.size_in_bits_for_defs(prg, const_sizes),
+                resolve_const_expr_usize(size, const_sizes),
+            ),
+            _ => return None,
+        })
+    }
+
     pub(crate) fn size_in_bits_for_defs(
         &self,
         prg: &TypedProgram,
@@ -1613,6 +1566,127 @@ pub(crate) fn wires_as_unsigned(wires: &[bool]) -> u64 {
         n += (output as u64) << (wires.len() - 1 - i);
     }
     n
+}
+
+enum MergeMode<F> {
+    JoinLoop { process_binding: F },
+    JoinFunc { include_b: bool, process_binding: F },
+}
+
+impl<F> MergeMode<F> {
+    fn is_join_func(&self) -> bool {
+        match self {
+            MergeMode::JoinLoop { .. } => false,
+            MergeMode::JoinFunc { .. } => true,
+        }
+    }
+
+    fn include_b_in_binding(&self) -> bool {
+        match self {
+            MergeMode::JoinLoop { .. } => true,
+            MergeMode::JoinFunc { include_b, .. } => *include_b,
+        }
+    }
+}
+
+type ProcessBindingFunc<'a> = &'a mut dyn FnMut(
+    &mut Env<Vec<GateIndex>>,
+    &mut CircuitBuilder,
+    GateIndex,
+    Vec<GateIndex>,
+) -> Vec<GateIndex>;
+
+/// Compile bitonic merge of two array expressions.
+///
+/// This is a building block for compiling [`StmtEnum::JoinLoop`] and [`ExprEnum::BuiltInFnCall`].
+/// Their `compile` methods call this function and post process the binding differently.
+fn compile_bitonic_merge(
+    prg: &TypedProgram,
+    env: &mut Env<Vec<GateIndex>>,
+    circuit: &mut CircuitBuilder,
+    join_ty: &Type,
+    a: &TypedExpr,
+    b: &TypedExpr,
+    mut mode: MergeMode<ProcessBindingFunc>,
+) -> Vec<Vec<GateIndex>> {
+    let (elem_bits_a, num_elems_a) =
+        a.ty.unwrap_array_size(prg, circuit.const_sizes())
+            .expect("Found a non-array value in an array access expr");
+    let (elem_bits_b, num_elems_b) =
+        b.ty.unwrap_array_size(prg, circuit.const_sizes())
+            .expect("Found a non-array value in an array access expr");
+    let max_elem_bits = max(elem_bits_a, elem_bits_b);
+    let num_elems = (num_elems_a + num_elems_b).next_power_of_two();
+    let join_ty_size = join_ty.size_in_bits_for_defs(prg, circuit.const_sizes());
+    let a = a.compile(prg, env, circuit);
+    let b = b.compile(prg, env, circuit);
+    let mut bitonic = vec![];
+    let num_empty_elems = num_elems - num_elems_a - num_elems_b;
+    for _ in 0..num_empty_elems {
+        bitonic.push(vec![0; max_elem_bits + 1]);
+    }
+    for i in 0..num_elems_a {
+        let mut v = a[i * elem_bits_a..(i + 1) * elem_bits_a].to_vec();
+        v.resize(max_elem_bits, 0);
+        // We insert a tag bit after the the join_ty to distinguish between elements from
+        // a and b. Here it is 0
+        v.insert(join_ty_size, 0);
+        bitonic.push(v);
+    }
+    for i in (0..num_elems_b).rev() {
+        let mut v = b[i * elem_bits_b..(i + 1) * elem_bits_b].to_vec();
+        v.resize(max_elem_bits, 0);
+        // Here the tag bit is 1
+        v.insert(join_ty_size, 1);
+        bitonic.push(v);
+    }
+    // Include the tag bit in the sorting of the merger
+    circuit.push_bitonic_merger(join_ty_size + 1, true, &mut bitonic);
+    let mut joined = Vec::with_capacity(num_elems_a + num_elems_b - 1);
+    for slice in bitonic.windows(2).skip(num_empty_elems) {
+        let mut binding: Vec<GateIndex> = if mode.is_join_func() {
+            // Insert a dummy false element at the first position,
+            // we will set this to the bool indicating whether the element is part of
+            // the join
+            vec![0]
+        } else {
+            vec![]
+        };
+        // Unfortunately, there currently is no `windows_mut`, so we clone
+        let mut a = slice[0].clone();
+        let mut b = slice[1].clone();
+        // Remove the tag bit
+        let tag_a = a.remove(join_ty_size);
+        // and the padding
+        a.truncate(elem_bits_a);
+        let tag_b = b.remove(join_ty_size);
+        b.truncate(elem_bits_b);
+        binding.extend(&a);
+        // we only need to include the other element if we have assoc data
+        // in which case the return of bitonic_sort is (bool, tuple_a, tuple_b)
+        if mode.include_b_in_binding() {
+            binding.extend(&b);
+        }
+        let join_a = &a[..join_ty_size];
+        let join_b = &b[..join_ty_size];
+        let mut join_eq = circuit.push_eq_circuit(join_a, join_b);
+        // Ensure that the join only includes elements which are actually present in both datasets
+        // i.e. the tag is different. Guards against duplicates in one of the datasets
+        let tags_differ = circuit.push_xor(tag_a, tag_b);
+        join_eq = circuit.push_and(join_eq, tags_differ);
+
+        if let MergeMode::JoinFunc { .. } = &mode {
+            // set previous dummy element to comparison result
+            binding[0] = join_eq;
+        }
+
+        let (MergeMode::JoinLoop { process_binding }
+        | MergeMode::JoinFunc {
+            process_binding, ..
+        }) = &mut mode;
+        joined.push(process_binding(env, circuit, join_eq, binding));
+    }
+    joined
 }
 
 fn extend_to_bits(v: &mut Vec<usize>, ty: &Type, bits: usize) {
