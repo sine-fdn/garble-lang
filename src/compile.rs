@@ -10,11 +10,11 @@ use crate::{
         Accessor, BuiltInFnCall, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, Op, Pattern,
         PatternEnum, StmtEnum, StructDef, Type, UnaryOp, VariantExprEnum,
     },
-    circuit::{Circuit, CircuitBuilder, GateIndex, PanicReason, USIZE_BITS},
+    circuit::{Circuit, CircuitBuilder, CircuitBuilderOptions, GateIndex, PanicReason, USIZE_BITS},
     env::Env,
     literal::Literal,
     token::{MetaInfo, SignedNumType, UnsignedNumType},
-    TypedExpr, TypedFnDef, TypedPattern, TypedProgram, TypedStmt,
+    CompileOptions, TypedExpr, TypedFnDef, TypedPattern, TypedProgram, TypedStmt,
 };
 
 /// An error that occurred during compilation.
@@ -82,7 +82,7 @@ impl TypedProgram {
     /// Assumes that the input program has been correctly type-checked and **panics** if
     /// incompatible types are found that should have been caught by the type-checker.
     pub fn compile(&self, fn_name: &str) -> Result<(Circuit, &TypedFnDef), Vec<CompilerError>> {
-        self.compile_with_constants(fn_name, HashMap::new())
+        self.compile_with_constants(fn_name, HashMap::new(), &CompileOptions::default())
             .map(|(c, f, _)| (c, f))
     }
 
@@ -94,6 +94,7 @@ impl TypedProgram {
         &self,
         fn_name: &str,
         consts: HashMap<String, HashMap<String, Literal>>,
+        opts: &CompileOptions,
     ) -> Result<CompiledProgram<'_>, Vec<CompilerError>> {
         let mut env = Env::new();
         let mut const_sizes = HashMap::new();
@@ -227,7 +228,10 @@ impl TypedProgram {
                 env.let_in_current_scope(param.name.clone(), wires);
             }
         }
-        let mut circuit = CircuitBuilder::new(input_gates, const_sizes.clone());
+        let builder_opts = CircuitBuilderOptions {
+            cache_gates: opts.optimize_duplicate_gates,
+        };
+        let mut circuit = CircuitBuilder::new(input_gates, const_sizes.clone(), builder_opts);
         for (const_name, const_def) in self.const_defs.iter() {
             let ConstExpr(expr, _) = &const_def.value;
             match expr {

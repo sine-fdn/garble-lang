@@ -53,6 +53,7 @@ use scan::{scan, ScanError};
 use std::{
     collections::HashMap,
     fmt::{Display, Write as _},
+    mem,
     path::Path,
 };
 use token::MetaInfo;
@@ -126,21 +127,33 @@ pub fn compile_with_constants(
     prg: &str,
     consts: HashMap<String, HashMap<String, Literal>>,
 ) -> Result<GarbleProgram, Error> {
+    compile_with_options(
+        prg,
+        CompileOptions {
+            consts,
+            ..Default::default()
+        },
+    )
+}
+
+/// Scans, parses, type-checks and then compiles the `"main"` fn of a program to a Boolean circuit with the specified options.
+pub fn compile_with_options(
+    prg: &str,
+    mut options: CompileOptions,
+) -> Result<GarbleProgram, Error> {
     let program = check(prg)?;
-    let (circuit, main, const_sizes) = program.compile_with_constants("main", consts.clone())?;
+    let consts = mem::take(&mut options.consts);
+    let (circuit, main, const_sizes) =
+        program.compile_with_constants("main", consts.clone(), &options)?;
     let main = main.clone();
-    Ok(GarbleProgram {
+    let mut program = GarbleProgram {
         program,
         main,
         circuit: CircuitType::Ssa(circuit),
         consts,
         const_sizes,
-    })
-}
+    };
 
-/// Scans, parses, type-checks and then compiles the `"main"` fn of a program to a Boolean circuit with the specified options.
-pub fn compile_with_options(prg: &str, options: CompileOptions) -> Result<GarbleProgram, Error> {
-    let mut program = compile_with_constants(prg, options.consts)?;
     if matches!(options.circuit_kind, CircuitKind::Register) {
         program.circuit.to_register();
     }
@@ -168,13 +181,30 @@ pub fn compile_bristol_to_circuit(path: &Path) -> Result<Circuit, Error> {
     Ok(Circuit::bristol_to_garble(path)?)
 }
 
-/// Options for compilation.
-#[derive(Debug, Clone, Default)]
+/// Options for compilation. Can impact memory consumption
+///
+/// Set `optimize_duplicate_gates` to `false` to significantly reduce
+/// memory consumption of the compilation.
+#[derive(Debug, Clone)]
 pub struct CompileOptions {
     /// The type of circuit we compile to.
     pub circuit_kind: CircuitKind,
     /// Constants provided by the parties.
     pub consts: GarbleConsts,
+    /// Optimize duplicate gates with equivalent input wires. Increases memory consumption.
+    ///
+    /// Default is `true`.
+    pub optimize_duplicate_gates: bool,
+}
+
+impl Default for CompileOptions {
+    fn default() -> Self {
+        Self {
+            circuit_kind: Default::default(),
+            consts: Default::default(),
+            optimize_duplicate_gates: true,
+        }
+    }
 }
 
 /// The type of circuit we compile to.
