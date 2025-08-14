@@ -15,7 +15,7 @@ pub fn main(_x: bool) -> bool {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -34,7 +34,7 @@ pub fn main(_x: i32) -> i32 {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -73,7 +73,7 @@ pub fn main(x: u32) -> [u32; 17] {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -92,7 +92,7 @@ pub fn main(a: u32, b: u32, c: u32) -> u32 {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -111,7 +111,7 @@ pub fn main(a: u32, b: u32, c: u32) -> u32 {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -130,7 +130,7 @@ pub fn main(a: u32, b: u32, c: u32) -> u32 {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -149,7 +149,7 @@ pub fn main(a: u32, b: u32) -> u32 {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -168,7 +168,7 @@ pub fn main(a: u32, b: u32) -> u32 {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -187,7 +187,7 @@ pub fn main(a: u32, b: u32) -> u32 {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -206,7 +206,7 @@ pub fn main(a: u32, b: u32, c: u32) -> u32 {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -225,7 +225,7 @@ pub fn main(a: u32, b: u32, c: u32) -> u32 {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -244,7 +244,7 @@ pub fn main(a: u32, b: u32, c: u32) -> u32 {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -263,7 +263,7 @@ pub fn main(a: u32, b: u32) -> u32 {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -282,7 +282,7 @@ pub fn main(a: u32, b: u32) -> u32 {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -301,7 +301,7 @@ pub fn main(a: u32, b: u32) -> u32 {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -321,7 +321,7 @@ pub fn main(a: u32, b: u32, c: u32) -> [u32; 2] {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -341,7 +341,7 @@ pub fn main(a: u32, b: u32, c: u32) -> [u32; 2] {
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
 
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -360,7 +360,7 @@ pub fn main(b: bool, x: i32) -> bool {
 ";
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -379,7 +379,7 @@ pub fn main(x: i32) -> i32 {
 ";
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -416,7 +416,7 @@ fn add(a: i8, b: i8) -> i8 {
 ";
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -434,7 +434,7 @@ pub fn main(b: bool) -> bool {
 ";
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -463,7 +463,7 @@ pub fn main(arr1: [u8; 8], arr2: [u8; 8], choice: bool) -> [u8; 8] {
 ";
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -492,7 +492,7 @@ pub fn main(arr1: [u8; 8], arr2: [u8; 8], choice: bool) -> [u8; 8] {
 ";
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -510,8 +510,8 @@ pub fn main(arr1: [(u16, u16, u32); 8]) -> [((u16, u16), u32); 8] {
     arr2
 }";
     let compiled = compile(prg).map_err(|e| e.prettify(prg))?;
-    assert_eq!(compiled.circuit.and_gates(), 0);
-    assert_eq!(compiled.circuit.gates.len(), 2);
+    assert_eq!(compiled.circuit.ands(), 0);
+    assert_eq!(compiled.circuit.ops(), 2);
     Ok(())
 }
 
@@ -529,7 +529,7 @@ pub fn main(x: i32) -> i32 {
 ";
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -547,7 +547,7 @@ pub fn main(x: i32) -> i32 {
 ";
     let naive = compile(naive).map_err(|e| e.prettify(naive))?;
     let optimized = compile(optimized).map_err(|e| e.prettify(optimized))?;
-    assert_eq!(naive.circuit.gates.len(), optimized.circuit.gates.len());
+    assert_eq!(naive.circuit.ops(), optimized.circuit.ops());
     Ok(())
 }
 
@@ -616,16 +616,16 @@ pub fn main(rows0: [([u8; 8], u32); ROWS_0], rows1: [([u8; 8], u32); ROWS_1]) ->
         let compiled =
             compile_with_constants(prg_join, consts.clone()).map_err(|e| format!("{e:?}"))?;
         println!("{n} (joined): {}", compiled.circuit.report_gates());
-        all_gates_joined.push((n as f32, compiled.circuit.gates.len() as f32 / 1_000_000.0));
+        all_gates_joined.push((n as f32, compiled.circuit.ops() as f32 / 1_000_000.0));
         and_gates_joined.push((n as f32, compiled.circuit.and_gates() as f32 / 1_000_000.0));
 
         if n <= 250 {
             let compiled =
                 compile_with_constants(prg_nested_loop, consts).map_err(|e| format!("{e:?}"))?;
             println!("{n} (nested): {}", compiled.circuit.report_gates());
-            all_gates_nested.push((n as f32, compiled.circuit.gates.len() as f32 / 1_000_000.0));
+            all_gates_nested.push((n as f32, compiled.circuit.ops() as f32 / 1_000_000.0));
             and_gates_nested.push((n as f32, compiled.circuit.and_gates() as f32 / 1_000_000.0));
-            let all_gates = compiled.circuit.gates.len() as f32 / 1_000_000.0;
+            let all_gates = compiled.circuit.ops() as f32 / 1_000_000.0;
             if all_gates > max_gates {
                 max_gates = all_gates;
             }
