@@ -576,13 +576,12 @@ impl CircuitBuilder {
                 Gate::And(x, y)
             }
         };
-        let mut gates: Vec<Gate> = self
-            .gates
-            .into_iter()
-            .map(shift_gate_if_necessary)
-            .collect();
-        gates.insert(0, Gate::Xor(0, 0)); // constant false
-        gates.insert(1, Gate::Not(input_shift)); // constant true
+
+        // + 2 for constant gates
+        let mut gates = Vec::with_capacity(2 + self.gates.len());
+        gates.push(Gate::Xor(0, 0)); // constant false
+        gates.push(Gate::Not(input_shift)); // constant true
+        gates.extend(self.gates.into_iter().map(shift_gate_if_necessary));
 
         let mut panic_and_output =
             Vec::with_capacity(PANIC_RESULT_SIZE_IN_BITS + output_gates.len());
