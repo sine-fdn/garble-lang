@@ -1,10 +1,7 @@
 //! The [`Circuit`] representation used by the compiler.
 
 use crate::{compile::wires_as_unsigned, env::Env, token::MetaInfo};
-use std::{
-    collections::{HashMap, HashSet},
-    mem,
-};
+use std::{collections::HashMap, mem};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -264,16 +261,27 @@ pub(crate) enum BuilderGate {
 
 #[derive(Debug, Clone)]
 pub(crate) struct CircuitBuilder {
+    opts: CircuitBuilderOptions,
     shift: usize,
     input_gates: Vec<usize>,
     gates: Vec<BuilderGate>,
-    used: HashSet<GateIndex>,
     cache: HashMap<BuilderGate, GateIndex>,
     negated: HashMap<GateIndex, GateIndex>,
     gates_optimized: usize,
     gate_counter: usize,
     panic_gates: CachedPanicResult,
     consts: HashMap<String, usize>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CircuitBuilderOptions {
+    pub(crate) cache_gates: bool,
+}
+
+impl Default for CircuitBuilderOptions {
+    fn default() -> Self {
+        Self { cache_gates: true }
+    }
 }
 
 pub(crate) const USIZE_BITS: usize = 32;
@@ -405,7 +413,11 @@ impl PanicReason {
 }
 
 impl CircuitBuilder {
-    pub fn new(input_gates: Vec<usize>, consts: HashMap<String, usize>) -> Self {
+    pub fn new(
+        input_gates: Vec<usize>,
+        consts: HashMap<String, usize>,
+        opts: CircuitBuilderOptions,
+    ) -> Self {
         let mut gate_counter = 2; // for const true and false
         for input_gates_of_party in input_gates.iter() {
             gate_counter += input_gates_of_party;
@@ -414,7 +426,6 @@ impl CircuitBuilder {
             shift: gate_counter,
             input_gates,
             gates: vec![],
-            used: HashSet::new(),
             cache: HashMap::new(),
             negated: HashMap::new(),
             gates_optimized: 0,
@@ -424,6 +435,7 @@ impl CircuitBuilder {
                 cache: HashMap::new(),
             },
             consts,
+            opts,
         }
     }
 
@@ -431,7 +443,20 @@ impl CircuitBuilder {
         &self.consts
     }
 
+    fn push_gate(&mut self, gate: BuilderGate) -> GateIndex {
+        self.gates.push(gate);
+        let gate_idx = self.gate_counter;
+        self.gate_counter += 1;
+        if self.opts.cache_gates {
+            self.cache.insert(gate, gate_idx);
+        }
+        gate_idx
+    }
+
     fn get_cached(&self, gate: &BuilderGate) -> Option<&usize> {
+        if !self.opts.cache_gates {
+            return None;
+        }
         match self.cache.get(gate) {
             Some(wire) => Some(wire),
             None => match gate {
@@ -535,6 +560,7 @@ impl CircuitBuilder {
     }
 
     pub fn build(mut self, output_gates: Vec<GateIndex>) -> Circuit {
+        self.gates.shrink_to_fit();
         let output_gates = self.remove_unused_gates(output_gates);
 
         if PRINT_OPTIMIZATION_RATIO && self.gates_optimized > 0 {
@@ -835,19 +861,9 @@ impl CircuitBuilder {
                         (x2, x1, y1, y2),
                         (x2, x1, y2, y1),
                     ] {
-                        if a1 == b1 && !self.used.contains(&x) && !self.used.contains(&y) {
-                            let a2_xor_b2_gate = BuilderGate::Xor(a2, b2);
-                            self.gate_counter += 1;
-                            self.gates.push(a2_xor_b2_gate);
-                            let a2_xor_b2 = self.gate_counter - 1;
-                            self.cache.insert(a2_xor_b2_gate, a2_xor_b2);
-
-                            let gate = BuilderGate::And(a1, a2_xor_b2);
-                            self.gate_counter += 1;
-                            self.gates.push(gate);
-                            self.cache.insert(gate, self.gate_counter - 1);
-                            self.used.insert(a2_xor_b2);
-                            return self.gate_counter - 1;
+                        if a1 == b1 {
+                            let a2_xor_b2 = self.push_gate(BuilderGate::Xor(a2, b2));
+                            return self.push_gate(BuilderGate::And(a1, a2_xor_b2));
                         }
                     }
                 }
@@ -888,13 +904,7 @@ impl CircuitBuilder {
                     }
                 }
             }
-            let gate = BuilderGate::Xor(x, y);
-            self.gate_counter += 1;
-            self.gates.push(gate);
-            let gate_index = self.gate_counter - 1;
-            self.cache.insert(gate, gate_index);
-            self.used.insert(x);
-            self.used.insert(y);
+            let gate_index = self.push_gate(BuilderGate::Xor(x, y));
             if x == 1 {
                 self.negated.insert(y, gate_index);
                 self.negated.insert(gate_index, y);
@@ -990,13 +1000,7 @@ impl CircuitBuilder {
                     }
                 }
             }
-            let gate = BuilderGate::And(x, y);
-            self.gate_counter += 1;
-            self.gates.push(gate);
-            self.cache.insert(gate, self.gate_counter - 1);
-            self.used.insert(x);
-            self.used.insert(y);
-            self.gate_counter - 1
+            self.push_gate(BuilderGate::And(x, y))
         }
     }
 
