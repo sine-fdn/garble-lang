@@ -4,11 +4,11 @@ use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
     ast::Type,
-    circuit::{Circuit, EvalPanic, USIZE_BITS},
+    circuit::{EvalPanic, USIZE_BITS},
     compile::{resolve_const_expr_usize, signed_to_bits, unsigned_to_bits},
     literal::Literal,
     token::{SignedNumType, UnsignedNumType},
-    CompileTimeError, TypedFnDef, TypedProgram,
+    CircuitType, CompileTimeError, TypedFnDef, TypedProgram,
 };
 
 /// Evaluates a [`crate::circuit::Circuit`] with inputs supplied by different parties.
@@ -18,7 +18,7 @@ pub struct Evaluator<'a> {
     /// The function to be evaluated.
     pub main_fn: &'a TypedFnDef,
     /// The compiled circuit.
-    pub circuit: &'a Circuit,
+    pub circuit: &'a CircuitType,
     inputs: Vec<Vec<bool>>,
     const_sizes: &'a HashMap<String, usize>,
 }
@@ -28,7 +28,7 @@ impl<'a> Evaluator<'a> {
     pub fn new(
         program: &'a TypedProgram,
         main_fn: &'a TypedFnDef,
-        circuit: &'a Circuit,
+        circuit: &'a CircuitType,
         const_sizes: &'a HashMap<String, usize>,
     ) -> Self {
         Self {
@@ -105,11 +105,11 @@ impl From<EvalPanic> for EvalError {
 impl<'a> Evaluator<'a> {
     /// Evaluates a [`crate::circuit::Circuit`] with the previously set inputs.
     pub fn run(self) -> Result<EvalOutput<'a>, EvalError> {
-        if self.inputs.len() != self.circuit.input_gates.len() {
+        if self.inputs.len() != self.circuit.parties() {
             return Err(EvalError::UnexpectedNumberOfParties);
         }
-        for p in 0..self.circuit.input_gates.len() {
-            if self.inputs[p].len() != self.circuit.input_gates[p] {
+        for (p, input_len) in self.circuit.input_lengths().enumerate() {
+            if self.inputs[p].len() != input_len {
                 return Err(EvalError::UnexpectedNumberOfInputsFromParty(p));
             }
         }

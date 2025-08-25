@@ -60,7 +60,10 @@ use token::MetaInfo;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::convert::{FromBristolError, ToBristolError};
+use crate::{
+    circuit_type::CircuitType,
+    convert::{FromBristolError, ToBristolError},
+};
 
 /// [`crate::ast::Program`] without any associated type information.
 pub type UntypedProgram = Program<()>;
@@ -87,6 +90,7 @@ pub type TypedPattern = Pattern<Type>;
 pub mod ast;
 pub mod check;
 pub mod circuit;
+pub mod circuit_type;
 pub mod compile;
 pub mod convert;
 pub mod env;
@@ -94,6 +98,7 @@ pub mod eval;
 pub mod literal;
 pub mod macros;
 pub mod parse;
+pub mod register_circuit;
 pub mod scan;
 pub mod token;
 
@@ -110,7 +115,7 @@ pub fn compile(prg: &str) -> Result<GarbleProgram, Error> {
     Ok(GarbleProgram {
         program,
         main,
-        circuit,
+        circuit: CircuitType::Ssa(circuit),
         consts: HashMap::new(),
         const_sizes: HashMap::new(),
     })
@@ -127,10 +132,19 @@ pub fn compile_with_constants(
     Ok(GarbleProgram {
         program,
         main,
-        circuit,
+        circuit: CircuitType::Ssa(circuit),
         consts,
         const_sizes,
     })
+}
+
+/// Scans, parses, type-checks and then compiles the `"main"` fn of a program to a Boolean circuit with the specified options.
+pub fn compile_with_options(prg: &str, options: CompileOptions) -> Result<GarbleProgram, Error> {
+    let mut program = compile_with_constants(prg, options.consts)?;
+    if matches!(options.circuit_kind, CircuitKind::Register) {
+        program.circuit.to_register();
+    }
+    Ok(program)
 }
 
 /// Scans, parses, type-checks and then compiles the `"main"` fn of a program to a Boolean circuit.
@@ -139,7 +153,11 @@ pub fn compile_with_constants(
 /// support the Bristol format.
 pub fn compile_to_bristol(prg: &str, path: &Path) -> Result<(), Error> {
     let program = compile(prg)?;
-    program.circuit.format_as_bristol(path)?;
+    if let CircuitType::Ssa(circuit) = program.circuit {
+        circuit.format_as_bristol(path)?;
+    } else {
+        unreachable!("Default compilation is Ssa form");
+    }
     Ok(())
 }
 
@@ -150,6 +168,35 @@ pub fn compile_bristol_to_circuit(path: &Path) -> Result<Circuit, Error> {
     Ok(Circuit::bristol_to_garble(path)?)
 }
 
+/// Options for compilation.
+#[derive(Debug, Clone, Default)]
+pub struct CompileOptions {
+    /// The type of circuit we compile to.
+    pub circuit_kind: CircuitKind,
+    /// Constants provided by the parties.
+    pub consts: GarbleConsts,
+}
+
+/// The type of circuit we compile to.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum CircuitKind {
+    /// A circuit in [SSA](https://en.wikipedia.org/wiki/Static_single-assignment_form) form.
+    ///
+    /// Each output is written to exactly once. The output place of a gate is implicitly specified
+    /// by its position.
+    #[default]
+    Ssa,
+    /// A circuit with operations that write to registers.
+    ///
+    /// Each instruction writes to an output register which might be overwritten by a later
+    /// instruction if the value is not needed anymore. Can be utilized for reduced memory
+    /// consumption
+    Register,
+}
+
+/// A map of constants from the parties.
+pub type GarbleConsts = HashMap<String, HashMap<String, Literal>>;
+
 /// The result of type-checking and compiling a Garble program.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -159,7 +206,7 @@ pub struct GarbleProgram {
     /// The function to be executed as a circuit.
     pub main: TypedFnDef,
     /// The compilation output, as a circuit of Boolean gates.
-    pub circuit: Circuit,
+    pub circuit: CircuitType,
     /// The constants used for compiling the circuit.
     pub consts: HashMap<String, HashMap<String, Literal>>,
     /// The values of usize constants used for compiling the circuit.
