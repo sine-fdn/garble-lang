@@ -2,8 +2,18 @@ use garble_lang::{
     circuit::{EvalPanic, PanicReason},
     compile,
     eval::{EvalError, EvalOutput},
-    Error,
+    Error, GarbleProgram,
 };
+
+fn test_ssa_and_register_circ<E>(
+    mut prg: GarbleProgram,
+    mut test_fn: impl FnMut(&GarbleProgram) -> Result<(), E>,
+) -> Result<(), E> {
+    test_fn(&prg)?;
+    prg.circuit.to_register();
+    test_fn(&prg)?;
+    Ok(())
+}
 
 #[test]
 fn panic_on_unsigned_add_with_overflow() -> Result<(), String> {
@@ -12,11 +22,13 @@ pub fn main(x: u8) -> u8 {
     x + 255u8
 }";
     let prg = compile(prg).map_err(|e| e.prettify(prg))?;
-    let mut computation = prg.evaluator();
-    computation.set_u8(1);
-    let res = computation.run();
-    expect_panic(res, PanicReason::Overflow);
-    Ok(())
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut computation = prg.evaluator();
+        computation.set_u8(1);
+        let res = computation.run();
+        expect_panic(res, PanicReason::Overflow);
+        Ok(())
+    })
 }
 
 #[test]
@@ -26,11 +38,13 @@ pub fn main(x: i8) -> i8 {
     x + -100i8
 }";
     let prg = compile(prg).map_err(|e| e.prettify(prg))?;
-    let mut computation = prg.evaluator();
-    computation.set_i8(-100);
-    let res = computation.run();
-    expect_panic(res, PanicReason::Overflow);
-    Ok(())
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut computation = prg.evaluator();
+        computation.set_i8(-100);
+        let res = computation.run();
+        expect_panic(res, PanicReason::Overflow);
+        Ok(())
+    })
 }
 
 #[test]
@@ -40,11 +54,13 @@ pub fn main(x: i8) -> i8 {
     x - 100i8
 }";
     let prg = compile(prg).map_err(|e| e.prettify(prg))?;
-    let mut computation = prg.evaluator();
-    computation.set_i8(-100);
-    let res = computation.run();
-    expect_panic(res, PanicReason::Overflow);
-    Ok(())
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut computation = prg.evaluator();
+        computation.set_i8(-100);
+        let res = computation.run();
+        expect_panic(res, PanicReason::Overflow);
+        Ok(())
+    })
 }
 
 #[test]
@@ -54,11 +70,13 @@ pub fn main(x: u8) -> u8 {
     x / 0u8
 }";
     let prg = compile(prg).map_err(|e| e.prettify(prg))?;
-    let mut computation = prg.evaluator();
-    computation.set_u8(1);
-    let res = computation.run();
-    expect_panic(res, PanicReason::DivByZero);
-    Ok(())
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut computation = prg.evaluator();
+        computation.set_u8(1);
+        let res = computation.run();
+        expect_panic(res, PanicReason::DivByZero);
+        Ok(())
+    })
 }
 
 #[test]
@@ -72,16 +90,18 @@ pub fn main(b: bool) -> i32 {
     }
 }";
     let prg = compile(prg).map_err(|e| e.prettify(prg))?;
-    let mut computation = prg.evaluator();
-    computation.set_bool(true);
-    let res = computation.run();
-    assert!(res.is_ok());
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut computation = prg.evaluator();
+        computation.set_bool(true);
+        let res = computation.run();
+        assert!(res.is_ok());
 
-    let mut computation = prg.evaluator();
-    computation.set_bool(false);
-    let res = computation.run();
-    expect_panic(res, PanicReason::DivByZero);
-    Ok(())
+        let mut computation = prg.evaluator();
+        computation.set_bool(false);
+        let res = computation.run();
+        expect_panic(res, PanicReason::DivByZero);
+        Ok(())
+    })
 }
 
 #[test]
@@ -97,33 +117,34 @@ pub fn main(x: i32) -> i32 {
     }
 }";
     let prg = compile(prg).map_err(|e| e.prettify(prg))?;
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut computation = prg.evaluator();
+        computation.set_i32(0);
+        let res = computation.run();
+        assert!(res.is_ok());
 
-    let mut computation = prg.evaluator();
-    computation.set_i32(0);
-    let res = computation.run();
-    assert!(res.is_ok());
+        let mut computation = prg.evaluator();
+        computation.set_i32(1);
+        let res = computation.run();
+        expect_panic(res, PanicReason::DivByZero);
 
-    let mut computation = prg.evaluator();
-    computation.set_i32(1);
-    let res = computation.run();
-    expect_panic(res, PanicReason::DivByZero);
+        let mut computation = prg.evaluator();
+        computation.set_i32(2);
+        let res = computation.run();
+        assert!(res.is_ok());
 
-    let mut computation = prg.evaluator();
-    computation.set_i32(2);
-    let res = computation.run();
-    assert!(res.is_ok());
+        let mut computation = prg.evaluator();
+        computation.set_i32(3);
+        let res = computation.run();
+        expect_panic(res, PanicReason::Overflow);
 
-    let mut computation = prg.evaluator();
-    computation.set_i32(3);
-    let res = computation.run();
-    expect_panic(res, PanicReason::Overflow);
+        let mut computation = prg.evaluator();
+        computation.set_i32(4);
+        let res = computation.run();
+        assert!(res.is_ok());
 
-    let mut computation = prg.evaluator();
-    computation.set_i32(4);
-    let res = computation.run();
-    assert!(res.is_ok());
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
@@ -134,28 +155,29 @@ pub fn main(i: usize) -> i32 {
 }
 ";
     let prg = compile(prg).map_err(|e| e.prettify(prg))?;
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut computation = prg.evaluator();
+        computation.set_usize(0);
+        let res = computation.run();
+        assert!(res.is_ok());
 
-    let mut computation = prg.evaluator();
-    computation.set_usize(0);
-    let res = computation.run();
-    assert!(res.is_ok());
+        let mut computation = prg.evaluator();
+        computation.set_usize(1);
+        let res = computation.run();
+        assert!(res.is_ok());
 
-    let mut computation = prg.evaluator();
-    computation.set_usize(1);
-    let res = computation.run();
-    assert!(res.is_ok());
+        let mut computation = prg.evaluator();
+        computation.set_usize(2);
+        let res = computation.run();
+        assert!(res.is_ok());
 
-    let mut computation = prg.evaluator();
-    computation.set_usize(2);
-    let res = computation.run();
-    assert!(res.is_ok());
+        let mut computation = prg.evaluator();
+        computation.set_usize(3);
+        let res = computation.run();
+        expect_panic(res, PanicReason::OutOfBounds);
 
-    let mut computation = prg.evaluator();
-    computation.set_usize(3);
-    let res = computation.run();
-    expect_panic(res, PanicReason::OutOfBounds);
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
@@ -168,28 +190,29 @@ pub fn main(i: usize) -> i32 {
 }
 ";
     let prg = compile(prg).map_err(|e| e.prettify(prg))?;
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut computation = prg.evaluator();
+        computation.set_usize(0);
+        let res = computation.run();
+        assert!(res.is_ok());
 
-    let mut computation = prg.evaluator();
-    computation.set_usize(0);
-    let res = computation.run();
-    assert!(res.is_ok());
+        let mut computation = prg.evaluator();
+        computation.set_usize(1);
+        let res = computation.run();
+        assert!(res.is_ok());
 
-    let mut computation = prg.evaluator();
-    computation.set_usize(1);
-    let res = computation.run();
-    assert!(res.is_ok());
+        let mut computation = prg.evaluator();
+        computation.set_usize(2);
+        let res = computation.run();
+        assert!(res.is_ok());
 
-    let mut computation = prg.evaluator();
-    computation.set_usize(2);
-    let res = computation.run();
-    assert!(res.is_ok());
+        let mut computation = prg.evaluator();
+        computation.set_usize(3);
+        let res = computation.run();
+        expect_panic(res, PanicReason::OutOfBounds);
 
-    let mut computation = prg.evaluator();
-    computation.set_usize(3);
-    let res = computation.run();
-    expect_panic(res, PanicReason::OutOfBounds);
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
@@ -200,47 +223,51 @@ pub fn main(b: bool) -> bool {
 }
 ";
     let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut eval = prg.evaluator();
+        eval.set_bool(true);
+        expect_panic(eval.run(), PanicReason::OutOfBounds);
 
-    let mut eval = prg.evaluator();
-    eval.set_bool(true);
-    expect_panic(eval.run(), PanicReason::OutOfBounds);
-
-    let mut eval = prg.evaluator();
-    eval.set_bool(false);
-    expect_panic(eval.run(), PanicReason::OutOfBounds);
-
+        let mut eval = prg.evaluator();
+        eval.set_bool(false);
+        expect_panic(eval.run(), PanicReason::OutOfBounds);
+        Ok::<_, Error>(())
+    })?;
     let prg = "
 pub fn main(b: bool) -> bool {
     b && [true; 0][1]
 }
 ";
     let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut eval = prg.evaluator();
+        eval.set_bool(true);
+        expect_panic(eval.run(), PanicReason::OutOfBounds);
 
-    let mut eval = prg.evaluator();
-    eval.set_bool(true);
-    expect_panic(eval.run(), PanicReason::OutOfBounds);
-
-    let mut eval = prg.evaluator();
-    eval.set_bool(false);
-    let output = eval.run()?;
-    let output = bool::try_from(output);
-    assert!(output.is_ok());
-    assert!(!output.unwrap());
-
+        let mut eval = prg.evaluator();
+        eval.set_bool(false);
+        let output = eval.run()?;
+        let output = bool::try_from(output);
+        assert!(output.is_ok());
+        assert!(!output.unwrap());
+        Ok::<_, Error>(())
+    })?;
     let prg = "
 pub fn main(b: bool) -> bool {
     [true; 0][1] && b
 }
 ";
     let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut eval = prg.evaluator();
+        eval.set_bool(true);
+        expect_panic(eval.run(), PanicReason::OutOfBounds);
 
-    let mut eval = prg.evaluator();
-    eval.set_bool(true);
-    expect_panic(eval.run(), PanicReason::OutOfBounds);
-
-    let mut eval = prg.evaluator();
-    eval.set_bool(false);
-    expect_panic(eval.run(), PanicReason::OutOfBounds);
+        let mut eval = prg.evaluator();
+        eval.set_bool(false);
+        expect_panic(eval.run(), PanicReason::OutOfBounds);
+        Ok::<_, Error>(())
+    })?;
 
     let prg = "
 pub fn main(b: bool) -> bool {
@@ -248,16 +275,17 @@ pub fn main(b: bool) -> bool {
 }
 ";
     let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut eval = prg.evaluator();
+        eval.set_bool(true);
+        expect_panic(eval.run(), PanicReason::DivByZero);
 
-    let mut eval = prg.evaluator();
-    eval.set_bool(true);
-    expect_panic(eval.run(), PanicReason::DivByZero);
+        let mut eval = prg.evaluator();
+        eval.set_bool(false);
+        expect_panic(eval.run(), PanicReason::DivByZero);
 
-    let mut eval = prg.evaluator();
-    eval.set_bool(false);
-    expect_panic(eval.run(), PanicReason::DivByZero);
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
@@ -268,64 +296,68 @@ pub fn main(b: bool) -> bool {
 }
 ";
     let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut eval = prg.evaluator();
+        eval.set_bool(true);
+        expect_panic(eval.run(), PanicReason::OutOfBounds);
 
-    let mut eval = prg.evaluator();
-    eval.set_bool(true);
-    expect_panic(eval.run(), PanicReason::OutOfBounds);
-
-    let mut eval = prg.evaluator();
-    eval.set_bool(false);
-    expect_panic(eval.run(), PanicReason::OutOfBounds);
-
+        let mut eval = prg.evaluator();
+        eval.set_bool(false);
+        expect_panic(eval.run(), PanicReason::OutOfBounds);
+        Ok::<_, Error>(())
+    })?;
     let prg = "
 pub fn main(b: bool) -> bool {
     b || [true; 0][1]
 }
 ";
     let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut eval = prg.evaluator();
+        eval.set_bool(true);
+        let output = eval.run()?;
+        let output = bool::try_from(output);
+        assert!(output.is_ok());
+        assert!(output.unwrap());
 
-    let mut eval = prg.evaluator();
-    eval.set_bool(true);
-    let output = eval.run()?;
-    let output = bool::try_from(output);
-    assert!(output.is_ok());
-    assert!(output.unwrap());
-
-    let mut eval = prg.evaluator();
-    eval.set_bool(false);
-    expect_panic(eval.run(), PanicReason::OutOfBounds);
-
+        let mut eval = prg.evaluator();
+        eval.set_bool(false);
+        expect_panic(eval.run(), PanicReason::OutOfBounds);
+        Ok::<_, Error>(())
+    })?;
     let prg = "
 pub fn main(b: bool) -> bool {
     [true; 0][1] || b
 }
 ";
     let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut eval = prg.evaluator();
+        eval.set_bool(true);
+        expect_panic(eval.run(), PanicReason::OutOfBounds);
 
-    let mut eval = prg.evaluator();
-    eval.set_bool(true);
-    expect_panic(eval.run(), PanicReason::OutOfBounds);
-
-    let mut eval = prg.evaluator();
-    eval.set_bool(false);
-    expect_panic(eval.run(), PanicReason::OutOfBounds);
-
+        let mut eval = prg.evaluator();
+        eval.set_bool(false);
+        expect_panic(eval.run(), PanicReason::OutOfBounds);
+        Ok::<_, Error>(())
+    })?;
     let prg = "
 pub fn main(b: bool) -> bool {
     (0i32 / 0i32 == 1i32) || [true; 0][1]
 }
 ";
     let prg = compile(prg).map_err(|e| pretty_print(e, prg))?;
+    test_ssa_and_register_circ(prg, |prg| {
+        let mut eval = prg.evaluator();
+        eval.set_bool(true);
+        expect_panic(eval.run(), PanicReason::DivByZero);
 
-    let mut eval = prg.evaluator();
-    eval.set_bool(true);
-    expect_panic(eval.run(), PanicReason::DivByZero);
+        let mut eval = prg.evaluator();
+        eval.set_bool(false);
+        expect_panic(eval.run(), PanicReason::DivByZero);
 
-    let mut eval = prg.evaluator();
-    eval.set_bool(false);
-    expect_panic(eval.run(), PanicReason::DivByZero);
-
-    Ok(())
+        Ok(())
+    })
 }
 
 fn expect_panic(eval_result: Result<EvalOutput, EvalError>, expected: PanicReason) {

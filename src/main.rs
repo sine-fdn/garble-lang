@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs::File, io::Read, path::PathBuf, process::exit};
 
-use garble_lang::{check, eval::Evaluator, literal::Literal};
+use garble_lang::{check, circuit_type::CircuitType, eval::Evaluator, literal::Literal};
 
 use clap::{Parser, Subcommand};
 
@@ -85,6 +85,7 @@ fn run(file: PathBuf, inputs: Vec<String>, function: String) -> Result<(), std::
     }
 
     let const_sizes = HashMap::new();
+    let circuit = CircuitType::Register(circuit.into());
     let mut evaluator = Evaluator::new(&program, main_fn, &circuit, &const_sizes);
     let main_params = &evaluator.main_fn.params;
     if main_params.len() != arguments.len() {

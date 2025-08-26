@@ -136,6 +136,8 @@ fn convert_garble_to_bristol_to_garble() -> Result<(), String> {
     let mult_bristol = NamedTempFile::new().map_err(|e| e.to_string())?;
     mult_garble_prg
         .circuit
+        .clone()
+        .unwrap_ssa()
         .format_as_bristol(mult_bristol.path())
         .map_err(|e| e.prettify())?;
     let new_circuit = Circuit::bristol_to_garble(mult_bristol.path()).map_err(|e| e.prettify())?;
@@ -146,6 +148,7 @@ fn convert_garble_to_bristol_to_garble() -> Result<(), String> {
     // PANIC_RESULT_SIZE_IN_BITS gets removed from the output as Bristol format does not have panic support
     let output1 = mult_garble_prg
         .circuit
+        .unwrap_ssa()
         .eval(&[input1_bits.clone(), input2_bits.clone()])[PANIC_RESULT_SIZE_IN_BITS..]
         .to_vec();
     let output2 = bristol_eval(
@@ -173,7 +176,10 @@ fn convert_garble_to_bristol_output_wire_input() -> Result<(), String> {
     let bad_compiled = compile(bad_example).map_err(|e| e.prettify(bad_example))?;
 
     let in_out = NamedTempFile::new().map_err(|e| e.to_string())?;
-    let result = bad_compiled.circuit.format_as_bristol(in_out.path());
+    let result = bad_compiled
+        .circuit
+        .unwrap_ssa()
+        .format_as_bristol(in_out.path());
 
     assert!(matches!(result, Err(ToBristolError::OutputWireIsInput)));
 
@@ -191,6 +197,7 @@ fn convert_garble_to_bristol_no_directory() -> Result<(), String> {
 
     let result = add_garble_prg
         .circuit
+        .unwrap_ssa()
         .format_as_bristol(Path::new("nonexistent_dir/circuit.txt"));
     assert!(matches!(result, Err(ToBristolError::IoError(_))));
 
