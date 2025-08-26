@@ -225,7 +225,7 @@ impl<'c> RegisterAllocator<'c> {
         // register idx (need to keep track of this).
         // We also need to maintain a map of gate idx -> register.
 
-        // Initiliaze the instructions with the Input operations.
+        // Initialize the instructions with the Input operations.
         // This assumes that the input wires in the original circuit have an increasing gate_id
         // which corresponds to their position in
         // `flatten(circ.input_gates.iter().map(|count| (0..count).to_vec()))`
