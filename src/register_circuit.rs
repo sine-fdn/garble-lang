@@ -13,7 +13,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 pub use crate::circuit::Circuit as SsaCircuit;
-use crate::circuit::{GateIndex, Wire};
+use crate::circuit::{GateIndex, Wire, MAX_GATES};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -40,7 +40,7 @@ impl Circuit {
 }
 
 /// A register identifier.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Reg(pub u32);
 
@@ -95,7 +95,76 @@ pub struct Input {
     pub input: u32,
 }
 
+/// Errors occurring during the validation of the Circuit.
+#[derive(Debug, PartialEq, Eq)]
+pub enum CircuitError {
+    /// The circuit does not specify any input instructions.
+    EmptyInputs,
+    /// The instruction at the specified position refers to a register greater than the max.
+    InvalidInst(usize),
+    /// The circuit does not specify any output registers.
+    EmptyOutputs,
+    /// The specified output register is invalid.
+    InvalidOutput(Reg),
+    /// The provided circuit has too many instructions to be processed.
+    MaxCircuitSizeExceeded,
+    /// The instruction at the specified position refers to a register before it is set.
+    InvalidRegAccess(usize, Reg),
+}
+
 impl Circuit {
+    /// Checks that the circuit only has valid instructions, has inputs andoutputs.
+    pub fn validate(&self) -> Result<(), CircuitError> {
+        let max_reg = Reg(self.max_reg_count.saturating_sub(1) as u32);
+        if self.input_regs.iter().all(|i| *i == 0) {
+            return Err(CircuitError::EmptyInputs);
+        }
+
+        if self.output_regs.is_empty() {
+            return Err(CircuitError::EmptyOutputs);
+        }
+        for &o in self.output_regs.iter() {
+            if o > max_reg {
+                return Err(CircuitError::InvalidOutput(o));
+            }
+        }
+        if self.insts.len() > MAX_GATES {
+            return Err(CircuitError::MaxCircuitSizeExceeded);
+        }
+
+        let mut register_set = vec![false; self.max_reg_count];
+        for (i, inst) in self.insts.iter().enumerate() {
+            if inst.out > max_reg {
+                return Err(CircuitError::InvalidInst(i));
+            }
+            match inst.op {
+                Op::Input(_) => {}
+                Op::Xor(Xor(x, y)) | Op::And(And(x, y)) => {
+                    if x > max_reg || y > max_reg {
+                        return Err(CircuitError::InvalidInst(i));
+                    }
+                    if !register_set[x] {
+                        return Err(CircuitError::InvalidRegAccess(i, x));
+                    }
+                    if !register_set[y] {
+                        return Err(CircuitError::InvalidRegAccess(i, x));
+                    }
+                }
+                Op::Not(Not(x)) => {
+                    if x > max_reg {
+                        return Err(CircuitError::InvalidInst(i));
+                    }
+                    if !register_set[x] {
+                        return Err(CircuitError::InvalidRegAccess(i, x));
+                    }
+                }
+            }
+            register_set[inst.out] = true;
+        }
+
+        Ok(())
+    }
+
     /// Evaluates the circuit with the specified inputs (with one `Vec<bool>` per party).
     ///
     /// Assumes that the inputs have been previously type-checked and **panics** if the number of
@@ -225,7 +294,7 @@ impl<'c> RegisterAllocator<'c> {
         // register idx (need to keep track of this).
         // We also need to maintain a map of gate idx -> register.
 
-        // Initiliaze the instructions with the Input operations.
+        // Initialize the instructions with the Input operations.
         // This assumes that the input wires in the original circuit have an increasing gate_id
         // which corresponds to their position in
         // `flatten(circ.input_gates.iter().map(|count| (0..count).to_vec()))`

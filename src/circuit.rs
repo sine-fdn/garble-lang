@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 // 3. Pruning of useless gates (gates that are not part of the output nor used by other gates)
 
 const PRINT_OPTIMIZATION_RATIO: bool = false;
-const MAX_GATES: usize = u32::MAX as usize;
+pub(crate) const MAX_GATES: usize = u32::MAX as usize;
 
 /// Data type to uniquely identify gates.
 pub type GateIndex = usize;
@@ -147,7 +147,7 @@ impl Circuit {
     /// Checks that the circuit only uses valid wires, includes no cycles, has outputs, etc.
     pub fn validate(&self) -> Result<(), CircuitError> {
         let wires = self.wires();
-        if self.input_gates.iter().all(|i| *i == 0) {
+        if self.input_gates.is_empty() && self.input_gates.iter().all(|i| *i == 0) {
             return Err(CircuitError::EmptyInputs);
         }
         for (i, g) in wires.enumerate() {

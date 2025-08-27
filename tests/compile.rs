@@ -21,6 +21,10 @@ fn test_ssa_and_register_circ(
 ) -> Result<(), Error> {
     test_fn(&prg)?;
     prg.circuit.to_register();
+    prg.circuit
+        .unwrap_register_ref()
+        .validate()
+        .expect("invalid register circuit");
     test_fn(&prg)?;
     Ok(())
 }
