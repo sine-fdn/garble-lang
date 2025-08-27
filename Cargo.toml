@@ -27,7 +27,7 @@ json_schema = ["dep:schemars", "serde"]
 serde = ["dep:serde"]
 
 [dependencies]
-clap = { version = "4.5.45", features = ["derive"], optional = true }
+clap = { version = "4.5.46", features = ["derive"], optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 plotters = { version = "0.3.7", optional = true }
 schemars = { version = "0.9", optional = true }
