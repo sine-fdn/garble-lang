@@ -110,6 +110,8 @@ pub enum CircuitError {
     MaxCircuitSizeExceeded,
     /// The instruction at the specified position refers to a register before it is set.
     InvalidRegAccess(usize, Reg),
+    /// The input instruction's output register is not equal to its position.
+    InvalidInput(usize, Inst),
 }
 
 impl Circuit {
@@ -138,7 +140,11 @@ impl Circuit {
                 return Err(CircuitError::InvalidInst(i));
             }
             match inst.op {
-                Op::Input(_) => {}
+                Op::Input(_) => {
+                    if i != inst.out.0 as usize {
+                        return Err(CircuitError::InvalidInput(i, *inst));
+                    }
+                }
                 Op::Xor(Xor(x, y)) | Op::And(And(x, y)) => {
                     if x > max_reg || y > max_reg {
                         return Err(CircuitError::InvalidInst(i));
