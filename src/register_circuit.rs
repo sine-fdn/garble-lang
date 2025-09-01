@@ -277,8 +277,8 @@ impl<'c> RegisterAllocator<'c> {
             last_used,
             free_regs: vec![],
             next_reg: 0,
-            wire_map: HashMap::with_capacity(circ.wires_len()),
-            insts: Vec::with_capacity(circ.gates.len()),
+            wire_map: HashMap::new(),
+            insts: Vec::with_capacity(circ.wires_len()),
             and_ops: 0,
         }
     }
