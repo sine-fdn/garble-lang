@@ -38,4 +38,4 @@ quickcheck_macros = "1"
 serde_json = "1.0.143"
 serde = { version = "1.0", features = ["derive"] }
 tempfile = "3"
-insta = { version = "1.43.1", features = ["json", "redactions"] }
+insta = { version = "1.43.2", features = ["json", "redactions"] }
