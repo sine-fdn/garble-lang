@@ -1829,7 +1829,7 @@ impl UntypedPattern {
     }
 }
 
-/// Creates the type of a `join` inbuilt call depending on the input arguments to the call.
+/// Creates the type of a `join` built-in call depending on the input arguments to the call.
 fn join_array_size(a: &Type, b: &Type, meta: MetaInfo) -> Result<ConstExpr, TypeErrors> {
     let to_const_expr = |ty: &Type| {
         let const_expr_enum = match ty {
