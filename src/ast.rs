@@ -427,11 +427,11 @@ impl Expr<Type> {
     }
 }
 
-/// Function calls to in-built functions.
+/// Function calls to built-in functions.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum BuiltInFnCall<T> {
-    /// In-built bitonic sorting-based join function.
+    /// Built-in bitonic sorting-based join function.
     Join {
         /// The type of the element that is joined on.
         join_ty: T,
@@ -445,9 +445,9 @@ pub enum BuiltInFnCall<T> {
 }
 
 impl BuiltInFnCall<()> {
-    /// Try to construct an [`InBuiltFnCall`] from an ident and args.
+    /// Try to construct an [`BuiltInFnCall`] from an ident and args.
     ///
-    /// Returns the args if the ident matches no in-built fn.
+    /// Returns the args if the ident matches no built-in fn.
     pub fn try_from_ident_args(
         ident: &str,
         args: Vec<UntypedExpr>,
@@ -506,7 +506,7 @@ pub enum ExprEnum<T> {
     Block(Vec<Stmt<T>>),
     /// Call of the specified function with a list of arguments.
     FnCall(String, Vec<Expr<T>>),
-    /// A call to an in-built, potentially generic function.
+    /// A call to an built-in, potentially generic function.
     BuiltInFnCall(BuiltInFnCall<T>),
     /// If-else expression for the specified condition, if-expr and else-expr.
     If(Box<Expr<T>>, Box<Expr<T>>, Box<Expr<T>>),

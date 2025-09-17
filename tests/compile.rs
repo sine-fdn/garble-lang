@@ -2419,7 +2419,7 @@ pub fn main(rows1: [([u8; 3], u16); 5], rows2: [([u8; 3], u16, u16); 3]) -> u16 
 }
 
 #[test]
-fn compile_join_inbuilt() -> Result<(), Error> {
+fn compile_join_built_in() -> Result<(), Error> {
     let prg = "
 pub fn main(rows1: [[u8; 3]; 5], rows2: [[u8; 3]; 3]) -> [(bool, [u8; 3]); const { 5usize + 3usize - 1usize } ] {
     join(rows1, rows2)
