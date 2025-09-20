@@ -6,6 +6,7 @@ use std::{
 };
 
 use crate::{
+    CompileOptions, TypedExpr, TypedFnDef, TypedPattern, TypedProgram, TypedStmt,
     ast::{
         Accessor, BuiltInFnCall, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum, Op, Pattern,
         PatternEnum, StmtEnum, StructDef, Type, UnaryOp, VariantExprEnum,
@@ -14,7 +15,6 @@ use crate::{
     env::Env,
     literal::Literal,
     token::{MetaInfo, SignedNumType, UnsignedNumType},
-    CompileOptions, TypedExpr, TypedFnDef, TypedPattern, TypedProgram, TypedStmt,
 };
 
 /// An error that occurred during compilation.

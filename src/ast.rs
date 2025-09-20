@@ -7,8 +7,8 @@ use std::{collections::HashMap, fmt::Display};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    token::{MetaInfo, SignedNumType, UnsignedNumType},
     UntypedExpr,
+    token::{MetaInfo, SignedNumType, UnsignedNumType},
 };
 
 /// A program, consisting of top level definitions (enums or functions).

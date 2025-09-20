@@ -1,8 +1,8 @@
 use garble_lang::{
+    Error, GarbleProgram,
     circuit::{EvalPanic, PanicReason},
     compile,
     eval::{EvalError, EvalOutput},
-    Error, GarbleProgram,
 };
 
 fn test_ssa_and_register_circ<E>(

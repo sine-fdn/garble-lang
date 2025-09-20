@@ -1,7 +1,7 @@
 use garble_lang::{
+    Error, UntypedProgram,
     parse::{ParseError, ParseErrorEnum},
     scan::scan,
-    Error, UntypedProgram,
 };
 
 #[test]

@@ -46,10 +46,10 @@ use check::TypeError;
 use circuit::Circuit;
 use compile::CompilerError;
 use convert::ConverterError;
-use eval::{resolve_const_type, EvalError, Evaluator};
+use eval::{EvalError, Evaluator, resolve_const_type};
 use literal::Literal;
 use parse::ParseError;
-use scan::{scan, ScanError};
+use scan::{ScanError, scan};
 use std::{
     collections::HashMap,
     fmt::{Display, Write as _},
@@ -417,7 +417,9 @@ impl Error {
             Error::CompileTimeError(e) => e.prettify(prg),
             Error::EvalError(e) => e.prettify(prg),
             Error::ConvertError(e) => {
-                format!("Could not convert between a Circuit in Garble and the Bristol format due to {e:?}")
+                format!(
+                    "Could not convert between a Circuit in Garble and the Bristol format due to {e:?}"
+                )
             }
         }
     }
