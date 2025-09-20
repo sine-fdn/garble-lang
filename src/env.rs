@@ -1,5 +1,5 @@
 //! Simple helper for lexical scopes used by [`crate::check()`] and [`crate::compile()`].
-use std::collections::{btree_map::Entry, BTreeMap};
+use std::collections::{BTreeMap, btree_map::Entry};
 
 #[derive(Debug, Clone)]
 pub(crate) struct Env<T: Clone>(pub(crate) Vec<BTreeMap<String, T>>);

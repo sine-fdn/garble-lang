@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use garble_lang::{
-    ast::Type, check, circuit::Circuit, circuit_type::CircuitType, eval::Evaluator,
-    literal::Literal, Error,
+    Error, ast::Type, check, circuit::Circuit, circuit_type::CircuitType, eval::Evaluator,
+    literal::Literal,
 };
 
 #[test]

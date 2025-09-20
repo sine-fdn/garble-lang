@@ -1,9 +1,9 @@
 use garble_lang::{
+    Error, TypedProgram,
     ast::{Pattern, PatternEnum, Type},
     check::{TypeError, TypeErrorEnum},
     scan::scan,
     token::{MetaInfo, UnsignedNumType},
-    Error, TypedProgram,
 };
 
 #[test]
@@ -20,10 +20,11 @@ pub fn main(x: u16) -> u16 {
 ";
     let e = scan(prg)?.parse()?.type_check();
     assert!(e.is_err());
-    assert!(e
-        .unwrap_err()
-        .iter()
-        .any(|TypeError(e, _)| matches!(**e, TypeErrorEnum::UnknownIdentifier(_))));
+    assert!(
+        e.unwrap_err()
+            .iter()
+            .any(|TypeError(e, _)| matches!(**e, TypeErrorEnum::UnknownIdentifier(_)))
+    );
     Ok(())
 }
 
