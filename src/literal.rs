@@ -15,8 +15,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    CompileTimeError, TypedExpr, TypedProgram,
     ast::{Expr, ExprEnum, Type, Variant, VariantExprEnum},
-    check::{check_type, Defs, TopLevelTypes, TypeError, TypedFns},
+    check::{Defs, TopLevelTypes, TypeError, TypedFns, check_type},
     circuit::EvalPanic,
     compile::{
         self, enum_max_size, enum_tag_number, enum_tag_size, signed_to_bits, unsigned_to_bits,
@@ -25,7 +26,6 @@ use crate::{
     eval::EvalError,
     scan::scan,
     token::{SignedNumType, UnsignedNumType},
-    CompileTimeError, TypedExpr, TypedProgram,
 };
 
 /// A subset of [`crate::ast::Expr`] that is used as input / output by an
@@ -645,11 +645,7 @@ impl TypedExpr {
 
 impl From<bool> for Literal {
     fn from(b: bool) -> Self {
-        if b {
-            Literal::True
-        } else {
-            Literal::False
-        }
+        if b { Literal::True } else { Literal::False }
     }
 }
 

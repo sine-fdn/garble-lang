@@ -3,6 +3,7 @@
 use std::{collections::HashMap, iter::Peekable, vec::IntoIter};
 
 use crate::{
+    UntypedExpr, UntypedFnDef, UntypedPattern, UntypedProgram, UntypedStmt,
     ast::{
         Accessor, BuiltInFnCall, ConstDef, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum,
         FnDef, Op, ParamDef, Pattern, PatternEnum, Program, Stmt, StmtEnum, StructDef, Type,
@@ -10,7 +11,6 @@ use crate::{
     },
     scan::Tokens,
     token::{MetaInfo, SignedNumType, Token, TokenEnum, UnsignedNumType},
-    UntypedExpr, UntypedFnDef, UntypedPattern, UntypedProgram, UntypedStmt,
 };
 
 /// An error found during parsing, with its location in the source code.
@@ -627,11 +627,7 @@ impl Parser {
                 }
             }
         }
-        if !has_error {
-            Ok(stmts)
-        } else {
-            Err(())
-        }
+        if !has_error { Ok(stmts) } else { Err(()) }
     }
 
     fn parse_expr(&mut self) -> Result<UntypedExpr, ()> {

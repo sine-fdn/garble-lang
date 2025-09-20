@@ -13,7 +13,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 pub use crate::circuit::Circuit as SsaCircuit;
-use crate::circuit::{GateIndex, Wire, MAX_GATES};
+use crate::circuit::{GateIndex, MAX_GATES, Wire};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

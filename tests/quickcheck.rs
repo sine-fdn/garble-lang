@@ -1,4 +1,5 @@
 use garble_lang::{
+    Error,
     ast::{
         Op::{self, *},
         Type,
@@ -10,7 +11,6 @@ use garble_lang::{
         SignedNumType::{self, *},
         UnsignedNumType::{self, *},
     },
-    Error,
 };
 use quickcheck::Arbitrary;
 use quickcheck_macros::quickcheck;
