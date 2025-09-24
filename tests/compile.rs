@@ -4,8 +4,8 @@ use std::{
 };
 
 use garble_lang::{
-    circuit_type::CircuitType, compile, compile_with_constants, garble_consts, literal::Literal,
-    Error, GarbleProgram,
+    Error, GarbleProgram, circuit_type::CircuitType, compile, compile_with_constants,
+    garble_consts, literal::Literal,
 };
 
 fn pretty_print<E: Into<Error>>(e: E, prg: &str) -> Error {

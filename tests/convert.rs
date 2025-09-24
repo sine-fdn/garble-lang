@@ -1,7 +1,7 @@
 use garble_lang::{
     circuit::{Circuit, PANIC_RESULT_SIZE_IN_BITS},
     compile,
-    convert::{parse_line, FromBristolError, ToBristolError},
+    convert::{FromBristolError, ToBristolError, parse_line},
 };
 
 use std::{

@@ -4,6 +4,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
+    TypedExpr, TypedFnDef, TypedPattern, TypedProgram, TypedStmt, UntypedExpr, UntypedFnDef,
+    UntypedPattern, UntypedProgram, UntypedStmt,
     ast::{
         self, Accessor, BuiltInFnCall, ConstDef, ConstExpr, ConstExprEnum, EnumDef, Expr, ExprEnum,
         Mutability, Op, ParamDef, Pattern, PatternEnum, Stmt, StmtEnum, StructDef, Type, UnaryOp,
@@ -11,8 +13,6 @@ use crate::{
     },
     env::Env,
     token::{MetaInfo, SignedNumType, UnsignedNumType},
-    TypedExpr, TypedFnDef, TypedPattern, TypedProgram, TypedStmt, UntypedExpr, UntypedFnDef,
-    UntypedPattern, UntypedProgram, UntypedStmt,
 };
 
 /// An error found during type-checking, with its location in the source code.
@@ -1107,7 +1107,7 @@ impl UntypedExpr {
                                         actual: ty.clone(),
                                     },
                                     *meta,
-                                ))])
+                                ))]);
                             }
                         }
                     }
@@ -1990,11 +1990,13 @@ fn specialize(ctor: &Ctor, pattern: &[TypedPattern]) -> Vec<PatternStack> {
             | PatternEnum::StructIgnoreRemaining(struct_name_in_pattern, fields)
                 if struct_name == struct_name_in_pattern =>
             {
-                vec![fields
-                    .iter()
-                    .map(|(_, pattern)| pattern.clone())
-                    .chain(tail)
-                    .collect()]
+                vec![
+                    fields
+                        .iter()
+                        .map(|(_, pattern)| pattern.clone())
+                        .chain(tail)
+                        .collect(),
+                ]
             }
             _ => vec![],
         },

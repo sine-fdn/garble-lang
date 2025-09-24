@@ -775,7 +775,9 @@ impl CircuitBuilder {
             for (identifier, binding_a) in a {
                 let binding_b = b.get(identifier).unwrap();
                 if binding_a.len() != binding_b.len() {
-                    panic!("Bindings of variable '{identifier}' have different lengths: {binding_a:?} vs {binding_b:?}");
+                    panic!(
+                        "Bindings of variable '{identifier}' have different lengths: {binding_a:?} vs {binding_b:?}"
+                    );
                 }
                 let mut binding = vec![0; binding_a.len()];
                 for (i, (&if_true, &if_false)) in binding_a.iter().zip(binding_b.iter()).enumerate()
