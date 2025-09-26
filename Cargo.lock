@@ -485,7 +485,7 @@ dependencies = [
 
 [[package]]
 name = "garble_lang"
-version = "0.7.0"
+version = "0.7.0-alpha.1"
 dependencies = [
  "clap",
  "insta",
