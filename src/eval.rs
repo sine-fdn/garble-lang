@@ -3,12 +3,12 @@
 use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
+    CircuitType, CompileTimeError, TypedFnDef, TypedProgram,
     ast::Type,
     circuit::{EvalPanic, USIZE_BITS},
     compile::{resolve_const_expr_usize, signed_to_bits, unsigned_to_bits},
     literal::Literal,
     token::{SignedNumType, UnsignedNumType},
-    CircuitType, CompileTimeError, TypedFnDef, TypedProgram,
 };
 
 /// Evaluates a [`crate::circuit::Circuit`] with inputs supplied by different parties.
