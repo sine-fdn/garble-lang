@@ -30,7 +30,7 @@ serde = ["dep:serde"]
 clap = { version = "4.5.53", features = ["derive"], optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 plotters = { version = "0.3.7", optional = true }
-schemars = { version = "0.9", optional = true }
+schemars = { version = "1.1", optional = true }
 
 [dev-dependencies]
 quickcheck = "1"
