@@ -5,6 +5,16 @@ version: 2
 updates:
   - package-ecosystem: "cargo"
     directory: "/"
+    cooldown:
+      default-days: 7
     schedule:
       interval: "weekly"
-      day: "tuesday"
+      day: "wednesday"
+
+  - package-ecosystem: "github-actions"
+    directory: ".github/workflows/"
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
