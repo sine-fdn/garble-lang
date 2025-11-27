@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Post to a Slack channel
-        uses: slackapi/slack-github-action@v1.23.0
+        uses: slackapi/slack-github-action@v2.1.1
         with:
           channel-id: 'C04658EJ9QS'
           slack-message: "New Dependabot PR: ${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
