@@ -18,7 +18,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
         with:
           toolchain: stable
-      - name: Install taplo for extracting polytune version
+      - name: Install mdBook
         uses: taiki-e/install-action@537c30d2b45cc3aa3fb35e2bbcfb61ef93fd6f02
         # if updating install-action, check if there is a new mdbook release
         with:

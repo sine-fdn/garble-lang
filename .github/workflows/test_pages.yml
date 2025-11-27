@@ -1,0 +1,24 @@
+name: Test Mdbook Pages
+on:
+  push:
+    paths:
+      - 'garble_docs/**'
+      - '.github/workflows/deploy_pages.yml'
+      - '.github/workflows/test_pages.yml'
+
+jobs:
+  test-mdbook:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: stable
+      - name: Install mdBook
+        uses: taiki-e/install-action@537c30d2b45cc3aa3fb35e2bbcfb61ef93fd6f02
+        # if updating install-action, check if there is a new mdbook release
+        with:
+          tool: mdbook@0.5.1
+      - name: Build Book
+        run: |
+          cd garble_docs && mdbook build
