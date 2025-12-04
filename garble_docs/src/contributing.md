@@ -1,8 +1,10 @@
 # Contributing
 
-While Garble was developed by us at the [SINE Foundation](https://sine.foundation/) for the use in our MPC engine, we would love to see how you end up using Garble and are happy to accept pull requests. Garble is distributed under the MIT license and hosted on GitHub:
-
-[![Github](github-mark.png "Contribute on Github")](https://github.com/sine-fdn/garble-lang)
+While Garble was developed by us at the [SINE Foundation](https://sine.foundation/) for the use in our MPC engine, we would love to see how you end up using Garble and are happy to accept pull requests. Garble is distributed under the MIT license and
+<a href="https://github.com/sine-fdn/garble-lang">
+    hosted on GitHub
+    <img src="github-mark.png" alt="Github" title="Contribute on Github" width="16" height="16">.
+</a>  
 
 The Garble compiler is relatively straightforward and turns a program `&str` into a `circuit::Circuit` (or aborts with a scan/parse/type error). The different steps and their modules are as follows (with steps 1-4 happening during compile time, step 5 is optional and happens during run time):
 

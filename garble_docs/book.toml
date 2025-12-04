@@ -1,10 +1,12 @@
 [book]
-authors = ["Frederic Kettelhoit"]
+authors = ["Frederic Kettelhoit", "Robin Hundt"]
 language = "en"
-multilingual = false
 src = "src"
 title = "The Garble Programming Language"
+
 [output.html]
 no-section-label = true
+git-repository-url = "https://github.com/sine-fdn/garble-lang"
+
 [output.html.playground]
 runnable = false
