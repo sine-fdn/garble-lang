@@ -660,6 +660,31 @@ fn type_check_block(
 }
 
 impl UntypedStmt {
+    /// Type-checks a single untyped statement and produces a typed statement or collected type errors.
+    ///
+    /// This validates the statement against the given top-level type information and current environment,
+    /// possibly mutating `env` (pushing/popping scopes and inserting bindings) and updating `fns`.
+    /// On success returns the corresponding `TypedStmt`; on failure returns the list of `TypeError` options
+    /// gathered while type-checking sub-expressions, patterns and bindings.
+    ///
+    /// # Parameters
+    ///
+    /// - `top_level_defs`: top-level struct/enum names used to resolve named types.
+    /// - `env`: current lexical environment; this function will push/pop scopes and insert bindings as it checks blocks, lets, and loops.
+    /// - `fns`: tracker for functions being checked and already-typed functions (used to detect recursion and resolve calls).
+    /// - `defs`: global definitions (consts, structs, enums, functions) used for resolving fields, variants and arities.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(TypedStmt)` with the typed statement on success, or `Err(TypeErrors)` containing collected errors (a `Vec<Option<TypeError>>`) when any part of the statement fails to type-check.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Pseudocode example — constructing a full environment and AST is out of scope here.
+    /// // Assume `stmt` is an untyped statement, and `top_level_defs`, `env`, `fns`, `defs` are prepared.
+    /// // let typed = stmt.type_check(&top_level_defs, &mut env, &mut fns, &defs)?;
+    /// ```
     pub(crate) fn type_check(
         &self,
         top_level_defs: &TopLevelTypes,
