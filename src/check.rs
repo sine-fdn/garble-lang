@@ -721,7 +721,7 @@ impl UntypedStmt {
                                 if let Type::Unsigned(UnsignedNumType::Unspecified)
                                 | Type::Signed(SignedNumType::Unspecified) = ty.as_ref()
                                 {
-                                    *ty = Box::new(Type::Signed(SignedNumType::I32));
+                                    **ty = Type::Signed(SignedNumType::I32);
                                 }
                             }
                             if let Type::Tuple(value_types) = &mut binding.ty {
