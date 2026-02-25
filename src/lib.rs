@@ -281,7 +281,8 @@ impl GarbleProgram {
         let Some(param) = self.main.params.get(arg_index) else {
             return Err(EvalError::InvalidArgIndex(arg_index));
         };
-        let literal = Literal::parse(&self.program, &param.ty, literal)
+        let ty = resolve_const_type(&param.ty, &self.const_sizes);
+        let literal = Literal::parse(&self.program, &ty, literal)
             .map_err(EvalError::LiteralParseError)?;
         Ok(GarbleArgument(literal, &self.program, &self.const_sizes))
     }
